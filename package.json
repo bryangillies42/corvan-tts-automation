@@ -1,0 +1,15 @@
+{
+  "name": "corvan-tts-automation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Console de combate do Corvan Duras para Tabletop Simulator",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test",
+    "test:lua": "pwsh -NoProfile -File scripts/smoke-moonsharp.ps1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

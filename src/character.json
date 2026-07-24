@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "version": "0.1.0",
+  "name": "Corvan Duras",
+  "shortName": "Corvan",
+  "resources": {
+    "hp": {
+      "label": "PV",
+      "max": 47
+    },
+    "mp": {
+      "label": "PM",
+      "max": 12
+    }
+  },
+  "defense": 20,
+  "damageReduction": 3,
+  "weapons": {
+    "sword": {
+      "name": "Espada Longa",
+      "chatName": "Espada",
+      "attack": 8,
+      "damage": {
+        "count": 1,
+        "sides": 8,
+        "bonus": 4
+      },
+      "critical": {
+        "min": 19,
+        "multiplier": 2
+      },
+      "type": "Corte",
+      "range": "Curto"
+    },
+    "shield": {
+      "name": "Escudo Pesado",
+      "chatName": "Escudo",
+      "attack": 8,
+      "damage": {
+        "count": 1,
+        "sides": 6,
+        "bonus": 4
+      },
+      "critical": {
+        "min": 20,
+        "multiplier": 2
+      },
+      "type": "Impacto",
+      "range": "Curto"
+    }
+  },
+  "skills": {
+    "initiative": {
+      "name": "Iniciativa",
+      "modifier": 3,
+      "resistance": false
+    },
+    "fight": {
+      "name": "Luta",
+      "modifier": 8,
+      "resistance": false
+    },
+    "intimidation": {
+      "name": "Intimidação",
+      "modifier": 7,
+      "resistance": false
+    },
+    "perception": {
+      "name": "Percepção",
+      "modifier": 5,
+      "resistance": false
+    },
+    "fortitude": {
+      "name": "Fortitude",
+      "modifier": 9,
+      "resistance": true
+    },
+    "reflex": {
+      "name": "Reflexos",
+      "modifier": 5,
+      "resistance": true
+    },
+    "will": {
+      "name": "Vontade",
+      "modifier": 5,
+      "resistance": true
+    }
+  },
+  "powers": {
+    "combatDefensive": {
+      "name": "Combate Defensivo",
+      "cost": 0,
+      "attackModifier": -2,
+      "defenseModifier": 5,
+      "duration": "turn"
+    },
+    "duel": {
+      "name": "Duelo",
+      "cost": 2,
+      "attackModifier": 2,
+      "damageModifier": 2,
+      "duration": "scene"
+    },
+    "baluarte": {
+      "name": "Baluarte",
+      "cost": 1,
+      "defenseModifier": 2,
+      "resistanceModifier": 2,
+      "duration": "turn"
+    },
+    "armedTower": {
+      "name": "Torre Armada",
+      "cost": 1,
+      "damageModifier": 5,
+      "duration": "nextDamage"
+    },
+    "provocation": {
+      "name": "Provocação",
+      "cost": 2,
+      "willDifficulty": 13,
+      "duration": "turn"
+    },
+    "solidity": {
+      "name": "Solidez",
+      "passive": true
+    },
+    "platesOfWrath": {
+      "name": "Placas da Ira",
+      "passive": true,
+      "damageReduction": 3
+    }
+  },
+  "diceOffset": {
+    "x": 0,
+    "y": 2.5,
+    "z": -5
+  }
+}

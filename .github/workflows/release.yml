@@ -1,0 +1,64 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate release tag
+        shell: bash
+        run: |
+          package_version="$(node -p 'require("./package.json").version')"
+          if [[ "${GITHUB_REF_NAME}" != "v${package_version}" ]]; then
+            echo "A tag ${GITHUB_REF_NAME} não corresponde à versão ${package_version} do package.json."
+            exit 1
+          fi
+
+      - name: Test
+        run: npm test
+
+      - name: Discover previous stable version
+        shell: bash
+        run: |
+          previous_tag="$(git tag --list --sort=-v:refname \
+            | grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' \
+            | grep -Fxv "${GITHUB_REF_NAME}" \
+            | head -n 1 || true)"
+          if [[ -n "${previous_tag}" ]]; then
+            echo "CORVAN_PREVIOUS_VERSION=${previous_tag#v}" >> "${GITHUB_ENV}"
+          fi
+
+      - name: Build immutable artifacts
+        env:
+          CORVAN_COMMIT_SHA: ${{ github.sha }}
+        run: npm run build
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            dist/corvan-runtime.lua \
+            dist/manifest.json \
+            dist/Corvan_Duras_Console.json \
+            --verify-tag \
+            --generate-notes \
+            --title "Corvan Duras Console ${GITHUB_REF_NAME}"
