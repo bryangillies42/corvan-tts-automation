@@ -1,21 +1,18 @@
-<!-- 0.104 × 3.07 ≈ 0.32: compensa o scaleX não uniforme do Custom_Tile. -->
-<Panel id="corvanConsole" width="1920" height="625" rectAlignment="MiddleCenter"
-       position="0 0 -15" rotation="0 0 0" scale="0.104 0.32 1"
-       color="#07090CD8" outline="#8C6A2D" outlineSize="3 3" raycastTarget="true">
-    <!--
-      Runtime contract (all values are shared because no visibility filter is used):
-      Dynamic text: pvCurrent, pvMax, pmCurrent, pmMax, defenseValue, rdValue,
-                    versionLabel, refreshStatus, activeWeaponLabel, attackValue,
-                    damageValue, criticalValue, lastResult, activeEffects,
-                    activePowersLabel.
-      Dynamic visual state: weapon_sword, weapon_shield, roll_attack, roll_damage,
-                            roll_critical, power_combat_defensive, power_duel,
-                            power_baluarte, power_torre_armada, power_provocacao.
-      Lua may update `text`, `textColor`, `colors`, `interactable`, and `active`
-      through self.UI.setAttribute. Buttons and inputs report their unique id.
-    -->
+<!-- O painel fica paralelo à face superior do Custom_Tile. Z -50 evita que a UI seja ocultada pela malha. -->
+<!--
+  Runtime contract (all values are shared because no visibility filter is used):
+  Dynamic text: pvCurrent, pvMax, pmCurrent, pmMax, defenseValue, rdValue,
+                versionLabel, refreshStatus, activeWeaponLabel, attackValue,
+                damageValue, criticalValue, lastResult, activeEffects,
+                activePowersLabel.
+  Dynamic visual state: weapon_sword, weapon_shield, roll_attack, roll_damage,
+                        roll_critical, power_combat_defensive, power_duel,
+                        power_baluarte, power_torre_armada, power_provocacao.
+  Lua may update `text`, `textColor`, `colors`, `interactable`, and `active`
+  through self.UI.setAttribute. Buttons and inputs report their unique id.
+-->
 
-    <Defaults>
+<Defaults>
         <Text color="#E8E2D5" fontSize="20" fontStyle="Bold"
               alignment="MiddleCenter" resizeTextForBestFit="true"
               resizeTextMinSize="12" resizeTextMaxSize="26"
@@ -110,15 +107,19 @@
                     alignment="MiddleCenter" characterValidation="Decimal"
                     characterLimit="8" caretColor="#63A8D5"
                     selectionColor="#376987AA" outline="#52575C" outlineSize="1 1" />
-    </Defaults>
+</Defaults>
 
-    <!-- Main HUD uses a 1920 x 625 logical canvas (3.072:1). -->
+<Panel id="corvanConsole" width="1600" height="720" rectAlignment="MiddleCenter"
+       position="0 0 -50" rotation="0 0 180" scale="0.25 0.25 1"
+       color="#07090CD8" outline="#8C6A2D" outlineSize="3 3" raycastTarget="true">
+
+    <!-- Main HUD uses a 1600 x 720 logical canvas (2.22:1). -->
     <VerticalLayout id="mainLayout" anchorMin="0 0" anchorMax="1 1"
                     offsetMin="14 10" offsetMax="-14 -10"
                     spacing="8" childForceExpandWidth="true" childForceExpandHeight="false">
 
         <!-- Header -->
-        <Panel class="section" preferredHeight="105">
+        <Panel class="section" preferredHeight="112">
             <HorizontalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="10 8" offsetMax="-10 -8"
                               spacing="8" childForceExpandWidth="false" childForceExpandHeight="true">
                 <Panel flexibleWidth="1" minWidth="530">
@@ -196,7 +197,7 @@
         </Panel>
 
         <!-- Combat and powers -->
-        <HorizontalLayout preferredHeight="351" spacing="8"
+        <HorizontalLayout preferredHeight="425" spacing="8"
                           childForceExpandWidth="true" childForceExpandHeight="true">
             <Panel flexibleWidth="49">
                 <VerticalLayout anchorMin="0 0" anchorMax="1 1" spacing="8"
@@ -278,8 +279,8 @@
                         <Text id="activePowersLabel" text="ATIVOS  •  nenhum" class="muted"
                               alignment="MiddleRight" preferredWidth="390" />
                     </HorizontalLayout>
-                    <GridLayout flexibleHeight="1" cellSize="298 148" spacing="7 7"
-                                constraint="FixedColumnCount" constraintCount="3"
+                    <GridLayout flexibleHeight="1" cellSize="365 116" spacing="7 7"
+                                constraint="FixedColumnCount" constraintCount="2"
                                 childAlignment="UpperCenter" startCorner="UpperLeft" startAxis="Horizontal">
                         <Button id="power_combat_defensive" class="powerButton" onClick="dispatch"
                                 text="COMBATE DEFENSIVO  •  0 PM&#10;−2 no próximo ataque&#10;+5 DEF até fim do turno"
@@ -315,7 +316,7 @@
         </HorizontalLayout>
 
         <!-- Quick skills and lifecycle -->
-        <Panel preferredHeight="133">
+        <Panel preferredHeight="145">
             <VerticalLayout anchorMin="0 0" anchorMax="1 1" spacing="7"
                             childForceExpandWidth="true" childForceExpandHeight="false">
                 <Panel class="section" preferredHeight="55">
@@ -356,7 +357,7 @@
                                         spacing="0" childForceExpandWidth="true" childForceExpandHeight="false">
                             <HorizontalLayout preferredHeight="24" childForceExpandWidth="false">
                                 <Text text="RUNTIME" class="caption gold" preferredWidth="90" />
-                                <Text id="versionLabel" text="v0.1.1 • offline pronto" class="muted"
+                                <Text id="versionLabel" text="v0.1.2 • offline pronto" class="muted"
                                       alignment="MiddleRight" flexibleWidth="1" />
                             </HorizontalLayout>
                             <Text id="refreshStatus" text="ATUALIZAÇÃO  •  pronta"

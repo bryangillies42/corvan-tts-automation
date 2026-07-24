@@ -7,10 +7,13 @@ const source = await readFile(bootstrapUrl, 'utf8');
 const runtimeSource = await readFile(new URL('../src/runtime.lua', import.meta.url), 'utf8');
 const uiSource = await readFile(new URL('../src/ui.xml', import.meta.url), 'utf8');
 
-test('keeps a single build-time seed runtime placeholder', () => {
+test('keeps one build-time placeholder for the seed UI and runtime', () => {
+  assert.equal((source.match(/__SEED_UI_LITERAL__/g) ?? []).length, 1);
   assert.equal((source.match(/__SEED_RUNTIME_LITERAL__/g) ?? []).length, 1);
-  assert.match(source, /local BOOTSTRAP_VERSION = "1\.0\.1"/);
+  assert.match(source, /local BOOTSTRAP_VERSION = "1\.0\.2"/);
+  assert.match(source, /local SEED_UI = __SEED_UI_LITERAL__/);
   assert.match(source, /local SEED_RUNTIME = __SEED_RUNTIME_LITERAL__/);
+  assert.match(source, /uiXml = SEED_UI/);
 });
 
 test('exposes the complete stable panel callback contract', () => {
@@ -45,6 +48,19 @@ test('uses copy-safe helper ownership and a non-interactive hidden scripting zon
   assert.match(source, /setUiAttribute\(\s*"refreshStatus",\s*"text"/);
 });
 
+test('carries persisted runtime state through the asynchronous helper replacement path', () => {
+  assert.match(source, /local function registerHelper\(helper, runtimeState\)/);
+  assert.match(source, /payload\.state = runtimeState/);
+  assert.match(
+    source,
+    /local function probeExistingHelper\(helperGuid, serial, attemptsRemaining, runtimeStateToRestore\)/,
+  );
+  assert.match(source, /beginStableRuntimeInstall\(helper, runtimeStateToRestore\)/);
+  assert.match(source, /probeExistingHelper\([\s\S]*desiredRuntimeState[\s\S]*\)/);
+  assert.match(source, /spawnHelper\(runtimeStateToRestore\)/);
+  assert.match(source, /ensureHelper = function\(runtimeStateToRestore\)/);
+});
+
 test('waits for object UI loading and only targets IDs declared by the XML', () => {
   const uiIds = new Set(
     [...uiSource.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]),
@@ -65,7 +81,14 @@ test('waits for object UI loading and only targets IDs declared by the XML', () 
   assert.match(source, /local uiAttributeValues = \{\}/);
   assert.match(source, /if not uiReady or uiIds\[id\] ~= true then\s+return false/);
   assert.match(source, /return self\.UI\.loading/);
+  assert.match(source, /Wait\.frames\(function\(\)\s+Wait\.condition\(finishLoading, hasFinishedLoading/);
   assert.match(source, /Wait\.condition\(finishLoading, hasFinishedLoading/);
+  assert.doesNotMatch(source, /type\(Wait\)\s*==\s*"table"/);
+  assert.doesNotMatch(runtimeSource, /type\(Wait\)\s*==\s*"table"/);
+  assert.match(source, /self\.UI\.getXml\(\)/);
+  assert.match(source, /function recoverUi\(/);
+  assert.match(source, /self\.createButton\(\{/);
+  assert.match(source, /label = "CARREGAR PAINEL"/);
   assert.match(source, /uiIds\[id\] ~= true/);
   assert.match(runtimeSource, /safeParentCall\("setRuntimeUiAttribute"/);
   assert.doesNotMatch(runtimeSource, /parent\.UI\.setAttribute/);

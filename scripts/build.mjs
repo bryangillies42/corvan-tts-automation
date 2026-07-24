@@ -17,6 +17,7 @@ const RELEASE_BASE_URL = "https://github.com/bryangillies42/corvan-tts-automatio
 const PLACEHOLDERS = Object.freeze({
   ui: "__UI_XML_LITERAL__",
   character: "__CHARACTER_JSON_LITERAL__",
+  seedUi: "__SEED_UI_LITERAL__",
   seedRuntime: "__SEED_RUNTIME_LITERAL__",
 });
 
@@ -257,7 +258,19 @@ export function validateUi(input) {
 
   assert(tagCount > 0, "src/ui.xml não contém elementos.");
   assert(stack.length === 0, `Tag XML <${stack.at(-1)}> não foi fechada.`);
-  assert(roots.length === 1 && roots[0] === "Panel", "src/ui.xml deve possuir um único Panel raiz.");
+  const visualRoots = roots.filter((name) => name !== "Defaults");
+  assert(
+    roots.every((name) => name === "Defaults" || name === "Panel"),
+    "src/ui.xml pode declarar somente Defaults e o Panel visual no nível raiz.",
+  );
+  assert(
+    roots.filter((name) => name === "Defaults").length <= 1,
+    "src/ui.xml pode declarar no máximo um bloco Defaults raiz.",
+  );
+  assert(
+    visualRoots.length === 1 && visualRoots[0] === "Panel",
+    "src/ui.xml deve possuir um único Panel visual raiz.",
+  );
   assert(ids.has("corvanConsole"), "src/ui.xml deve declarar o painel raiz corvanConsole.");
   for (const requiredId of [
     "pvCurrent", "pvMax", "pmCurrent", "pmMax", "defenseValue", "rdValue",
@@ -314,7 +327,7 @@ function createManifest(version, commitSha, runtime, previousVersion) {
   return {
     schemaVersion: 1,
     version,
-    minBootstrapVersion: "1.0.1",
+    minBootstrapVersion: "1.0.2",
     commitSha,
     runtime: {
       url: `${RELEASE_BASE_URL}/v${version}/corvan-runtime.lua`,
@@ -325,11 +338,11 @@ function createManifest(version, commitSha, runtime, previousVersion) {
   };
 }
 
-function createSavedObject(bootstrap, version, commitSha) {
+function createSavedObject(bootstrap, ui, version, commitSha, assetUrlOverride = null) {
   // Release builds pin the board art to the exact source commit. A local build
   // without CORVAN_COMMIT_SHA keeps using main so it remains directly importable.
   const assetRef = commitSha === DEFAULT_COMMIT_SHA ? "main" : commitSha;
-  const assetUrl = `${RAW_ASSET_BASE_URL}/${assetRef}/assets/panel-board.png`;
+  const assetUrl = assetUrlOverride || `${RAW_ASSET_BASE_URL}/${assetRef}/assets/panel-board.png`;
   return {
     SaveName: "Corvan Duras Console",
     GameMode: "",
@@ -353,13 +366,13 @@ function createSavedObject(bootstrap, version, commitSha) {
           rotX: 0,
           rotY: 180,
           rotZ: 0,
-          scaleX: 3.07,
+          scaleX: 1,
           scaleY: 1,
           scaleZ: 1,
         },
         Nickname: "Corvan Duras Console",
         Description: `Console de combate atualizável • v${version}`,
-        GMNotes: stableJson({ project: "corvan-tts-automation", version, aspectRatio: "3.07:1" }).trim(),
+        GMNotes: stableJson({ project: "corvan-tts-automation", version, aspectRatio: "2.22:1" }).trim(),
         ColorDiffuse: { r: 1, g: 1, b: 1 },
         Locked: false,
         Grid: true,
@@ -387,7 +400,7 @@ function createSavedObject(bootstrap, version, commitSha) {
         },
         LuaScript: bootstrap,
         LuaScriptState: "",
-        XmlUI: "",
+        XmlUI: ui,
         GUID: "c0a4a1",
       },
     ],
@@ -401,6 +414,7 @@ export async function buildProject({
   outDir = join(rootDir, "dist"),
   commitSha = process.env.CORVAN_COMMIT_SHA || DEFAULT_COMMIT_SHA,
   previousVersion = process.env.CORVAN_PREVIOUS_VERSION || null,
+  assetUrl = null,
 } = {}) {
   const absoluteRoot = resolve(rootDir);
   const absoluteOut = resolve(outDir);
@@ -445,6 +459,12 @@ export async function buildProject({
     luaLongString(runtime),
     PLACEHOLDERS.seedRuntime,
   );
+  bootstrap = replaceSinglePlaceholder(
+    bootstrap,
+    PLACEHOLDERS.seedUi,
+    luaLongString(ui),
+    PLACEHOLDERS.seedUi,
+  );
   bootstrap = withFinalNewline(bootstrap);
 
   for (const placeholder of Object.values(PLACEHOLDERS)) {
@@ -458,7 +478,8 @@ export async function buildProject({
     runtime,
     validatePreviousVersion(previousVersion, packageJson.version),
   );
-  const savedObject = createSavedObject(bootstrap, packageJson.version, manifest.commitSha);
+  if (assetUrl !== null) assertString(assetUrl, "assetUrl");
+  const savedObject = createSavedObject(bootstrap, ui, packageJson.version, manifest.commitSha, assetUrl);
   const files = {
     "corvan-runtime.lua": runtime,
     "manifest.json": stableJson(manifest),
@@ -495,6 +516,9 @@ function parseCliArguments(argv) {
       index += 1;
     } else if (argument === "--previous" && value) {
       options.previousVersion = value;
+      index += 1;
+    } else if (argument === "--asset-url" && value) {
+      options.assetUrl = value;
       index += 1;
     } else {
       fail(`Argumento desconhecido ou sem valor: ${argument}`);

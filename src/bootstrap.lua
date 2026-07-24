@@ -2,10 +2,11 @@
 -- This file deliberately contains no character rules. The replaceable runtime lives
 -- on an invisible helper so this visible panel never needs to be reloaded to update.
 
-local BOOTSTRAP_VERSION = "1.0.1"
+local BOOTSTRAP_VERSION = "1.0.2"
 local STATE_SCHEMA_VERSION = 1
 local MANIFEST_SCHEMA_VERSION = 1
-local SEED_RUNTIME_VERSION = "0.1.1"
+local SEED_RUNTIME_VERSION = "0.1.2"
+local SEED_UI = __SEED_UI_LITERAL__
 local SEED_RUNTIME = __SEED_RUNTIME_LITERAL__
 
 local RELEASE_API_URL = "https://api.github.com/repos/bryangillies42/corvan-tts-automation/releases/latest"
@@ -37,6 +38,7 @@ local uiReady = false
 local uiLoadSerial = 0
 local uiIds = {}
 local uiAttributeValues = {}
+local uiFallbackVisible = false
 local pendingRefreshText = ""
 local pendingRefreshBusy = false
 local update = {
@@ -64,7 +66,7 @@ local function defaultState()
         runtimeCommitSha = nil,
         runtimeSource = SEED_RUNTIME,
         runtimeState = nil,
-        uiXml = nil,
+        uiXml = SEED_UI,
     }
 end
 
@@ -426,6 +428,61 @@ local function collectUiIds(xml)
     return ids
 end
 
+local function clearUiFallback()
+    if not uiFallbackVisible then
+        return
+    end
+    pcall(function()
+        self.clearButtons()
+    end)
+    uiFallbackVisible = false
+end
+
+local function showUiFallback(reason)
+    if uiFallbackVisible then
+        return
+    end
+    local created = pcall(function()
+        self.createButton({
+            click_function = "recoverUi",
+            function_owner = self,
+            label = "CARREGAR PAINEL",
+            position = {0, 0.4, 0},
+            rotation = {0, 0, 0},
+            scale = {0.7, 0.7, 0.7},
+            width = 1200,
+            height = 320,
+            font_size = 110,
+            color = {0.10, 0.12, 0.14, 0.98},
+            font_color = {0.90, 0.72, 0.34, 1},
+            hover_color = {0.18, 0.22, 0.25, 1},
+            press_color = {0.30, 0.22, 0.10, 1},
+            tooltip = "Recarregar a interface do Console do Corvan",
+        })
+    end)
+    if created then
+        uiFallbackVisible = true
+    end
+    log("Corvan bootstrap: " .. tostring(reason) .. " Use o botão CARREGAR PAINEL.")
+end
+
+local function installedUiMatches(xml)
+    local ok, installed = pcall(function()
+        return self.UI.getXml()
+    end)
+    if not ok or type(installed) ~= "string" or installed == "" then
+        return false
+    end
+    for id in pairs(collectUiIds(xml)) do
+        if string.find(installed, 'id="' .. id .. '"', 1, true) == nil
+            and string.find(installed, "id='" .. id .. "'", 1, true) == nil
+        then
+            return false
+        end
+    end
+    return true
+end
+
 local function applyUiAttribute(id, attribute, value)
     if not uiReady or uiIds[id] ~= true then
         return false
@@ -492,7 +549,13 @@ local function installUiXml(xml)
         if serial ~= uiLoadSerial then
             return
         end
+        if not installedUiMatches(xml) then
+            uiReady = false
+            showUiFallback("a interface carregada não corresponde ao XML esperado.")
+            return
+        end
         uiReady = true
+        clearUiFallback()
         for id, attributes in pairs(uiAttributeValues) do
             for attribute, value in pairs(attributes) do
                 applyUiAttribute(id, attribute, value)
@@ -508,17 +571,21 @@ local function installUiXml(xml)
         return ok and loading == false
     end
 
-    if type(Wait) == "table" and type(Wait.condition) == "function" then
-        local scheduled = pcall(function()
+    -- Wait é um proxy do host no TTS, não uma table Lua. Uma checagem rígida de
+    -- tipo desativa justamente o caminho real do jogo.
+    local scheduled = pcall(function()
+        -- setXml agenda o carregamento para um frame posterior. Consultar
+        -- UI.loading no mesmo frame pode devolver false para a UI antiga e
+        -- validar XML obsoleto. Dois frames cobrem tanto o início quanto um
+        -- carregamento que já tenha terminado.
+        Wait.frames(function()
             Wait.condition(finishLoading, hasFinishedLoading, 5, function()
-                log("Corvan bootstrap: a interface não terminou de carregar.")
+                showUiFallback("a interface não terminou de carregar.")
             end)
-        end)
-        if not scheduled then
-            log("Corvan bootstrap: não foi possível aguardar o carregamento da interface.")
-        end
-    else
-        log("Corvan bootstrap: Wait.condition indisponível; interface mantida em modo seguro.")
+        end, 2)
+    end)
+    if not scheduled then
+        showUiFallback("não foi possível aguardar o carregamento da interface.")
     end
     return true
 end
@@ -743,9 +810,16 @@ local function healthIsValid(health, expectedVersion)
     return true
 end
 
-local function registerHelper(helper)
+local function registerHelper(helper, runtimeState)
     configureHelper(helper)
-    safeObjectCall(helper, "registerParent", {parentGuid = self.getGUID()})
+    local payload = {parentGuid = self.getGUID()}
+    if type(runtimeState) == "table" then
+        -- A freshly spawned/reloaded helper starts from its own default state and
+        -- may report that state back immediately. Seed it atomically while binding
+        -- the parent so a copied panel cannot lose its persisted resources/effects.
+        payload.state = runtimeState
+    end
+    safeObjectCall(helper, "registerParent", payload)
 end
 
 local function restoreRuntimeState(helper, runtimeState)
@@ -769,7 +843,7 @@ local function cacheExportedState(helper)
 end
 
 local function acceptStableHelper(helper, expectedVersion, runtimeState)
-    registerHelper(helper)
+    registerHelper(helper, runtimeState)
     if not restoreRuntimeState(helper, runtimeState) then
         return false
     end
@@ -784,31 +858,31 @@ local function acceptStableHelper(helper, expectedVersion, runtimeState)
     return true
 end
 
-local function probeExistingHelper(helperGuid, serial, attemptsRemaining)
+local function probeExistingHelper(helperGuid, serial, attemptsRemaining, runtimeStateToRestore)
     if serial ~= startupSerial or update.active then
         return
     end
     local helper = getObjectFromGUID(helperGuid)
     if helper == nil or not ownsHelper(helper) then
-        ensureHelper()
+        ensureHelper(runtimeStateToRestore)
         return
     end
-    registerHelper(helper)
+    registerHelper(helper, runtimeStateToRestore)
     local ok, health = safeObjectCall(helper, "healthCheck", {})
     if ok and healthIsValid(health, state.runtimeVersion) then
-        acceptStableHelper(helper, state.runtimeVersion, state.runtimeState)
+        acceptStableHelper(helper, state.runtimeVersion, runtimeStateToRestore)
         return
     end
     if attemptsRemaining > 0 then
         Wait.time(function()
-            probeExistingHelper(helperGuid, serial, attemptsRemaining - 1)
+            probeExistingHelper(helperGuid, serial, attemptsRemaining - 1, runtimeStateToRestore)
         end, HELPER_PROBE_INTERVAL)
         return
     end
-    beginStableRuntimeInstall(helper)
+    beginStableRuntimeInstall(helper, runtimeStateToRestore)
 end
 
-beginStableRuntimeInstall = function(helper)
+beginStableRuntimeInstall = function(helper, runtimeStateToRestore)
     if update.active or helper == nil then
         return
     end
@@ -829,7 +903,11 @@ beginStableRuntimeInstall = function(helper)
         return
     end
     startupInstallAttempts = startupInstallAttempts + 1
-    registerHelper(helper)
+    local desiredRuntimeState = runtimeStateToRestore
+    if desiredRuntimeState == nil then
+        desiredRuntimeState = state.runtimeState
+    end
+    registerHelper(helper, desiredRuntimeState)
     local ok, reloaded = pcall(function()
         helper.setLuaScript(source)
         return helper.reload()
@@ -844,11 +922,16 @@ beginStableRuntimeInstall = function(helper)
     startupSerial = startupSerial + 1
     local serial = startupSerial
     Wait.time(function()
-        probeExistingHelper(state.helperGuid, serial, math.floor(HELPER_HEALTH_TIMEOUT / HELPER_PROBE_INTERVAL))
+        probeExistingHelper(
+            state.helperGuid,
+            serial,
+            math.floor(HELPER_HEALTH_TIMEOUT / HELPER_PROBE_INTERVAL),
+            desiredRuntimeState
+        )
     end, HELPER_PROBE_INTERVAL)
 end
 
-local function spawnHelper()
+local function spawnHelper(runtimeStateToRestore)
     if helperSpawnPending then
         return
     end
@@ -867,25 +950,28 @@ local function spawnHelper()
                 return
             end
             configureHelper(helper)
-            beginStableRuntimeInstall(helper)
+            beginStableRuntimeInstall(helper, runtimeStateToRestore)
         end,
     })
 end
 
-ensureHelper = function()
+ensureHelper = function(runtimeStateToRestore)
+    if runtimeStateToRestore == nil then
+        runtimeStateToRestore = state.runtimeState
+    end
     local helper = findOwnedHelper()
     if helper == nil then
         -- A copied panel still contains the original helper GUID in its saved state.
         -- Ownership notes prevent it from ever taking over that helper.
         state.helperGuid = nil
-        spawnHelper()
+        spawnHelper(runtimeStateToRestore)
         return nil
     end
     configureHelper(helper)
     startupSerial = startupSerial + 1
     local serial = startupSerial
     Wait.time(function()
-        probeExistingHelper(helper.getGUID(), serial, 4)
+        probeExistingHelper(helper.getGUID(), serial, 4, runtimeStateToRestore)
     end, HELPER_PROBE_INTERVAL)
     return helper
 end
@@ -972,7 +1058,7 @@ local function webGet(url, headers, callback)
         return
     end
 
-    local timeoutScheduled = type(Wait) == "table" and type(Wait.time) == "function" and pcall(function()
+    local timeoutScheduled = pcall(function()
         Wait.time(function()
             if completed then
                 return
@@ -1336,6 +1422,16 @@ function onLoad(savedData)
     end
     setRefreshFeedback("", false)
     ensureHelper()
+end
+
+function recoverUi(_, playerColor, _)
+    local color = playerColorOf(playerColor)
+    local xml = state and state.uiXml or SEED_UI
+    if installUiXml(xml) then
+        tell(color, "recarregando a interface...", {0.80, 0.68, 0.38})
+    else
+        tell(color, "não foi possível recarregar a interface.", {1.0, 0.38, 0.30})
+    end
 end
 
 function onSave()

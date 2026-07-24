@@ -18,7 +18,7 @@ npm run build
 npm run test:lua
 ```
 
-`test:lua` é o smoke opcional de Windows (PowerShell 7): usa o MoonSharp instalado junto do próprio TTS para compilar runtime/bootstrap, executar as fórmulas centrais e simular `onLoad`, timeout de rede, update e rollback.
+`test:lua` é o smoke opcional de Windows (PowerShell 7): usa o MoonSharp instalado junto do próprio TTS para compilar runtime/bootstrap, executar as fórmulas centrais e simular `onLoad`, persistência de cópias, timeout de rede, update e rollback.
 
 O build valida `src/character.json` e `src/ui.xml`, incorpora ambos ao runtime Lua e inclui uma cópia offline do runtime no bootstrap. Os três artefatos determinísticos são escritos em `dist/`:
 
@@ -28,6 +28,8 @@ O build valida `src/character.json` e `src/ui.xml`, incorpora ambos ao runtime L
 
 Para identificar uma compilação sem alterar os fontes, defina `CORVAN_COMMIT_SHA` antes do build. Sem essa variável, o manifesto usa um SHA nulo de 40 caracteres como marcador determinístico; releases recebem automaticamente o SHA real da tag.
 O workflow de release também descobre a tag estável anterior e a registra em `previousVersion` (na primeira release, o valor é `null`).
+
+Com uma mesa aberta e a API de editor externo do TTS disponível, `scripts/tts-dev-api.ps1` permite listar os objetos do Corvan ou executar uma inspeção Lua por GUID. O script é apenas uma ferramenta de desenvolvimento e não integra o Saved Object publicado.
 
 ## Importar uma única vez
 

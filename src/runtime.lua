@@ -7,6 +7,7 @@ local CHARACTER_JSON = __CHARACTER_JSON_LITERAL__
 local STATE_SCHEMA_VERSION = 1
 local ROLL_TIMEOUT_SECONDS = 15
 local SPAWN_TIMEOUT_SECONDS = 4
+local DICE_STABLE_FRAMES = 12
 local CHAT_COLOR = {0.86, 0.70, 0.32}
 local ERROR_COLOR = {0.95, 0.36, 0.30}
 
@@ -39,7 +40,7 @@ end
 
 local DEFAULT_CHARACTER = {
     schemaVersion = 1,
-    version = "0.1.1",
+    version = "0.1.2",
     name = "Corvan Duras",
     shortName = "Corvan",
     resources = {hp = {max = 47}, mp = {max = 12}},
@@ -487,6 +488,7 @@ end
 
 local function diceHaveSettled(token)
     if not currentRoll or currentRoll.token ~= token then return true end
+    local allRestingAfterMotion = true
     for index = 1, currentRoll.count do
         local object = currentRoll.objects[index]
         if not object then return false end
@@ -507,14 +509,44 @@ local function diceHaveSettled(token)
             currentRoll.objectMissing = true
             return true
         end
-        if not resting then return false end
+        if not resting then
+            -- Logo após object.roll(), o TTS pode manter resting=true durante
+            -- um frame. Só aceitamos o repouso depois de observar movimento
+            -- real, evitando registrar a face inicial antes da física começar.
+            currentRoll.motionObserved[index] = true
+            currentRoll.stableRestFrames[index] = 0
+            currentRoll.lastRestingValues[index] = nil
+            allRestingAfterMotion = false
+        elseif not currentRoll.motionObserved[index] then
+            currentRoll.stableRestFrames[index] = 0
+            currentRoll.lastRestingValues[index] = nil
+            allRestingAfterMotion = false
+        else
+            local valueOk, value = pcall(function() return object.getRotationValue() end)
+            value = valueOk and tonumber(value) or nil
+            if not value then
+                currentRoll.stableRestFrames[index] = 0
+                currentRoll.lastRestingValues[index] = nil
+                allRestingAfterMotion = false
+            else
+                if currentRoll.lastRestingValues[index] == value then
+                    currentRoll.stableRestFrames[index] = currentRoll.stableRestFrames[index] + 1
+                else
+                    currentRoll.lastRestingValues[index] = value
+                    currentRoll.stableRestFrames[index] = 1
+                end
+                if currentRoll.stableRestFrames[index] < DICE_STABLE_FRAMES then
+                    allRestingAfterMotion = false
+                end
+            end
+        end
     end
-    return true
+    return allRestingAfterMotion
 end
 
 local function waitForDice(token)
     if not currentRoll or currentRoll.token ~= token then return end
-    if type(Wait) == "table" and type(Wait.condition) == "function" then
+    local scheduled = pcall(function()
         Wait.condition(function()
             if currentRoll and currentRoll.token == token and currentRoll.objectMissing then
                 finishRollFailure(token, "um dado foi removido durante a rolagem.")
@@ -523,8 +555,9 @@ local function waitForDice(token)
             end
         end, function() return diceHaveSettled(token) end, ROLL_TIMEOUT_SECONDS,
         function() finishRollFailure(token, "os dados não pararam a tempo.") end)
-    else
-        completeRoll(token)
+    end)
+    if not scheduled then
+        finishRollFailure(token, "não foi possível acompanhar os dados.")
     end
 end
 
@@ -574,6 +607,9 @@ local function startPhysicalRoll(parameters)
     local token = rollSequence
     parameters.token = token
     parameters.objects = {}
+    parameters.motionObserved = {}
+    parameters.stableRestFrames = {}
+    parameters.lastRestingValues = {}
     parameters.pendingSpawns = parameters.count
     currentRoll = parameters
     rollInProgress = true
@@ -600,12 +636,16 @@ local function startPhysicalRoll(parameters)
             return false
         end
     end
-    if type(Wait) == "table" and type(Wait.time) == "function" then
+    local spawnTimeoutScheduled = pcall(function()
         Wait.time(function()
             if currentRoll and currentRoll.token == token and currentRoll.pendingSpawns > 0 then
                 finishRollFailure(token, "a criação dos dados expirou.")
             end
         end, SPAWN_TIMEOUT_SECONDS)
+    end)
+    if not spawnTimeoutScheduled then
+        finishRollFailure(token, "não foi possível iniciar o temporizador dos dados.")
+        return false
     end
     return true
 end
@@ -922,8 +962,10 @@ local function bindWithRetry(remaining)
         notifyReady()
         return
     end
-    if remaining > 0 and type(Wait) == "table" and type(Wait.time) == "function" then
-        Wait.time(function() bindWithRetry(remaining - 1) end, 0.5)
+    if remaining > 0 then
+        pcall(function()
+            Wait.time(function() bindWithRetry(remaining - 1) end, 0.5)
+        end)
     end
 end
 

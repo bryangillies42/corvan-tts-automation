@@ -104,7 +104,15 @@ printToAll = function(message, _) table.insert(publicChat, message) end
 printToColor = function(message, _, _) table.insert(privateChat, message) end
 Wait = {
     condition = function(callback, condition, _, timeout)
-        if condition() then callback() elseif timeout then timeout() end
+        if condition() then error('runtime accepted initial resting face before motion') end
+        for _, die in pairs(diceByGuid) do die.resting = false end
+        if condition() then error('runtime accepted a die that is still moving') end
+        for _, die in pairs(diceByGuid) do die.resting = true end
+        local stable = false
+        for _ = 1, 60 do
+            if condition() then stable = true; break end
+        end
+        if stable then callback() elseif timeout then timeout() end
     end,
     time = function(callback, _) callback() end
 }
@@ -211,10 +219,12 @@ $integrityFrames = [int]$integrityResult.Tuple[2].Number
 
 $onLoadHarness = @'
 local timeQueue = {}
+local frameQueue = {}
 local conditionQueue = {}
 local attributeCalls = 0
 local invalidAttributeCalls = 0
 local xmlSetCalls = 0
+local installedXml = ''
 local helper = nil
 
 JSON = {
@@ -223,6 +233,7 @@ JSON = {
 }
 Wait = {
     time = function(callback, _) table.insert(timeQueue, callback) end,
+    frames = function(callback, _) table.insert(frameQueue, callback) end,
     condition = function(callback, condition, _, timeout)
         table.insert(conditionQueue, {callback = callback, condition = condition, timeout = timeout})
     end
@@ -230,10 +241,12 @@ Wait = {
 self = {
     UI = {
         loading = false,
-        setXml = function(_)
+        setXml = function(xml)
             xmlSetCalls = xmlSetCalls + 1
+            installedXml = xml
             self.UI.loading = true
         end,
+        getXml = function() return installedXml end,
         setAttribute = function(id, _, _)
             attributeCalls = attributeCalls + 1
             if self.UI.loading or (id ~= 'refresh' and id ~= 'refreshStatus' and id ~= 'versionLabel') then
@@ -244,7 +257,9 @@ self = {
     },
     getGUID = function() return 'panel1' end,
     positionToWorld = function(_) return {0, -2.5, 0} end,
-    getPosition = function() return {x = 0, y = 1, z = 0} end
+    getPosition = function() return {x = 0, y = 1, z = 0} end,
+    createButton = function(_) end,
+    clearButtons = function() end
 }
 getAllObjects = function() return {} end
 getObjectFromGUID = function(guid)
@@ -266,15 +281,15 @@ spawnObject = function(params)
                 xml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
             })
             if not accepted then error('bootstrap rejected valid UI') end
-            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.1.1'})
+            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.1.2'})
             setRuntimeUiAttribute({id = 'missing', attribute = 'text', value = 'must stay queued'})
             return helper
         end,
         call = function(name, _)
             if name == 'healthCheck' then
-                return {ok = true, version = '0.1.1', parentGuid = 'panel1'}
+                return {ok = true, version = '0.1.2', parentGuid = 'panel1'}
             elseif name == 'exportState' then
-                return {schemaVersion = 1, runtimeVersion = '0.1.1'}
+                return {schemaVersion = 1, runtimeVersion = '0.1.2'}
             end
             return true
         end
@@ -286,13 +301,24 @@ log = function(...) end
 
 onLoad('')
 if attributeCalls ~= 0 then error('onLoad touched UI before loading finished') end
-self.UI.loading = false
-for _, pending in ipairs(conditionQueue) do
-    if pending.condition() then pending.callback() elseif pending.timeout then pending.timeout() end
-end
-while #timeQueue > 0 do
-    local callback = table.remove(timeQueue, 1)
-    callback()
+local eventCycles = 0
+while #frameQueue > 0 or #conditionQueue > 0 or #timeQueue > 0 do
+    eventCycles = eventCycles + 1
+    if eventCycles > 100 then error('onLoad event loop exceeded') end
+
+    -- TTS commits setXml on a later frame. Every simulated event cycle starts
+    -- after that commit so UI.loading and getXml expose the installed tree.
+    self.UI.loading = false
+    if #frameQueue > 0 then
+        local callback = table.remove(frameQueue, 1)
+        callback()
+    elseif #conditionQueue > 0 then
+        local pending = table.remove(conditionQueue, 1)
+        if pending.condition() then pending.callback() elseif pending.timeout then pending.timeout() end
+    else
+        local callback = table.remove(timeQueue, 1)
+        callback()
+    end
 end
 if invalidAttributeCalls ~= 0 then error('bootstrap attempted an invalid UI attribute') end
 local info = getBootstrapInfo()
@@ -301,9 +327,106 @@ return xmlSetCalls, attributeCalls, invalidAttributeCalls, info.helperGuid, info
 
 $onLoadRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $onLoadResult = $onLoadRunner.DoString($bootstrap + "`n" + $onLoadHarness).ToString()
-$expectedOnLoad = '1, 5, 0, "helper1", "0.1.1"'
+$expectedOnLoad = '2, 5, 0, "helper1", "0.1.2"'
 if ($onLoadResult -ne $expectedOnLoad) {
     throw "Smoke de onLoad retornou '$onLoadResult'; esperado '$expectedOnLoad'."
+}
+
+$copyPersistenceHarness = @'
+local timeQueue = {}
+local helper = nil
+local helperState = nil
+local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.2', mp = 12, effects = {duel = false}}
+local persistedRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.2', mp = 10, effects = {duel = true}}
+
+JSON = {
+    encode = function(_) return '{"parentGuid":"panel-copy"}' end,
+    decode = function(_) return {parentGuid = 'panel-copy'} end
+}
+Wait = {
+    time = function(callback, _) table.insert(timeQueue, callback) end,
+    frames = function(callback, _) callback() end,
+    condition = function(callback, condition, _, timeout)
+        if condition() then callback() elseif timeout then timeout() end
+    end
+}
+self = {
+    getGUID = function() return 'panel-copy' end,
+    positionToWorld = function(_) return {0, -2.5, 0} end,
+    getPosition = function() return {x = 0, y = 1, z = 0} end
+}
+getAllObjects = function() return helper and {helper} or {} end
+getObjectFromGUID = function(guid)
+    if helper and guid == helper.getGUID() then return helper end
+    return nil
+end
+spawnObject = function(params)
+    helper = {
+        getGUID = function() return 'helper-copy' end,
+        getGMNotes = function() return '{"parentGuid":"panel-copy"}' end,
+        setGMNotes = function(_) end,
+        setName = function(_) end,
+        setDescription = function(_) end,
+        setLock = function(_) end,
+        setInvisibleTo = function(_) end,
+        setLuaScript = function(_) end,
+        reload = function()
+            -- Reproduz a corrida real: o helper recém-recarregado publica seu
+            -- estado padrão antes de o bootstrap terminar o health check.
+            helperState = defaultRuntimeState
+            cacheRuntimeState({state = defaultRuntimeState})
+            return helper
+        end,
+        call = function(name, payload)
+            if name == 'registerParent' then
+                if type(payload) == 'table' and type(payload.state) == 'table' then
+                    helperState = payload.state
+                end
+                cacheRuntimeState({state = helperState or defaultRuntimeState})
+                return true
+            elseif name == 'healthCheck' then
+                return {ok = true, version = '0.1.2', parentGuid = 'panel-copy'}
+            elseif name == 'importState' then
+                helperState = payload
+                return true
+            elseif name == 'exportState' then
+                return helperState
+            end
+            return true
+        end
+    }
+    params.callback_function(helper)
+end
+printToColor = function(...) end
+log = function(...) end
+
+state = defaultState()
+state.runtimeState = persistedRuntimeState
+startupInstallAttempts = 0
+helperSpawnPending = false
+ensureHelper()
+local cycles = 0
+while #timeQueue > 0 do
+    cycles = cycles + 1
+    if cycles > 100 then error('copy persistence event loop exceeded') end
+    local callback = table.remove(timeQueue, 1)
+    callback()
+end
+
+if not state.runtimeState or state.runtimeState.mp ~= 10 then
+    error('copied panel lost persisted MP during helper replacement')
+end
+if not state.runtimeState.effects or state.runtimeState.effects.duel ~= true then
+    error('copied panel lost persisted effects during helper replacement')
+end
+return state.runtimeState.mp, state.runtimeState.effects.duel, state.helperGuid
+'@
+
+$copyPersistenceRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
+$copyPersistenceResult = $copyPersistenceRunner.DoString($bootstrap + "`n" + $copyPersistenceHarness).ToString()
+$expectedCopyPersistence = '10, true, "helper-copy"'
+if ($copyPersistenceResult -ne $expectedCopyPersistence) {
+    throw "Smoke de persistência da cópia retornou '$copyPersistenceResult'; esperado '$expectedCopyPersistence'."
 }
 
 $webRequestHarness = @'
@@ -341,13 +464,14 @@ if ($webRequestResult -ne $expectedWebRequest) {
 $transactionHarness = @'
 local oldXml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
 local candidateXml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/><Text id="activeWeaponLabel"/></Panel>'
-local candidateSource = '-- CORVAN_RUNTIME candidate v0.1.2'
+local candidateSource = '-- CORVAN_RUNTIME candidate v0.1.3'
 local oldSource = SEED_RUNTIME
 local timers = {}
 local currentGuid = 'helper1'
-local activeVersion = '0.1.1'
+local activeVersion = '0.1.2'
 local loadedSource = oldSource
-local currentState = {schemaVersion = 1, runtimeVersion = '0.1.1', hp = 23}
+local installedXml = oldXml
+local currentState = {schemaVersion = 1, runtimeVersion = '0.1.2', hp = 23}
 local helper = nil
 
 JSON = {
@@ -364,10 +488,13 @@ Wait = {
 self = {
     UI = {
         loading = false,
-        setXml = function(_) self.UI.loading = false end,
+        setXml = function(xml) installedXml = xml; self.UI.loading = false end,
+        getXml = function() return installedXml end,
         setAttribute = function(_, _, _) end
     },
-    getGUID = function() return 'panel1' end
+    getGUID = function() return 'panel1' end,
+    createButton = function(_) end,
+    clearButtons = function() end
 }
 printToColor = function(...) end
 log = function(...) end
@@ -388,11 +515,11 @@ helper = {
     reload = function()
         if loadedSource == candidateSource then
             currentGuid = 'candidate-guid'
-            activeVersion = CANDIDATE_HEALTH_OK and '0.1.2' or 'broken'
+            activeVersion = CANDIDATE_HEALTH_OK and '0.1.3' or 'broken'
             applyRuntimeUi({xml = candidateXml})
         else
             currentGuid = 'rollback-guid'
-            activeVersion = '0.1.1'
+            activeVersion = '0.1.2'
             applyRuntimeUi({xml = oldXml})
         end
         return helper
@@ -412,7 +539,7 @@ helper = {
 
 state = defaultState()
 state.helperGuid = currentGuid
-state.runtimeVersion = '0.1.1'
+state.runtimeVersion = '0.1.2'
 state.runtimeSource = oldSource
 state.runtimeState = currentState
 state.uiXml = oldXml
@@ -425,7 +552,7 @@ update.playerColor = 'White'
 update.phase = 'install'
 
 installCandidate(9, {
-    manifest = {version = '0.1.2', commitSha = '0123456789abcdef0123456789abcdef01234567'},
+    manifest = {version = '0.1.3', commitSha = '0123456789abcdef0123456789abcdef01234567'},
     source = candidateSource,
     etag = 'etag-2'
 })
@@ -455,15 +582,15 @@ function Invoke-TransactionSmoke([bool]$healthy) {
 }
 
 $updateSuccess = Invoke-TransactionSmoke $true
-$expectedUpdateSuccess = '"0.1.2", true, false, false, "candidate-guid", 23, true, false'
+$expectedUpdateSuccess = '"0.1.3", true, false, false, "candidate-guid", 23, true, false'
 if ($updateSuccess -ne $expectedUpdateSuccess) {
     throw "Smoke de update retornou '$updateSuccess'; esperado '$expectedUpdateSuccess'."
 }
 
 $updateRollback = Invoke-TransactionSmoke $false
-$expectedUpdateRollback = '"0.1.1", false, true, false, "rollback-guid", 23, false, true'
+$expectedUpdateRollback = '"0.1.2", false, true, false, "rollback-guid", 23, false, true'
 if ($updateRollback -ne $expectedUpdateRollback) {
     throw "Smoke de rollback retornou '$updateRollback'; esperado '$expectedUpdateRollback'."
 }
 
-Write-Output "MoonSharp OK: runtime/bootstrap compilam; combate $runtimeFlowResult; SHA-256 em $integrityFrames frames; onLoad, watchdog, update e rollback seguros"
+Write-Output "MoonSharp OK: runtime/bootstrap compilam; combate $runtimeFlowResult; SHA-256 em $integrityFrames frames; onLoad, cópia persistente, watchdog, update e rollback seguros"

@@ -145,6 +145,12 @@ test('dados físicos usam offset local, espera oficial e limpeza por GUID própr
   assert.match(runtime, /spawnObject\s*\(\s*\{/);
   assert.match(runtime, /Wait\.condition/);
   assert.match(runtime, /object\.resting/);
+  assert.match(runtime, /parameters\.motionObserved\s*=\s*\{\}/);
+  assert.match(runtime, /currentRoll\.motionObserved\[index\]\s*=\s*true/);
+  assert.match(runtime, /not currentRoll\.motionObserved\[index\]/);
+  assert.match(runtime, /DICE_STABLE_FRAMES\s*=\s*12/);
+  assert.match(runtime, /parameters\.stableRestFrames\s*=\s*\{\}/);
+  assert.match(runtime, /currentRoll\.stableRestFrames\[index\]\s*<\s*DICE_STABLE_FRAMES/);
   assert.match(runtime, /object\.getRotationValue\(\)/);
   assert.match(runtime, /state\.ownedDiceGuids/);
   assert.match(runtime, /destroyObject\(object\)/);
