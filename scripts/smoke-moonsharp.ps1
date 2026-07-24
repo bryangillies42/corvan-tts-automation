@@ -154,7 +154,7 @@ Wait = {
     end,
     time = function(callback, _) callback() end,
     frames = function(callback, frames)
-        assert(frames == 1)
+        assert(frames == 3)
         frameCalls = frameCalls + 1
         callback()
     end
@@ -169,24 +169,24 @@ spawnObject = function(params)
         getGUID = function() return guid end,
         setName = function(_) end,
         roll = function() end,
-        addForce = function(force, forceType)
-            assert(forceType == 4 and force.y ~= 0)
-            if guid == 'die3' then error('simulated addForce failure') end
-            launchCalls = launchCalls + 1
-        end,
         setVelocity = function(force)
-            assert(guid == 'die3' and force.y ~= 0)
+            assert(force.y ~= 0)
+            if guid == 'die3' then error('simulated setVelocity failure') end
             velocityFallbackCalls = velocityFallbackCalls + 1
         end,
-        addTorque = function(torque, forceType)
-            assert(forceType == 4)
-            assert(torque.x ~= nil and torque.y ~= nil and torque.z ~= nil)
-            if guid == 'die4' then error('simulated addTorque failure') end
-            torqueCalls = torqueCalls + 1
+        addForce = function(force, forceType)
+            assert(guid == 'die3' and forceType == 4 and force.y ~= 0)
+            launchCalls = launchCalls + 1
         end,
         setAngularVelocity = function(torque)
-            assert(guid == 'die4' and torque.x ~= nil and torque.y ~= nil and torque.z ~= nil)
+            assert(torque.x ~= nil and torque.y ~= nil and torque.z ~= nil)
+            if guid == 'die4' then error('simulated setAngularVelocity failure') end
             angularFallbackCalls = angularFallbackCalls + 1
+        end,
+        addTorque = function(torque, forceType)
+            assert(guid == 'die4' and forceType == 4)
+            assert(torque.x ~= nil and torque.y ~= nil and torque.z ~= nil)
+            torqueCalls = torqueCalls + 1
         end,
         getRotationValue = function() return value end
     }
@@ -250,8 +250,8 @@ local latestSpawn = spawnPositions[#spawnPositions]
 assert(latestSpawn.x == 35 and math.abs(latestSpawn.y - 7.2) < 0.001 and latestSpawn.z == 42,
     'spawn did not follow panel: ' .. tostring(latestSpawn.x) .. ','
         .. tostring(latestSpawn.y) .. ',' .. tostring(latestSpawn.z))
-assert(launchCalls == 4 and torqueCalls == 4 and frameCalls == 5
-        and velocityFallbackCalls == 1 and angularFallbackCalls == 1,
+assert(launchCalls == 1 and torqueCalls == 1 and frameCalls == 5
+        and velocityFallbackCalls == 4 and angularFallbackCalls == 4,
     'unexpected launch counts: ' .. tostring(launchCalls) .. ','
         .. tostring(torqueCalls) .. ',' .. tostring(frameCalls) .. ','
         .. tostring(velocityFallbackCalls) .. ',' .. tostring(angularFallbackCalls))
@@ -420,15 +420,15 @@ spawnObject = function(params)
                 xml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
             })
             if not accepted then error('bootstrap rejected valid UI') end
-            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.1.3'})
+            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.1.4'})
             setRuntimeUiAttribute({id = 'missing', attribute = 'text', value = 'must stay queued'})
             return helper
         end,
         call = function(name, _)
             if name == 'healthCheck' then
-                return {ok = true, version = '0.1.3', parentGuid = 'panel1'}
+                return {ok = true, version = '0.1.4', parentGuid = 'panel1'}
             elseif name == 'exportState' then
-                return {schemaVersion = 1, runtimeVersion = '0.1.3'}
+                return {schemaVersion = 1, runtimeVersion = '0.1.4'}
             end
             return true
         end
@@ -466,7 +466,7 @@ return xmlSetCalls, attributeCalls, invalidAttributeCalls, info.helperGuid, info
 
 $onLoadRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $onLoadResult = $onLoadRunner.DoString($bootstrap + "`n" + $onLoadHarness).ToString()
-$expectedOnLoad = '2, 5, 0, "helper1", "0.1.3"'
+$expectedOnLoad = '2, 5, 0, "helper1", "0.1.4"'
 if ($onLoadResult -ne $expectedOnLoad) {
     throw "Smoke de onLoad retornou '$onLoadResult'; esperado '$expectedOnLoad'."
 }
@@ -475,7 +475,7 @@ $copyPersistenceHarness = @'
 local timeQueue = {}
 local helper = nil
 local helperState = nil
-local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.3', mp = 12, effects = {duel = false}}
+local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.4', mp = 12, effects = {duel = false}}
 local persistedRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.2', mp = 10, effects = {duel = true}}
 
 JSON = {
@@ -524,7 +524,7 @@ spawnObject = function(params)
                 cacheRuntimeState({state = helperState or defaultRuntimeState})
                 return true
             elseif name == 'healthCheck' then
-                return {ok = true, version = '0.1.3', parentGuid = 'panel-copy'}
+                return {ok = true, version = '0.1.4', parentGuid = 'panel-copy'}
             elseif name == 'importState' then
                 helperState = payload
                 return true
@@ -603,7 +603,7 @@ if ($webRequestResult -ne $expectedWebRequest) {
 $transactionHarness = @'
 local oldXml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
 local candidateXml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/><Text id="activeWeaponLabel"/></Panel>'
-local candidateSource = '-- CORVAN_RUNTIME candidate v0.1.3'
+local candidateSource = '-- CORVAN_RUNTIME candidate v0.1.4'
 local oldSource = SEED_RUNTIME
 local timers = {}
 local currentGuid = 'helper1'
@@ -654,7 +654,7 @@ helper = {
     reload = function()
         if loadedSource == candidateSource then
             currentGuid = 'candidate-guid'
-            activeVersion = CANDIDATE_HEALTH_OK and '0.1.3' or 'broken'
+            activeVersion = CANDIDATE_HEALTH_OK and '0.1.4' or 'broken'
             applyRuntimeUi({xml = candidateXml})
         else
             currentGuid = 'rollback-guid'
@@ -691,7 +691,7 @@ update.playerColor = 'White'
 update.phase = 'install'
 
 installCandidate(9, {
-    manifest = {version = '0.1.3', commitSha = '0123456789abcdef0123456789abcdef01234567'},
+    manifest = {version = '0.1.4', commitSha = '0123456789abcdef0123456789abcdef01234567'},
     source = candidateSource,
     etag = 'etag-2'
 })
@@ -721,7 +721,7 @@ function Invoke-TransactionSmoke([bool]$healthy) {
 }
 
 $updateSuccess = Invoke-TransactionSmoke $true
-$expectedUpdateSuccess = '"0.1.3", true, false, false, "candidate-guid", 23, true, false'
+$expectedUpdateSuccess = '"0.1.4", true, false, false, "candidate-guid", 23, true, false'
 if ($updateSuccess -ne $expectedUpdateSuccess) {
     throw "Smoke de update retornou '$updateSuccess'; esperado '$expectedUpdateSuccess'."
 }

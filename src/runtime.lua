@@ -8,6 +8,7 @@ local STATE_SCHEMA_VERSION = 1
 local ROLL_TIMEOUT_SECONDS = 15
 local SPAWN_TIMEOUT_SECONDS = 4
 local DICE_STABLE_FRAMES = 12
+local DICE_LAUNCH_DELAY_FRAMES = 3
 local LEGACY_DICE_OFFSET = {x = 0, y = 2.5, z = -5}
 local CHAT_COLOR = {0.86, 0.70, 0.32}
 local ERROR_COLOR = {0.95, 0.36, 0.30}
@@ -41,7 +42,7 @@ end
 
 local DEFAULT_CHARACTER = {
     schemaVersion = 1,
-    version = "0.1.3",
+    version = "0.1.4",
     name = "Corvan Duras",
     shortName = "Corvan",
     resources = {hp = {max = 47}, mp = {max = 12}},
@@ -526,7 +527,7 @@ local function localDicePosition(index, count)
     return localPosition
 end
 
-local function localDirectionToWorld(localDirection)
+local function localDirectionToWorld(localDirection, magnitude)
     if parent then
         local ok, origin, target = pcall(function()
             return parent.positionToWorld({x = 0, y = 0, z = 0}),
@@ -541,7 +542,7 @@ local function localDirectionToWorld(localDirection)
             local length = math.sqrt(direction.x * direction.x
                 + direction.y * direction.y + direction.z * direction.z)
             if length > 0.001 then
-                local magnitude = 6.5
+                magnitude = finiteNumber(magnitude, 8.5)
                 return {
                     x = direction.x / length * magnitude,
                     y = direction.y / length * magnitude,
@@ -697,25 +698,33 @@ local function launchDie(token, index)
         return
     end
 
-    local localImpulse = {
-        x = (math.random() * 2 - 1) * 1.2,
-        y = 6,
-        z = (math.random() * 2 - 1) * 1.2
+    -- Cada eixo é normalizado separadamente: o painel usa escala X/Z maior
+    -- que Y, e transformar o vetor inteiro inclinava o lançamento para os lados.
+    local up = localDirectionToWorld({x = 0, y = 1, z = 0}, 1)
+    local right = localDirectionToWorld({x = 1, y = 0, z = 0}, 1)
+    local forward = localDirectionToWorld({x = 0, y = 0, z = 1}, 1)
+    local horizontalRight = (math.random() * 2 - 1) * 1.4
+    local horizontalForward = (math.random() * 2 - 1) * 1.4
+    local worldVelocity = {
+        x = up.x * 16 + right.x * horizontalRight + forward.x * horizontalForward,
+        y = up.y * 16 + right.y * horizontalRight + forward.y * horizontalForward,
+        z = up.z * 16 + right.z * horizontalRight + forward.z * horizontalForward
     }
-    local worldImpulse = localDirectionToWorld(localImpulse)
-    local launched = pcall(function() object.addForce(worldImpulse, 4) end)
+    -- setVelocity é determinístico depois do congelamento inicial do spawn.
+    -- addForce pode retornar sem erro enquanto o TTS ainda ignora o impulso.
+    local launched = pcall(function() object.setVelocity(worldVelocity) end)
     if not launched then
-        launched = pcall(function() object.setVelocity(worldImpulse) end)
+        launched = pcall(function() object.addForce(worldVelocity, 4) end)
     end
 
     local angularVelocity = {
-        x = (math.random() * 2 - 1) * 14,
-        y = (math.random() * 2 - 1) * 14,
-        z = (math.random() * 2 - 1) * 14
+        x = (math.random() * 2 - 1) * 24,
+        y = (math.random() * 2 - 1) * 24,
+        z = (math.random() * 2 - 1) * 24
     }
-    local spinning = pcall(function() object.addTorque(angularVelocity, 4) end)
+    local spinning = pcall(function() object.setAngularVelocity(angularVelocity) end)
     if not spinning then
-        spinning = pcall(function() object.setAngularVelocity(angularVelocity) end)
+        spinning = pcall(function() object.addTorque(angularVelocity, 4) end)
     end
     if not launched then
         -- Mantém compatibilidade com builds antigos, mas não aceita uma face
@@ -755,7 +764,7 @@ local function onDieSpawned(token, index, object)
     -- O TTS congela objetos recém-criados por um frame. Aplicar a força no
     -- callback imediato faz o dado nascer sem movimento em algumas sessões.
     local scheduled = pcall(function()
-        Wait.frames(function() launchDie(token, index) end, 1)
+        Wait.frames(function() launchDie(token, index) end, DICE_LAUNCH_DELAY_FRAMES)
     end)
     if not scheduled then
         finishRollFailure(token, "não foi possível agendar o lançamento do dado.")

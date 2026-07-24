@@ -139,10 +139,11 @@ test('todo ID atualizado pelo runtime existe no XML', () => {
 
 test('dados físicos usam offset local, espera oficial e limpeza por GUID próprio', () => {
   assert.match(runtime, /parent\.positionToWorld\(localPosition\)/);
-  assert.match(runtime, /Wait\.frames\(function\(\) launchDie\(token, index\) end, 1\)/);
-  assert.match(runtime, /object\.addForce\(worldImpulse, 4\)/);
+  assert.match(runtime, /DICE_LAUNCH_DELAY_FRAMES\s*=\s*3/);
+  assert.match(runtime, /Wait\.frames\(function\(\) launchDie\(token, index\) end, DICE_LAUNCH_DELAY_FRAMES\)/);
+  assert.match(runtime, /object\.addForce\(worldVelocity, 4\)/);
   assert.match(runtime, /object\.addTorque\(angularVelocity, 4\)/);
-  assert.match(runtime, /object\.setVelocity\(worldImpulse\)/);
+  assert.match(runtime, /object\.setVelocity\(worldVelocity\)/);
   assert.match(runtime, /object\.setAngularVelocity\(angularVelocity\)/);
   assert.match(runtime, /parameters\.pendingLaunches\s*=\s*parameters\.count/);
   assert.match(runtime, /\[6\]\s*=\s*"Die_6"/);
@@ -167,7 +168,7 @@ test('offset padrão nasce sobre o painel e o offset legado é migrado sem schem
   assert.deepEqual(character.diceOffset, { x: 0, y: 3.2, z: 0 });
   assert.match(runtime, /LEGACY_DICE_OFFSET\s*=\s*\{x\s*=\s*0, y\s*=\s*2\.5, z\s*=\s*-5\}/);
   assert.match(runtime, /normalized\.diceOffset\s*=\s*deepCopy\(CHARACTER\.diceOffset/);
-  assert.match(runtime, /local function localDirectionToWorld\(localDirection\)/);
+  assert.match(runtime, /local function localDirectionToWorld\(localDirection, magnitude\)/);
 });
 
 test('chat usa entrega resiliente, formato centralizado e nunca notificações centrais', () => {
@@ -185,4 +186,9 @@ test('chat usa entrega resiliente, formato centralizado e nunca notificações c
 test('UI não usa tooltips nativos que herdam a rotação de 180 graus', () => {
   assert.match(ui, /rotation="0 0 180"/);
   assert.doesNotMatch(ui, /\btooltip(?:Position|FontSize|TextColor|BackgroundColor|BorderColor)?\s*=/i);
+});
+
+test('Refresh principal fica sempre visível e configurações mantêm um segundo atalho', () => {
+  assert.match(ui, /<Button id="refresh"[^>]*onClick="refresh"/s);
+  assert.match(ui, /<Button id="settings_refresh"[^>]*onClick="refresh"/s);
 });
