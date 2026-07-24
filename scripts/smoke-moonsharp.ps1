@@ -56,6 +56,14 @@ local state = {
         armedTower = true
     }
 }
+assert(CorvanRules.formatRollResult('Iniciativa', 10, 1, 20, {7}, 3) ==
+    'Iniciativa - 10 (d20[7] + 3)')
+assert(CorvanRules.formatRollResult('Espada', 10, 1, 20, {12}, -2) ==
+    'Espada - 10 (d20[12] - 2)')
+assert(CorvanRules.formatRollResult('Escudo', 21, 1, 20, {13}, 8) ==
+    'Escudo - 21 (d20[13] + 8)')
+assert(CorvanRules.formatRollResult('Crítico', 13, 2, 8, {6, 3}, 4) ==
+    'Crítico - 13 (2d8[6,3] + 4)')
 local damage = CorvanRules.calculateDamageSpec(character, state, 'sword', true)
 return CorvanRules.calculateAttackModifier(character, state, 'sword'),
     CorvanRules.calculateDefense(character, state),
@@ -79,10 +87,40 @@ local diceByGuid = {}
 local dieValues = {}
 local dieSequence = 0
 local parentObject = nil
+local globalChatCalls = 0
+local panelPosition = {x = 20, y = 1, z = 30}
+local spawnPositions = {}
+local launchCalls = 0
+local torqueCalls = 0
+local velocityFallbackCalls = 0
+local angularFallbackCalls = 0
+local frameCalls = 0
+
+local whitePlayer = {
+    steam_id = 'steam-white',
+    color = 'White',
+    print = function(message, _) table.insert(publicChat, 'White|' .. message) end
+}
+local greyPlayer = {
+    steam_id = 'steam-grey',
+    color = 'Grey',
+    print = function(message, _) table.insert(publicChat, 'Grey|' .. message) end
+}
+Player = {
+    getPlayers = function() return {whitePlayer} end,
+    -- White aparece de novo para provar que a entrega é deduplicada.
+    getSpectators = function() return {greyPlayer, whitePlayer} end
+}
 
 parentObject = {
-    positionToWorld = function(position) return position end,
-    getPosition = function() return {x = 0, y = 1, z = 0} end,
+    positionToWorld = function(position)
+        return {
+            x = panelPosition.x + position.x,
+            y = panelPosition.y + position.y,
+            z = panelPosition.z + position.z
+        }
+    end,
+    getPosition = function() return panelPosition end,
     call = function(name, payload)
         if name == 'setRuntimeUiAttribute' then
             attributes[payload.id] = payload.value
@@ -100,7 +138,7 @@ end
 destroyObject = function(object)
     diceByGuid[object.getGUID()] = nil
 end
-printToAll = function(message, _) table.insert(publicChat, message) end
+printToAll = function(_, _) globalChatCalls = globalChatCalls + 1 end
 printToColor = function(message, _, _) table.insert(privateChat, message) end
 Wait = {
     condition = function(callback, condition, _, timeout)
@@ -114,17 +152,42 @@ Wait = {
         end
         if stable then callback() elseif timeout then timeout() end
     end,
-    time = function(callback, _) callback() end
+    time = function(callback, _) callback() end,
+    frames = function(callback, frames)
+        assert(frames == 1)
+        frameCalls = frameCalls + 1
+        callback()
+    end
 }
 spawnObject = function(params)
     dieSequence = dieSequence + 1
     local guid = 'die' .. tostring(dieSequence)
     local value = table.remove(dieValues, 1)
+    table.insert(spawnPositions, params.position)
     local die = {
         resting = true,
         getGUID = function() return guid end,
         setName = function(_) end,
         roll = function() end,
+        addForce = function(force, forceType)
+            assert(forceType == 4 and force.y ~= 0)
+            if guid == 'die3' then error('simulated addForce failure') end
+            launchCalls = launchCalls + 1
+        end,
+        setVelocity = function(force)
+            assert(guid == 'die3' and force.y ~= 0)
+            velocityFallbackCalls = velocityFallbackCalls + 1
+        end,
+        addTorque = function(torque, forceType)
+            assert(forceType == 4)
+            assert(torque.x ~= nil and torque.y ~= nil and torque.z ~= nil)
+            if guid == 'die4' then error('simulated addTorque failure') end
+            torqueCalls = torqueCalls + 1
+        end,
+        setAngularVelocity = function(torque)
+            assert(guid == 'die4' and torque.x ~= nil and torque.y ~= nil and torque.z ~= nil)
+            angularFallbackCalls = angularFallbackCalls + 1
+        end,
         getRotationValue = function() return value end
     }
     diceByGuid[guid] = die
@@ -132,6 +195,13 @@ spawnObject = function(params)
 end
 
 assert(registerParent({parentGuid = 'panel1'}))
+local legacyState = exportState()
+legacyState.diceOffset = {x = 0, y = 2.5, z = -5}
+assert(importState(legacyState))
+local migratedOffset = exportState().diceOffset
+assert(migratedOffset.x == 0 and migratedOffset.y == 3.2 and migratedOffset.z == 0,
+    'legacy offset migration failed: ' .. tostring(migratedOffset.x) .. ','
+        .. tostring(migratedOffset.y) .. ',' .. tostring(migratedOffset.z))
 assert(handleUiEvent({id = 'power_duel', playerColor = 'White'}))
 local afterDuel = exportState()
 assert(afterDuel.mp == 10 and afterDuel.effects.duel)
@@ -150,7 +220,9 @@ assert(handleUiEvent({id = 'power_torre_armada', playerColor = 'White'}))
 dieValues = {6}
 assert(handleUiEvent({id = 'roll_damage', playerColor = 'White'}))
 local afterTower = exportState()
-assert(not afterTower.effects.armedTower and afterTower.lastResult == 'Dano: 15')
+assert(not afterTower.effects.armedTower and afterTower.lastResult == 'Dano - 15 (d8[6] + 9)')
+assert(publicChat[1] == 'White|Corvan: Dano - 15 (d8[6] + 9)')
+assert(publicChat[2] == 'Grey|Corvan: Dano - 15 (d8[6] + 9)')
 
 assert(handleUiEvent({id = 'power_combat_defensive', playerColor = 'White'}))
 dieValues = {19}
@@ -159,17 +231,41 @@ local afterAttack = exportState()
 assert(afterAttack.effects.combatDefensiveDefense and not afterAttack.effects.combatDefensiveArmed)
 assert(afterAttack.pendingThreat and afterAttack.pendingThreat.natural == 19)
 assert(CorvanRules.calculateDefense(CHARACTER, afterAttack) == 25)
+assert(afterAttack.lastResult == 'Espada - 25 (d20[19] + 6) • ameaça')
 
 dieValues = {6, 3}
 assert(handleUiEvent({id = 'roll_critical', playerColor = 'White'}))
 local afterCritical = exportState()
-assert(afterCritical.pendingThreat == nil and afterCritical.lastResult == 'Crítico: 13')
-assert(publicChat[#publicChat]:find('2d8%[6,3%] %+4 = 13') ~= nil)
+assert(afterCritical.pendingThreat == nil and afterCritical.lastResult == 'Crítico - 13 (2d8[6,3] + 4)')
+assert(publicChat[#publicChat] == 'Grey|Corvan: Crítico - 13 (2d8[6,3] + 4)')
+
+dieValues = {7}
+panelPosition = {x = 35, y = 4, z = 42}
+assert(handleUiEvent({id = 'skill_iniciativa', playerColor = 'White'}))
+local afterInitiative = exportState()
+assert(afterInitiative.lastResult == 'Iniciativa - 10 (d20[7] + 3)')
+assert(publicChat[#publicChat] == 'Grey|Corvan: Iniciativa - 10 (d20[7] + 3)')
+assert(#publicChat == 8 and globalChatCalls == 0)
+local latestSpawn = spawnPositions[#spawnPositions]
+assert(latestSpawn.x == 35 and math.abs(latestSpawn.y - 7.2) < 0.001 and latestSpawn.z == 42,
+    'spawn did not follow panel: ' .. tostring(latestSpawn.x) .. ','
+        .. tostring(latestSpawn.y) .. ',' .. tostring(latestSpawn.z))
+assert(launchCalls == 4 and torqueCalls == 4 and frameCalls == 5
+        and velocityFallbackCalls == 1 and angularFallbackCalls == 1,
+    'unexpected launch counts: ' .. tostring(launchCalls) .. ','
+        .. tostring(torqueCalls) .. ',' .. tostring(frameCalls) .. ','
+        .. tostring(velocityFallbackCalls) .. ',' .. tostring(angularFallbackCalls))
+
+local chatBeforeFailure = #publicChat
+currentRoll = {token = 999, playerColor = 'White'}
+rollInProgress = true
+finishRollFailure(999, 'a rolagem expirou.')
+assert(#publicChat == chatBeforeFailure)
 
 assert(handleUiEvent({id = 'pm_input', value = '-5', playerColor = 'White'}))
 assert(exportState().mp == 0)
 assert(not handleUiEvent({id = 'power_duel', playerColor = 'White'}))
-assert(#privateChat >= 2)
+assert(#privateChat >= 3)
 
 return afterDuel.mp, afterTurn.mp, afterTower.lastResult, afterAttack.pendingThreat.natural,
     afterCritical.lastResult, #publicChat, #privateChat
@@ -177,9 +273,52 @@ return afterDuel.mp, afterTurn.mp, afterTower.lastResult, afterAttack.pendingThr
 
 $runtimeFlowRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $runtimeFlowResult = $runtimeFlowRunner.DoString($runtime + "`n" + $runtimeFlowHarness).ToString()
-$expectedRuntimeFlow = '10, 9, "Dano: 15", 19, "Crítico: 13", 3, 2'
+$expectedRuntimeFlow = '10, 9, "Dano - 15 (d8[6] + 9)", 19, "Crítico - 13 (2d8[6,3] + 4)", 8, 3'
 if ($runtimeFlowResult -ne $expectedRuntimeFlow) {
     throw "Smoke do fluxo de combate retornou '$runtimeFlowResult'; esperado '$expectedRuntimeFlow'."
+}
+
+$chatFallbackHarness = @'
+local directCalls = 0
+local colorFallbackCalls = 0
+local globalFallbackCalls = 0
+local hostPrintCalls = 0
+local diagnostics = 0
+local failedPlayer = {
+    steam_id = 'steam-failed',
+    color = 'Blue',
+    print = function(_, _) directCalls = directCalls + 1; error('direct chat unavailable') end
+}
+Player = {
+    getPlayers = function() return {failedPlayer} end,
+    getSpectators = function() return {failedPlayer} end
+}
+printToColor = function(message, color, _)
+    assert(message == 'Corvan: fallback por cor' and color == 'Blue')
+    colorFallbackCalls = colorFallbackCalls + 1
+end
+printToAll = function(_, _) globalFallbackCalls = globalFallbackCalls + 1 end
+print = function(_) hostPrintCalls = hostPrintCalls + 1 end
+log = function(_, _) diagnostics = diagnostics + 1 end
+
+assert(publicMessage('Corvan: fallback por cor'))
+assert(directCalls == 1 and colorFallbackCalls == 1 and globalFallbackCalls == 0)
+
+Player = nil
+assert(publicMessage('Corvan: fallback global'))
+assert(globalFallbackCalls == 1)
+
+printToAll = function(_, _) error('global chat unavailable') end
+assert(not publicMessage('Corvan: falha total'))
+assert(hostPrintCalls == 1 and diagnostics == 1)
+return directCalls, colorFallbackCalls, globalFallbackCalls, hostPrintCalls, diagnostics
+'@
+
+$chatFallbackRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
+$chatFallbackResult = $chatFallbackRunner.DoString($runtime + "`n" + $chatFallbackHarness).ToString()
+$expectedChatFallback = '1, 1, 1, 1, 1'
+if ($chatFallbackResult -ne $expectedChatFallback) {
+    throw "Smoke dos fallbacks de chat retornou '$chatFallbackResult'; esperado '$expectedChatFallback'."
 }
 
 $integrityHarness = @'
@@ -281,15 +420,15 @@ spawnObject = function(params)
                 xml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
             })
             if not accepted then error('bootstrap rejected valid UI') end
-            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.1.2'})
+            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.1.3'})
             setRuntimeUiAttribute({id = 'missing', attribute = 'text', value = 'must stay queued'})
             return helper
         end,
         call = function(name, _)
             if name == 'healthCheck' then
-                return {ok = true, version = '0.1.2', parentGuid = 'panel1'}
+                return {ok = true, version = '0.1.3', parentGuid = 'panel1'}
             elseif name == 'exportState' then
-                return {schemaVersion = 1, runtimeVersion = '0.1.2'}
+                return {schemaVersion = 1, runtimeVersion = '0.1.3'}
             end
             return true
         end
@@ -327,7 +466,7 @@ return xmlSetCalls, attributeCalls, invalidAttributeCalls, info.helperGuid, info
 
 $onLoadRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $onLoadResult = $onLoadRunner.DoString($bootstrap + "`n" + $onLoadHarness).ToString()
-$expectedOnLoad = '2, 5, 0, "helper1", "0.1.2"'
+$expectedOnLoad = '2, 5, 0, "helper1", "0.1.3"'
 if ($onLoadResult -ne $expectedOnLoad) {
     throw "Smoke de onLoad retornou '$onLoadResult'; esperado '$expectedOnLoad'."
 }
@@ -336,7 +475,7 @@ $copyPersistenceHarness = @'
 local timeQueue = {}
 local helper = nil
 local helperState = nil
-local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.2', mp = 12, effects = {duel = false}}
+local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.3', mp = 12, effects = {duel = false}}
 local persistedRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.2', mp = 10, effects = {duel = true}}
 
 JSON = {
@@ -385,7 +524,7 @@ spawnObject = function(params)
                 cacheRuntimeState({state = helperState or defaultRuntimeState})
                 return true
             elseif name == 'healthCheck' then
-                return {ok = true, version = '0.1.2', parentGuid = 'panel-copy'}
+                return {ok = true, version = '0.1.3', parentGuid = 'panel-copy'}
             elseif name == 'importState' then
                 helperState = payload
                 return true

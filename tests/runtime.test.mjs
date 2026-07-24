@@ -139,6 +139,12 @@ test('todo ID atualizado pelo runtime existe no XML', () => {
 
 test('dados físicos usam offset local, espera oficial e limpeza por GUID próprio', () => {
   assert.match(runtime, /parent\.positionToWorld\(localPosition\)/);
+  assert.match(runtime, /Wait\.frames\(function\(\) launchDie\(token, index\) end, 1\)/);
+  assert.match(runtime, /object\.addForce\(worldImpulse, 4\)/);
+  assert.match(runtime, /object\.addTorque\(angularVelocity, 4\)/);
+  assert.match(runtime, /object\.setVelocity\(worldImpulse\)/);
+  assert.match(runtime, /object\.setAngularVelocity\(angularVelocity\)/);
+  assert.match(runtime, /parameters\.pendingLaunches\s*=\s*parameters\.count/);
   assert.match(runtime, /\[6\]\s*=\s*"Die_6"/);
   assert.match(runtime, /\[8\]\s*=\s*"Die_8"/);
   assert.match(runtime, /\[20\]\s*=\s*"Die_20"/);
@@ -157,8 +163,26 @@ test('dados físicos usam offset local, espera oficial e limpeza por GUID própr
   assert.doesNotMatch(runtime, /getAllObjects\s*\(/, 'não pode apagar dados que não pertencem ao painel');
 });
 
-test('chat usa mensagens curtas e nunca notificações centrais', () => {
+test('offset padrão nasce sobre o painel e o offset legado é migrado sem schema novo', () => {
+  assert.deepEqual(character.diceOffset, { x: 0, y: 3.2, z: 0 });
+  assert.match(runtime, /LEGACY_DICE_OFFSET\s*=\s*\{x\s*=\s*0, y\s*=\s*2\.5, z\s*=\s*-5\}/);
+  assert.match(runtime, /normalized\.diceOffset\s*=\s*deepCopy\(CHARACTER\.diceOffset/);
+  assert.match(runtime, /local function localDirectionToWorld\(localDirection\)/);
+});
+
+test('chat usa entrega resiliente, formato centralizado e nunca notificações centrais', () => {
+  assert.match(runtime, /function CorvanRules\.formatRollResult\(/);
+  assert.match(runtime, /Player\[functionName\]/);
+  assert.match(runtime, /player\.print\(message, CHAT_COLOR\)/);
   assert.match(runtime, /printToAll\(/);
   assert.match(runtime, /printToColor\(/);
+  assert.match(runtime, /chatDiagnostic\(/);
+  assert.match(runtime, /CHARACTER\.shortName \.\. ": " \.\. state\.lastResult/);
+  assert.doesNotMatch(runtime, /\+ -/);
   assert.doesNotMatch(runtime, /broadcastTo(?:All|Color)\s*\(/);
+});
+
+test('UI não usa tooltips nativos que herdam a rotação de 180 graus', () => {
+  assert.match(ui, /rotation="0 0 180"/);
+  assert.doesNotMatch(ui, /\btooltip(?:Position|FontSize|TextColor|BackgroundColor|BorderColor)?\s*=/i);
 });

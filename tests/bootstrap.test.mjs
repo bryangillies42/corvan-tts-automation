@@ -11,6 +11,7 @@ test('keeps one build-time placeholder for the seed UI and runtime', () => {
   assert.equal((source.match(/__SEED_UI_LITERAL__/g) ?? []).length, 1);
   assert.equal((source.match(/__SEED_RUNTIME_LITERAL__/g) ?? []).length, 1);
   assert.match(source, /local BOOTSTRAP_VERSION = "1\.0\.2"/);
+  assert.match(source, /local SEED_RUNTIME_VERSION = "0\.1\.3"/);
   assert.match(source, /local SEED_UI = __SEED_UI_LITERAL__/);
   assert.match(source, /local SEED_RUNTIME = __SEED_RUNTIME_LITERAL__/);
   assert.match(source, /uiXml = SEED_UI/);

@@ -34,66 +34,42 @@
                 textAlignment="MiddleCenter" resizeTextForBestFit="true"
                 resizeTextMinSize="11" resizeTextMaxSize="20"
                 colors="#1A2026|#28313A|#11161B|#090B0D88"
-                outline="#41474D" outlineSize="1 1" padding="8 8 5 5"
-                tooltipPosition="Above" tooltipFontSize="16"
-                tooltipTextColor="#F3EEE3" tooltipBackgroundColor="#07090CF5"
-                tooltipBorderColor="#9E7A31" />
+                outline="#41474D" outlineSize="1 1" padding="8 8 5 5" />
         <Button class="miniButton" fontSize="14" fontStyle="Bold" textColor="#DED8CC"
                 textAlignment="MiddleCenter" resizeTextForBestFit="true"
                 resizeTextMinSize="10" resizeTextMaxSize="16"
                 colors="#171C21|#28323A|#0E1216|#090B0D88"
-                outline="#3A4045" outlineSize="1 1" padding="3 3 2 2"
-                tooltipPosition="Above" tooltipFontSize="15"
-                tooltipTextColor="#F3EEE3" tooltipBackgroundColor="#07090CF5"
-                tooltipBorderColor="#9E7A31" />
+                outline="#3A4045" outlineSize="1 1" padding="3 3 2 2" />
         <Button class="weaponButton" fontSize="18" fontStyle="Bold" textColor="#E7E0D3"
                 textAlignment="MiddleLeft" resizeTextForBestFit="true"
                 resizeTextMinSize="12" resizeTextMaxSize="19"
                 colors="#14191E|#222A31|#0D1115|#090B0D88"
-                outline="#4A5055" outlineSize="1 1" padding="18 12 8 8"
-                tooltipPosition="Above" tooltipFontSize="16"
-                tooltipTextColor="#F3EEE3" tooltipBackgroundColor="#07090CF5"
-                tooltipBorderColor="#9E7A31" />
+                outline="#4A5055" outlineSize="1 1" padding="18 12 8 8" />
         <Button class="powerButton" fontSize="16" fontStyle="Bold" textColor="#E7E0D3"
                 textAlignment="MiddleCenter" resizeTextForBestFit="true"
                 resizeTextMinSize="11" resizeTextMaxSize="18"
                 colors="#13191E|#232D35|#0D1115|#090B0D88"
-                outline="#3B4B56" outlineSize="1 1" padding="8 8 5 5"
-                tooltipPosition="Above" tooltipFontSize="16"
-                tooltipTextColor="#F3EEE3" tooltipBackgroundColor="#07090CF5"
-                tooltipBorderColor="#9E7A31" />
+                outline="#3B4B56" outlineSize="1 1" padding="8 8 5 5" />
         <Button class="skillButton" fontSize="14" fontStyle="Bold" textColor="#DAD7CE"
                 textAlignment="MiddleCenter" resizeTextForBestFit="true"
                 resizeTextMinSize="10" resizeTextMaxSize="16"
                 colors="#151A1F|#283139|#0D1115|#090B0D88"
-                outline="#363C41" outlineSize="1 1" padding="4 4 2 2"
-                tooltipPosition="Above" tooltipFontSize="15"
-                tooltipTextColor="#F3EEE3" tooltipBackgroundColor="#07090CF5"
-                tooltipBorderColor="#9E7A31" />
+                outline="#363C41" outlineSize="1 1" padding="4 4 2 2" />
         <Button class="dangerAction" fontSize="20" fontStyle="Bold" textColor="#F3DDD7"
                 textAlignment="MiddleCenter" resizeTextForBestFit="true"
                 resizeTextMinSize="13" resizeTextMaxSize="22"
                 colors="#6B2821|#8A3B30|#451B17|#21100F88"
-                outline="#A44D3E" outlineSize="2 2" padding="7 7 4 4"
-                tooltipPosition="Above" tooltipFontSize="16"
-                tooltipTextColor="#F3EEE3" tooltipBackgroundColor="#07090CF5"
-                tooltipBorderColor="#9E7A31" />
+                outline="#A44D3E" outlineSize="2 2" padding="7 7 4 4" />
         <Button class="goldAction" fontSize="20" fontStyle="Bold" textColor="#FFF0C6"
                 textAlignment="MiddleCenter" resizeTextForBestFit="true"
                 resizeTextMinSize="13" resizeTextMaxSize="22"
                 colors="#665018|#856D25|#44350F|#211A0988"
-                outline="#B58B35" outlineSize="2 2" padding="7 7 4 4"
-                tooltipPosition="Above" tooltipFontSize="16"
-                tooltipTextColor="#F3EEE3" tooltipBackgroundColor="#07090CF5"
-                tooltipBorderColor="#9E7A31" />
+                outline="#B58B35" outlineSize="2 2" padding="7 7 4 4" />
         <Button class="greenAction" fontSize="20" fontStyle="Bold" textColor="#E3F3DF"
                 textAlignment="MiddleCenter" resizeTextForBestFit="true"
                 resizeTextMinSize="13" resizeTextMaxSize="22"
                 colors="#28562A|#39723B|#19391B|#0D1C0E88"
-                outline="#4E8C50" outlineSize="2 2" padding="7 7 4 4"
-                tooltipPosition="Above" tooltipFontSize="16"
-                tooltipTextColor="#F3EEE3" tooltipBackgroundColor="#07090CF5"
-                tooltipBorderColor="#9E7A31" />
+                outline="#4E8C50" outlineSize="2 2" padding="7 7 4 4" />
 
         <InputField class="numberInput" fontSize="16" fontStyle="Bold"
                     textColor="#F0E9DC" color="#090C0F"
@@ -144,13 +120,13 @@
                             <Text text="/" class="muted" preferredWidth="16" />
                             <Text id="pvMax" text="47" fontSize="24" preferredWidth="46" />
                             <InputField id="pv_input" class="numberInput" text="47" onEndEdit="dispatch"
-                                        preferredWidth="54" tooltip="Definir PV atual (0 a 47)" />
+                                        preferredWidth="54" />
                         </HorizontalLayout>
                         <HorizontalLayout preferredHeight="34" spacing="3" childForceExpandWidth="true">
-                            <Button id="pv_m5" class="miniButton" text="−5" onClick="dispatch" tooltip="Perder 5 PV" />
-                            <Button id="pv_m1" class="miniButton" text="−1" onClick="dispatch" tooltip="Perder 1 PV" />
-                            <Button id="pv_p1" class="miniButton" text="+1" onClick="dispatch" tooltip="Recuperar 1 PV" />
-                            <Button id="pv_p5" class="miniButton" text="+5" onClick="dispatch" tooltip="Recuperar 5 PV" />
+                            <Button id="pv_m5" class="miniButton" text="−5" onClick="dispatch" />
+                            <Button id="pv_m1" class="miniButton" text="−1" onClick="dispatch" />
+                            <Button id="pv_p1" class="miniButton" text="+1" onClick="dispatch" />
+                            <Button id="pv_p5" class="miniButton" text="+5" onClick="dispatch" />
                         </HorizontalLayout>
                     </VerticalLayout>
                 </Panel>
@@ -164,13 +140,13 @@
                             <Text text="/" class="muted" preferredWidth="16" />
                             <Text id="pmMax" text="12" fontSize="24" preferredWidth="44" />
                             <InputField id="pm_input" class="numberInput" text="12" onEndEdit="dispatch"
-                                        preferredWidth="52" tooltip="Definir PM atual (0 a 12)" />
+                                        preferredWidth="52" />
                         </HorizontalLayout>
                         <HorizontalLayout preferredHeight="34" spacing="3" childForceExpandWidth="true">
-                            <Button id="pm_m5" class="miniButton" text="−5" onClick="dispatch" tooltip="Gastar 5 PM" />
-                            <Button id="pm_m1" class="miniButton" text="−1" onClick="dispatch" tooltip="Gastar 1 PM" />
-                            <Button id="pm_p1" class="miniButton" text="+1" onClick="dispatch" tooltip="Recuperar 1 PM" />
-                            <Button id="pm_p5" class="miniButton" text="+5" onClick="dispatch" tooltip="Recuperar 5 PM" />
+                            <Button id="pm_m5" class="miniButton" text="−5" onClick="dispatch" />
+                            <Button id="pm_m1" class="miniButton" text="−1" onClick="dispatch" />
+                            <Button id="pm_p1" class="miniButton" text="+1" onClick="dispatch" />
+                            <Button id="pm_p5" class="miniButton" text="+5" onClick="dispatch" />
                         </HorizontalLayout>
                     </VerticalLayout>
                 </Panel>
@@ -192,7 +168,7 @@
                 </Panel>
 
                 <Button id="toggle_settings" class="baseButton" text="⚙&#10;AJUSTES" onClick="dispatch"
-                        preferredWidth="100" tooltip="Abrir ou fechar configurações, atualização e calibração" />
+                        preferredWidth="100" />
             </HorizontalLayout>
         </Panel>
 
@@ -214,11 +190,9 @@
                                 <Button id="weapon_sword" class="weaponButton" onClick="dispatch"
                                         colors="#302712|#493A18|#1D180D|#090B0D88"
                                         outline="#BE9139" outlineSize="2 2"
-                                        text="ESPADA LONGA  •  ATIVA&#10;ATAQUE +8   •   DANO 1d8+4&#10;CRÍTICO 19–20/x2   •   CORTE"
-                                        tooltip="Selecionar Espada Longa" />
+                                        text="ESPADA LONGA  •  ATIVA&#10;ATAQUE +8   •   DANO 1d8+4&#10;CRÍTICO 19–20/x2   •   CORTE" />
                                 <Button id="weapon_shield" class="weaponButton" onClick="dispatch"
-                                        text="ESCUDO PESADO&#10;ATAQUE +8   •   DANO 1d6+4&#10;CRÍTICO 20/x2   •   IMPACTO"
-                                        tooltip="Selecionar Escudo Pesado" />
+                                        text="ESCUDO PESADO&#10;ATAQUE +8   •   DANO 1d6+4&#10;CRÍTICO 20/x2   •   IMPACTO" />
                             </HorizontalLayout>
                         </VerticalLayout>
                     </Panel>
@@ -258,11 +232,11 @@
                                   color="#CED0D0" outline="#000000AA" outlineSize="1 1" />
                             <HorizontalLayout preferredHeight="58" spacing="8" childForceExpandWidth="true">
                                 <Button id="roll_attack" class="dangerAction" text="ROLAR ATAQUE&#10;d20 + modificadores"
-                                        onClick="dispatch" tooltip="Criar um d20 físico e rolar o ataque" />
+                                        onClick="dispatch" />
                                 <Button id="roll_damage" class="goldAction" text="ROLAR DANO&#10;dados da arma + bônus"
-                                        onClick="dispatch" tooltip="Criar os dados físicos do dano normal" />
+                                        onClick="dispatch" />
                                 <Button id="roll_critical" class="greenAction" text="CRÍTICO&#10;confirmar ameaça"
-                                        onClick="dispatch" tooltip="Rolar dano crítico após confirmar a ameaça" />
+                                        onClick="dispatch" />
                             </HorizontalLayout>
                             <Text id="activeEffects" text="EFEITOS ATIVOS  •  nenhum"
                                   class="muted" preferredHeight="21" alignment="MiddleLeft" />
@@ -283,24 +257,19 @@
                                 constraint="FixedColumnCount" constraintCount="2"
                                 childAlignment="UpperCenter" startCorner="UpperLeft" startAxis="Horizontal">
                         <Button id="power_combat_defensive" class="powerButton" onClick="dispatch"
-                                text="COMBATE DEFENSIVO  •  0 PM&#10;−2 no próximo ataque&#10;+5 DEF até fim do turno"
-                                tooltip="Arma −2 no próximo ataque; depois concede +5 Defesa até o fim do turno" />
+                                text="COMBATE DEFENSIVO  •  0 PM&#10;−2 no próximo ataque&#10;+5 DEF até fim do turno" />
                         <Button id="power_duel" class="powerButton" onClick="dispatch"
                                 colors="#201615|#39201D|#130D0C|#090B0D88" outline="#76332B"
-                                text="DUELO  •  2 PM&#10;+2 ataque e dano&#10;dura até o fim da cena"
-                                tooltip="Ativar ou consultar Duelo; não acumula" />
+                                text="DUELO  •  2 PM&#10;+2 ataque e dano&#10;dura até o fim da cena" />
                         <Button id="power_baluarte" class="powerButton" onClick="dispatch"
                                 colors="#111C24|#1C3444|#0A1116|#090B0D88" outline="#315F7A"
-                                text="BALUARTE  •  1 PM&#10;+2 DEF e resistências&#10;até fim do turno"
-                                tooltip="Ativar Baluarte; não acumula" />
+                                text="BALUARTE  •  1 PM&#10;+2 DEF e resistências&#10;até fim do turno" />
                         <Button id="power_torre_armada" class="powerButton" onClick="dispatch"
                                 colors="#211B10|#3C2F14|#151006|#090B0D88" outline="#765B22"
-                                text="TORRE ARMADA  •  1 PM&#10;+5 no próximo dano&#10;consome ao rolar dano"
-                                tooltip="Preparar +5 no próximo dano; não acumula" />
+                                text="TORRE ARMADA  •  1 PM&#10;+5 no próximo dano&#10;consome ao rolar dano" />
                         <Button id="power_provocacao" class="powerButton" onClick="dispatch"
                                 colors="#201312|#3A201C|#140B0A|#090B0D88" outline="#753129"
-                                text="PROVOCAÇÃO  •  2 PM&#10;Vontade CD 13&#10;até fim do turno"
-                                tooltip="Ativar Provocação e anunciar Vontade CD 13" />
+                                text="PROVOCAÇÃO  •  2 PM&#10;Vontade CD 13&#10;até fim do turno" />
                         <Panel class="goldCard">
                             <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="10 7" offsetMax="-10 -7"
                                             spacing="2" childForceExpandWidth="true" childForceExpandHeight="true">
@@ -323,20 +292,13 @@
                     <HorizontalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="9 6" offsetMax="-9 -6"
                                       spacing="6" childForceExpandWidth="true" childForceExpandHeight="true">
                         <Text text="ATALHOS&#10;RÁPIDOS" class="caption gold" preferredWidth="104" alignment="MiddleLeft" />
-                        <Button id="skill_iniciativa" class="skillButton" text="INICIATIVA  +3" onClick="dispatch"
-                                tooltip="Rolar Iniciativa: d20 +3" />
-                        <Button id="skill_luta" class="skillButton" text="LUTA  +8" onClick="dispatch"
-                                tooltip="Rolar Luta: d20 +8" />
-                        <Button id="skill_intimidacao" class="skillButton" text="INTIMIDAÇÃO  +7" onClick="dispatch"
-                                tooltip="Rolar Intimidação: d20 +7" />
-                        <Button id="skill_percepcao" class="skillButton" text="PERCEPÇÃO  +5" onClick="dispatch"
-                                tooltip="Rolar Percepção: d20 +5" />
-                        <Button id="skill_fortitude" class="skillButton" text="FORTITUDE  +9" onClick="dispatch"
-                                tooltip="Rolar Fortitude: d20 +9" />
-                        <Button id="skill_reflexos" class="skillButton" text="REFLEXOS  +5" onClick="dispatch"
-                                tooltip="Rolar Reflexos: d20 +5" />
-                        <Button id="skill_vontade" class="skillButton" text="VONTADE  +5" onClick="dispatch"
-                                tooltip="Rolar Vontade: d20 +5" />
+                        <Button id="skill_iniciativa" class="skillButton" text="INICIATIVA  +3" onClick="dispatch" />
+                        <Button id="skill_luta" class="skillButton" text="LUTA  +8" onClick="dispatch" />
+                        <Button id="skill_intimidacao" class="skillButton" text="INTIMIDAÇÃO  +7" onClick="dispatch" />
+                        <Button id="skill_percepcao" class="skillButton" text="PERCEPÇÃO  +5" onClick="dispatch" />
+                        <Button id="skill_fortitude" class="skillButton" text="FORTITUDE  +9" onClick="dispatch" />
+                        <Button id="skill_reflexos" class="skillButton" text="REFLEXOS  +5" onClick="dispatch" />
+                        <Button id="skill_vontade" class="skillButton" text="VONTADE  +5" onClick="dispatch" />
                     </HorizontalLayout>
                 </Panel>
 
@@ -344,20 +306,17 @@
                                   childForceExpandWidth="true" childForceExpandHeight="true">
                     <Button id="end_turn" class="baseButton" onClick="dispatch"
                             colors="#142631|#1E3B4C|#0D1820|#090B0D88" outline="#315C72"
-                            text="FIM DO TURNO&#10;limpa efeitos temporários"
-                            tooltip="Remover efeitos de turno, ataque pendente e ameaça; preservar Duelo" />
+                            text="FIM DO TURNO&#10;limpa efeitos temporários" />
                     <Button id="end_scene" class="baseButton" onClick="dispatch"
-                            text="FIM DA CENA&#10;encerra Duelo e efeitos"
-                            tooltip="Encerrar efeitos de turno e cena sem restaurar PV ou PM" />
+                            text="FIM DA CENA&#10;encerra Duelo e efeitos" />
                     <Button id="undo" class="baseButton" onClick="dispatch"
-                            text="DESFAZER&#10;última mudança de estado"
-                            tooltip="Restaurar o snapshot anterior; não apaga chat nem dados rolados" />
+                            text="DESFAZER&#10;última mudança de estado" />
                     <Panel class="goldCard" preferredWidth="420">
                         <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="10 4" offsetMax="-10 -4"
                                         spacing="0" childForceExpandWidth="true" childForceExpandHeight="false">
                             <HorizontalLayout preferredHeight="24" childForceExpandWidth="false">
                                 <Text text="RUNTIME" class="caption gold" preferredWidth="90" />
-                                <Text id="versionLabel" text="v0.1.2 • offline pronto" class="muted"
+                                <Text id="versionLabel" text="v0.1.3 • offline pronto" class="muted"
                                       alignment="MiddleRight" flexibleWidth="1" />
                             </HorizontalLayout>
                             <Text id="refreshStatus" text="ATUALIZAÇÃO  •  pronta"
@@ -387,29 +346,25 @@
                 <Panel class="card">
                     <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="6 4" offsetMax="-6 -4" spacing="2">
                         <Text text="OFFSET X" class="caption" alignment="MiddleCenter" preferredHeight="22" />
-                        <InputField id="offset_x" class="decimalInput" text="0" onEndEdit="dispatch"
-                                    tooltip="Deslocamento lateral local" />
+                        <InputField id="offset_x" class="decimalInput" text="0" onEndEdit="dispatch" />
                     </VerticalLayout>
                 </Panel>
                 <Panel class="card">
                     <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="6 4" offsetMax="-6 -4" spacing="2">
                         <Text text="OFFSET Y" class="caption" alignment="MiddleCenter" preferredHeight="22" />
-                        <InputField id="offset_y" class="decimalInput" text="2.5" onEndEdit="dispatch"
-                                    tooltip="Altura local acima da mesa" />
+                        <InputField id="offset_y" class="decimalInput" text="2.5" onEndEdit="dispatch" />
                     </VerticalLayout>
                 </Panel>
                 <Panel class="card">
                     <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="6 4" offsetMax="-6 -4" spacing="2">
                         <Text text="OFFSET Z" class="caption" alignment="MiddleCenter" preferredHeight="22" />
-                        <InputField id="offset_z" class="decimalInput" text="-5" onEndEdit="dispatch"
-                                    tooltip="Deslocamento frontal local" />
+                        <InputField id="offset_z" class="decimalInput" text="-5" onEndEdit="dispatch" />
                     </VerticalLayout>
                 </Panel>
             </HorizontalLayout>
             <Button id="calibrate_roll" class="baseButton" text="ROLAGEM DE TESTE  •  calibrar posição"
                     onClick="dispatch" preferredHeight="46"
-                    colors="#152633|#204056|#0D1820|#090B0D88" outline="#35627D"
-                    tooltip="Criar um d20 de teste no offset atual" />
+                    colors="#152633|#204056|#0D1820|#090B0D88" outline="#35627D" />
             <Panel class="card" preferredHeight="62">
                 <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="9 5" offsetMax="-9 -5" spacing="1">
                     <Text text="ATUALIZAÇÃO PELO GITHUB" class="caption gold" preferredHeight="22" />
@@ -418,12 +373,10 @@
                 </VerticalLayout>
             </Panel>
             <Button id="refresh" class="goldAction" text="REFRESH  •  buscar atualização"
-                    onClick="refresh" preferredHeight="48"
-                    tooltip="Buscar e aplicar a release estável mais recente; faz rollback se falhar" />
+                    onClick="refresh" preferredHeight="48" />
             <Button id="reset_state" class="baseButton" text="RESTAURAR ESTADO INICIAL"
                     onClick="dispatch" preferredHeight="40"
-                    colors="#351715|#57221D|#210E0C|#090B0D88" outline="#74322B"
-                    tooltip="Restaurar PV, PM, arma e efeitos iniciais; requer confirmação pelo runtime" />
+                    colors="#351715|#57221D|#210E0C|#090B0D88" outline="#74322B" />
         </VerticalLayout>
     </Panel>
 </Panel>

@@ -8,6 +8,7 @@ local STATE_SCHEMA_VERSION = 1
 local ROLL_TIMEOUT_SECONDS = 15
 local SPAWN_TIMEOUT_SECONDS = 4
 local DICE_STABLE_FRAMES = 12
+local LEGACY_DICE_OFFSET = {x = 0, y = 2.5, z = -5}
 local CHAT_COLOR = {0.86, 0.70, 0.32}
 local ERROR_COLOR = {0.95, 0.36, 0.30}
 
@@ -40,7 +41,7 @@ end
 
 local DEFAULT_CHARACTER = {
     schemaVersion = 1,
-    version = "0.1.2",
+    version = "0.1.3",
     name = "Corvan Duras",
     shortName = "Corvan",
     resources = {hp = {max = 47}, mp = {max = 12}},
@@ -74,7 +75,7 @@ local DEFAULT_CHARACTER = {
         armedTower = {cost = 1, damageModifier = 5},
         provocation = {cost = 2, willDifficulty = 13}
     },
-    diceOffset = {x = 0, y = 2.5, z = -5}
+    diceOffset = {x = 0, y = 3.2, z = 0}
 }
 
 local characterLoaded = false
@@ -178,7 +179,7 @@ local function defaultState()
         effects = defaultEffects(),
         pendingThreat = nil,
         undo = nil,
-        diceOffset = deepCopy(CHARACTER.diceOffset or {x = 0, y = 2.5, z = -5}),
+        diceOffset = deepCopy(CHARACTER.diceOffset or {x = 0, y = 3.2, z = 0}),
         ownedDiceGuids = {},
         lastResult = "—",
         settingsOpen = false
@@ -204,6 +205,13 @@ local function normalizeSnapshot(source)
         normalized.diceOffset.x = finiteNumber(source.diceOffset.x, normalized.diceOffset.x)
         normalized.diceOffset.y = finiteNumber(source.diceOffset.y, normalized.diceOffset.y)
         normalized.diceOffset.z = finiteNumber(source.diceOffset.z, normalized.diceOffset.z)
+        -- A v0.1.2 salvava um offset diante do painel. Ao atualizar, migramos
+        -- somente esse valor exato; qualquer calibração personalizada é mantida.
+        if normalized.diceOffset.x == LEGACY_DICE_OFFSET.x
+            and normalized.diceOffset.y == LEGACY_DICE_OFFSET.y
+            and normalized.diceOffset.z == LEGACY_DICE_OFFSET.z then
+            normalized.diceOffset = deepCopy(CHARACTER.diceOffset or {x = 0, y = 3.2, z = 0})
+        end
     end
     if type(source.lastResult) == "string" then normalized.lastResult = source.lastResult end
     normalized.settingsOpen = source.settingsOpen == true
@@ -268,6 +276,29 @@ local function signed(value)
     value = finiteNumber(value, 0)
     if value >= 0 then return "+" .. tostring(value) end
     return tostring(value)
+end
+
+local function formatDice(count, sides, values)
+    local prefix = count == 1 and "" or tostring(count)
+    local strings = {}
+    for _, value in ipairs(values) do table.insert(strings, tostring(value)) end
+    return prefix .. "d" .. tostring(sides) .. "[" .. table.concat(strings, ",") .. "]"
+end
+
+local function formatModifier(value)
+    value = finiteNumber(value, 0)
+    if value > 0 then return " + " .. tostring(value) end
+    if value < 0 then return " - " .. tostring(math.abs(value)) end
+    return ""
+end
+
+function CorvanRules.formatRollResult(label, total, count, sides, values, modifier, suffix)
+    local result = tostring(label) .. " - " .. tostring(total) .. " ("
+        .. formatDice(count, sides, values) .. formatModifier(modifier) .. ")"
+    if type(suffix) == "string" and suffix ~= "" then
+        result = result .. " • " .. suffix
+    end
+    return result
 end
 
 local function damageFormula(spec)
@@ -367,12 +398,86 @@ local function cacheAndRender()
     scheduleRender()
 end
 
-local function publicMessage(message)
-    if type(printToAll) == "function" then
-        pcall(function() printToAll(message, CHAT_COLOR) end)
+local function chatDiagnostic(message)
+    if type(log) == "function" then
+        pcall(function() log(message, "Corvan chat") end)
     elseif type(print) == "function" then
-        print(message)
+        pcall(function() print("Corvan chat: " .. message) end)
     end
+end
+
+local function playerProperty(player, property)
+    local ok, value = pcall(function() return player[property] end)
+    if ok then return value end
+    return nil
+end
+
+local function recipientKey(player)
+    local steamId = playerProperty(player, "steam_id")
+    if steamId ~= nil and tostring(steamId) ~= "" and tostring(steamId) ~= "0" then
+        return "steam:" .. tostring(steamId)
+    end
+    local color = playerProperty(player, "color")
+    if type(color) == "string" and color ~= "" then return "color:" .. color end
+    return "object:" .. tostring(player)
+end
+
+local function connectedPlayers()
+    if type(Player) ~= "table" then return {}, false end
+    local players = {}
+    local seen = {}
+    local managerAvailable = false
+    for _, functionName in ipairs({"getPlayers", "getSpectators"}) do
+        local managerFunction = Player[functionName]
+        if type(managerFunction) == "function" then
+            managerAvailable = true
+            local ok, list = pcall(function() return managerFunction() end)
+            if ok and type(list) == "table" then
+                for _, player in ipairs(list) do
+                    local key = recipientKey(player)
+                    if not seen[key] then
+                        seen[key] = true
+                        table.insert(players, player)
+                    end
+                end
+            end
+        end
+    end
+    return players, managerAvailable
+end
+
+local function printToPlayer(player, message)
+    local ok = pcall(function() player.print(message, CHAT_COLOR) end)
+    if ok then return true end
+    local color = playerProperty(player, "color")
+    if type(printToColor) == "function" and type(color) == "string" and color ~= "" then
+        return pcall(function() printToColor(message, color, CHAT_COLOR) end)
+    end
+    return false
+end
+
+local function publicMessage(message)
+    local players, managerAvailable = connectedPlayers()
+    if managerAvailable and #players > 0 then
+        local delivered = 0
+        for _, player in ipairs(players) do
+            if printToPlayer(player, message) then delivered = delivered + 1 end
+        end
+        if delivered == #players then return true end
+        chatDiagnostic("falha ao entregar para " .. tostring(#players - delivered) .. " jogador(es).")
+        return delivered > 0
+    end
+
+    if type(printToAll) == "function" then
+        local ok = pcall(function() printToAll(message, CHAT_COLOR) end)
+        if ok then return true end
+    end
+
+    if type(print) == "function" then
+        pcall(function() print(message) end)
+    end
+    chatDiagnostic("nenhuma API pública de chat aceitou a mensagem.")
+    return false
 end
 
 local function privateError(playerColor, message)
@@ -421,6 +526,33 @@ local function localDicePosition(index, count)
     return localPosition
 end
 
+local function localDirectionToWorld(localDirection)
+    if parent then
+        local ok, origin, target = pcall(function()
+            return parent.positionToWorld({x = 0, y = 0, z = 0}),
+                parent.positionToWorld(localDirection)
+        end)
+        if ok and origin and target then
+            local direction = {
+                x = finiteNumber(target.x, 0) - finiteNumber(origin.x, 0),
+                y = finiteNumber(target.y, 0) - finiteNumber(origin.y, 0),
+                z = finiteNumber(target.z, 0) - finiteNumber(origin.z, 0)
+            }
+            local length = math.sqrt(direction.x * direction.x
+                + direction.y * direction.y + direction.z * direction.z)
+            if length > 0.001 then
+                local magnitude = 6.5
+                return {
+                    x = direction.x / length * magnitude,
+                    y = direction.y / length * magnitude,
+                    z = direction.z / length * magnitude
+                }
+            end
+        end
+    end
+    return {x = localDirection.x, y = localDirection.y, z = localDirection.z}
+end
+
 local function finishRollFailure(token, message)
     if not currentRoll or currentRoll.token ~= token then return end
     local rollback = currentRoll.rollback
@@ -433,13 +565,6 @@ local function finishRollFailure(token, message)
     end
     cacheAndRender()
     privateError(playerColor, message or "a rolagem falhou.")
-end
-
-local function formatDice(count, sides, values)
-    local prefix = count == 1 and "" or tostring(count)
-    local strings = {}
-    for _, value in ipairs(values) do table.insert(strings, tostring(value)) end
-    return prefix .. "d" .. tostring(sides) .. "[" .. table.concat(strings, ",") .. "]"
 end
 
 local function completeRoll(token)
@@ -459,29 +584,32 @@ local function completeRoll(token)
 
     currentRoll = nil
     rollInProgress = false
-    local diceText = formatDice(roll.count, roll.sides, values)
     if roll.kind == "attack" then
         local natural = values[1]
         local total = natural + roll.modifier
         local threat = CorvanRules.isThreat(CHARACTER, roll.weaponKey, natural)
         state.pendingThreat = threat and {weaponKey = roll.weaponKey, natural = natural} or nil
-        local suffix = threat and " (ameaça)" or ""
-        state.lastResult = "d20 (" .. tostring(natural) .. ") " .. signed(roll.modifier) .. " = " .. tostring(total)
-        publicMessage(CHARACTER.shortName .. " • " .. CHARACTER.weapons[roll.weaponKey].chatName .. ": " .. diceText .. " " .. signed(roll.modifier) .. " = " .. tostring(total) .. suffix)
+        state.lastResult = CorvanRules.formatRollResult(
+            CHARACTER.weapons[roll.weaponKey].chatName, total,
+            roll.count, roll.sides, values, roll.modifier, threat and "ameaça" or nil)
+        publicMessage(CHARACTER.shortName .. ": " .. state.lastResult)
     elseif roll.kind == "skill" then
         local total = values[1] + roll.modifier
-        state.lastResult = roll.label .. ": " .. tostring(total)
-        publicMessage(CHARACTER.shortName .. " • " .. roll.label .. ": " .. diceText .. " " .. signed(roll.modifier) .. " = " .. tostring(total))
+        state.lastResult = CorvanRules.formatRollResult(
+            roll.label, total, roll.count, roll.sides, values, roll.modifier)
+        publicMessage(CHARACTER.shortName .. ": " .. state.lastResult)
     elseif roll.kind == "damage" then
         local total = roll.bonus
         for _, value in ipairs(values) do total = total + value end
         local label = roll.critical and "Crítico" or "Dano"
         state.pendingThreat = nil
-        state.lastResult = label .. ": " .. tostring(total)
-        publicMessage(CHARACTER.shortName .. " • " .. label .. ": " .. diceText .. " " .. signed(roll.bonus) .. " = " .. tostring(total))
+        state.lastResult = CorvanRules.formatRollResult(
+            label, total, roll.count, roll.sides, values, roll.bonus)
+        publicMessage(CHARACTER.shortName .. ": " .. state.lastResult)
     elseif roll.kind == "calibration" then
-        state.lastResult = "Calibração: " .. tostring(values[1])
-        publicMessage(CHARACTER.shortName .. " • Calibração: " .. diceText .. ".")
+        state.lastResult = CorvanRules.formatRollResult(
+            "Calibração", values[1], roll.count, roll.sides, values, 0)
+        publicMessage(CHARACTER.shortName .. ": " .. state.lastResult)
     end
     cacheAndRender()
 end
@@ -561,6 +689,51 @@ local function waitForDice(token)
     end
 end
 
+local function launchDie(token, index)
+    if not currentRoll or currentRoll.token ~= token then return end
+    local object = currentRoll.objects[index]
+    if not object then
+        finishRollFailure(token, "um dado desapareceu antes do lançamento.")
+        return
+    end
+
+    local localImpulse = {
+        x = (math.random() * 2 - 1) * 1.2,
+        y = 6,
+        z = (math.random() * 2 - 1) * 1.2
+    }
+    local worldImpulse = localDirectionToWorld(localImpulse)
+    local launched = pcall(function() object.addForce(worldImpulse, 4) end)
+    if not launched then
+        launched = pcall(function() object.setVelocity(worldImpulse) end)
+    end
+
+    local angularVelocity = {
+        x = (math.random() * 2 - 1) * 14,
+        y = (math.random() * 2 - 1) * 14,
+        z = (math.random() * 2 - 1) * 14
+    }
+    local spinning = pcall(function() object.addTorque(angularVelocity, 4) end)
+    if not spinning then
+        spinning = pcall(function() object.setAngularVelocity(angularVelocity) end)
+    end
+    if not launched then
+        -- Mantém compatibilidade com builds antigos, mas não aceita uma face
+        -- parada como resultado caso a API de física também falhe.
+        launched = pcall(function() object.roll() end)
+    end
+    if not launched then
+        finishRollFailure(token, "não foi possível lançar o dado.")
+        return
+    end
+
+    if not currentRoll or currentRoll.token ~= token then return end
+    currentRoll.pendingLaunches = currentRoll.pendingLaunches - 1
+    if currentRoll.pendingSpawns == 0 and currentRoll.pendingLaunches == 0 then
+        waitForDice(token)
+    end
+end
+
 local function onDieSpawned(token, index, object)
     if not currentRoll or currentRoll.token ~= token then
         -- Um callback pode chegar depois do timeout. O objeto ainda é nosso e deve
@@ -579,9 +752,13 @@ local function onDieSpawned(token, index, object)
     local guid = safeObjectGuid(object)
     if guid then table.insert(state.ownedDiceGuids, guid) end
     pcall(function() object.setName("Corvan • dado da ferramenta") end)
-    pcall(function() object.roll() end)
-    if currentRoll and currentRoll.token == token and currentRoll.pendingSpawns == 0 then
-        waitForDice(token)
+    -- O TTS congela objetos recém-criados por um frame. Aplicar a força no
+    -- callback imediato faz o dado nascer sem movimento em algumas sessões.
+    local scheduled = pcall(function()
+        Wait.frames(function() launchDie(token, index) end, 1)
+    end)
+    if not scheduled then
+        finishRollFailure(token, "não foi possível agendar o lançamento do dado.")
     end
 end
 
@@ -611,6 +788,7 @@ local function startPhysicalRoll(parameters)
     parameters.stableRestFrames = {}
     parameters.lastRestingValues = {}
     parameters.pendingSpawns = parameters.count
+    parameters.pendingLaunches = parameters.count
     currentRoll = parameters
     rollInProgress = true
     cacheAndRender()
@@ -829,7 +1007,7 @@ function handleUiEvent(payload)
     if id == "power_provocacao" then
         local cd = CHARACTER.powers.provocation.willDifficulty
         return activatePower(playerColor, "provocation", "provocation",
-            CHARACTER.shortName .. " • Provocação: Vontade CD " .. tostring(cd) .. ".")
+            CHARACTER.shortName .. ": Provocação - Vontade CD " .. tostring(cd))
     end
     local resourceButtons = {
         pv_m5 = {"hp", -5}, pv_m1 = {"hp", -1}, pv_p1 = {"hp", 1}, pv_p5 = {"hp", 5},
