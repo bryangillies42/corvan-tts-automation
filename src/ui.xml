@@ -318,7 +318,7 @@
                                             childForceExpandWidth="true" childForceExpandHeight="false">
                                 <HorizontalLayout preferredHeight="22" childForceExpandWidth="false">
                                     <Text text="RUNTIME" class="caption gold" preferredWidth="82" />
-                                    <Text id="versionLabel" text="v0.1.4 • offline pronto" class="muted"
+                                    <Text id="versionLabel" text="v0.1.5 • offline pronto" class="muted"
                                           alignment="MiddleRight" flexibleWidth="1" />
                                 </HorizontalLayout>
                                 <Text id="refreshStatus" text="ATUALIZAÇÃO  •  pronta"

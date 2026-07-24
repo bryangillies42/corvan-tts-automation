@@ -5,7 +5,7 @@
 local BOOTSTRAP_VERSION = "1.0.2"
 local STATE_SCHEMA_VERSION = 1
 local MANIFEST_SCHEMA_VERSION = 1
-local SEED_RUNTIME_VERSION = "0.1.4"
+local SEED_RUNTIME_VERSION = "0.1.5"
 local SEED_UI = __SEED_UI_LITERAL__
 local SEED_RUNTIME = __SEED_RUNTIME_LITERAL__
 
@@ -415,6 +415,28 @@ end
 local function tell(playerColor, message, tint)
     local color = playerColorOf(playerColor)
     pcall(printToColor, "Corvan • " .. message, color, tint or {0.80, 0.68, 0.38})
+end
+
+-- O helper invisível delega o chat ao objeto visível. Em algumas sessões do
+-- TTS, as APIs de chat aceitam chamadas feitas pelo helper sem exibir a linha;
+-- uma única chamada global feita pelo bootstrap evita confirmações individuais
+-- enganosas e garante exatamente uma entrada por resultado para cada cliente.
+function relayRuntimeChat(payload)
+    if type(payload) ~= "table" or type(payload.message) ~= "string" or payload.message == "" then
+        return false
+    end
+    local tint = {0.905, 0.898, 0.172}
+    if type(printToAll) == "function" then
+        return pcall(printToAll, payload.message, tint)
+    end
+    return false
+end
+
+function relayRuntimePrivate(payload)
+    if type(payload) ~= "table" or type(payload.message) ~= "string" then return false end
+    local color = playerColorOf(payload.playerColor)
+    if color == "Black" then return false end
+    return pcall(printToColor, payload.message, color, {1.0, 0.38, 0.30})
 end
 
 local function collectUiIds(xml)

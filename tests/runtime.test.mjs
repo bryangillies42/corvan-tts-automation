@@ -173,10 +173,22 @@ test('offset padrão nasce sobre o painel e o offset legado é migrado sem schem
 
 test('chat usa entrega resiliente, formato centralizado e nunca notificações centrais', () => {
   assert.match(runtime, /function CorvanRules\.formatRollResult\(/);
+  assert.match(runtime, /local function chatSafeMessage\(message\)/);
+  assert.ok(runtime.includes('gsub("%[", "［"):gsub("%]", "］")'));
   assert.match(runtime, /Player\[functionName\]/);
-  assert.match(runtime, /player\.print\(message, CHAT_COLOR\)/);
+  assert.match(runtime, /printToColor\(message, color, chatColor\(\)\)[\s\S]*Player\[color\]\.print\(message, chatColor\(\)\)/);
+  assert.match(runtime, /add\(preferredColor\)[\s\S]*getSeatedPlayers\(\)[\s\S]*connectedPlayers\(\)/);
+  assert.match(runtime, /local colors, managerAvailable = recipientColors\(preferredColor\)[\s\S]*if type\(printToAll\) == "function"[\s\S]*if type\(print\) == "function"/);
+  assert.match(runtime, /if Player == nil then return \{\}, false end/);
+  assert.doesNotMatch(runtime, /type\(Player\) ~= "table"/);
+  assert.match(runtime, /return \{0\.905, 0\.898, 0\.172\}/);
+  assert.doesNotMatch(runtime, /Color\.fromString/);
+  assert.doesNotMatch(runtime, /tint = chatColor\(\)/);
+  assert.doesNotMatch(runtime, /local CHAT_COLOR\s*=/);
   assert.match(runtime, /printToAll\(/);
   assert.match(runtime, /printToColor\(/);
+  assert.match(runtime, /safeParentCall\("relayRuntimeChat", \{/);
+  assert.match(runtime, /recordChatAudit\(message, "parent-relay", true\)/);
   assert.match(runtime, /chatDiagnostic\(/);
   assert.match(runtime, /CHARACTER\.shortName \.\. ": " \.\. state\.lastResult/);
   assert.doesNotMatch(runtime, /\+ -/);

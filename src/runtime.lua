@@ -10,8 +10,15 @@ local SPAWN_TIMEOUT_SECONDS = 4
 local DICE_STABLE_FRAMES = 12
 local DICE_LAUNCH_DELAY_FRAMES = 3
 local LEGACY_DICE_OFFSET = {x = 0, y = 2.5, z = -5}
-local CHAT_COLOR = {0.86, 0.70, 0.32}
-local ERROR_COLOR = {0.95, 0.36, 0.30}
+local function chatColor()
+    -- Use the positional Color table required by the TTS message API. Named
+    -- RGBA fields can emit a dev-api event without rendering in the Game tab.
+    return {0.905, 0.898, 0.172}
+end
+
+local function errorColor()
+    return {0.95, 0.36, 0.30}
+end
 
 local function deepCopy(value, seen)
     if type(value) ~= "table" then return value end
@@ -42,7 +49,7 @@ end
 
 local DEFAULT_CHARACTER = {
     schemaVersion = 1,
-    version = "0.1.4",
+    version = "0.1.5",
     name = "Corvan Duras",
     shortName = "Corvan",
     resources = {hp = {max = 47}, mp = {max = 12}},
@@ -242,6 +249,19 @@ local parent = nil
 local rollInProgress = false
 local currentRoll = nil
 local rollSequence = 0
+local chatAudit = {}
+local chatAuditSequence = 0
+
+local function recordChatAudit(message, route, accepted)
+    chatAuditSequence = chatAuditSequence + 1
+    table.insert(chatAudit, {
+        sequence = chatAuditSequence,
+        message = tostring(message),
+        route = tostring(route),
+        accepted = accepted == true
+    })
+    while #chatAudit > 24 do table.remove(chatAudit, 1) end
+end
 
 local function safeObjectGuid(object)
     if not object then return nil end
@@ -407,6 +427,13 @@ local function chatDiagnostic(message)
     end
 end
 
+-- O chat do TTS interpreta [HEX] como BBCode de cor. Resultados como d20[18]
+-- abrem uma tag e podem tornar o restante desta e das próximas mensagens
+-- invisível. Os colchetes fullwidth preservam a leitura sem acionar o parser.
+local function chatSafeMessage(message)
+    return tostring(message):gsub("%[", "［"):gsub("%]", "］")
+end
+
 local function playerProperty(player, property)
     local ok, value = pcall(function() return player[property] end)
     if ok then return value end
@@ -424,13 +451,15 @@ local function recipientKey(player)
 end
 
 local function connectedPlayers()
-    if type(Player) ~= "table" then return {}, false end
+    if Player == nil then return {}, false end
     local players = {}
     local seen = {}
     local managerAvailable = false
     for _, functionName in ipairs({"getPlayers", "getSpectators"}) do
-        local managerFunction = Player[functionName]
-        if type(managerFunction) == "function" then
+        -- TTS expõe Player como userdata; indexar suas funções precisa ser
+        -- protegido e não pode depender de type(Player) == "table".
+        local readOk, managerFunction = pcall(function() return Player[functionName] end)
+        if readOk and type(managerFunction) == "function" then
             managerAvailable = true
             local ok, list = pcall(function() return managerFunction() end)
             if ok and type(list) == "table" then
@@ -447,44 +476,109 @@ local function connectedPlayers()
     return players, managerAvailable
 end
 
-local function printToPlayer(player, message)
-    local ok = pcall(function() player.print(message, CHAT_COLOR) end)
-    if ok then return true end
-    local color = playerProperty(player, "color")
-    if type(printToColor) == "function" and type(color) == "string" and color ~= "" then
-        return pcall(function() printToColor(message, color, CHAT_COLOR) end)
+local function recipientColors(preferredColor)
+    local colors = {}
+    local seen = {}
+    local function add(color)
+        if type(color) == "string" and color ~= "" and not seen[color] then
+            seen[color] = true
+            table.insert(colors, color)
+        end
     end
-    return false
+
+    -- O evento da UI sempre fornece a cor de quem clicou. Incluí-la primeiro
+    -- garante o chat local mesmo quando o Player Manager do TTS enumera uma
+    -- lista vazia em single player/offline.
+    add(preferredColor)
+    if type(getSeatedPlayers) == "function" then
+        local ok, seated = pcall(function() return getSeatedPlayers() end)
+        if ok and type(seated) == "table" then
+            for _, color in ipairs(seated) do add(color) end
+        end
+    end
+
+    local players, managerAvailable = connectedPlayers()
+    for _, player in ipairs(players) do add(playerProperty(player, "color")) end
+    return colors, managerAvailable
 end
 
-local function publicMessage(message)
-    local players, managerAvailable = connectedPlayers()
-    if managerAvailable and #players > 0 then
+local function printToPlayerColor(color, message)
+    -- No TTS real, tanto printToAll quanto Player.print podem retornar sem erro
+    -- e ainda assim não inserir a linha depois de várias rolagens. A função
+    -- global direcionada é a rota que efetivamente chega ao chat do cliente.
+    if type(printToColor) == "function" and type(color) == "string" and color ~= "" then
+        local ok = pcall(function() printToColor(message, color, chatColor()) end)
+        if ok then return true, "printToColor:" .. color end
+    end
+    if Player ~= nil and type(color) == "string" and color ~= "" then
+        local ok = pcall(function() Player[color].print(message, chatColor()) end)
+        if ok then return true, "player-print:" .. color end
+    end
+    return false, "none"
+end
+
+local function publicMessage(message, preferredColor)
+    message = chatSafeMessage(message)
+    -- A rota primária passa pelo bootstrap do painel visível. O TTS pode
+    -- aceitar silenciosamente chamadas de chat feitas pelo helper invisível
+    -- sem inseri-las no cliente, enquanto o mesmo envio pelo painel funciona.
+    local relayOk, relayAccepted = safeParentCall("relayRuntimeChat", {
+        message = message,
+        playerColor = preferredColor
+    })
+    if relayOk and relayAccepted == true then
+        recordChatAudit(message, "parent-relay", true)
+        return true
+    end
+
+    local colors, managerAvailable = recipientColors(preferredColor)
+    if #colors > 0 then
         local delivered = 0
-        for _, player in ipairs(players) do
-            if printToPlayer(player, message) then delivered = delivered + 1 end
+        local routes = {}
+        for _, color in ipairs(colors) do
+            local ok, route = printToPlayerColor(color, message)
+            table.insert(routes, route)
+            if ok then delivered = delivered + 1 end
         end
-        if delivered == #players then return true end
-        chatDiagnostic("falha ao entregar para " .. tostring(#players - delivered) .. " jogador(es).")
+        recordChatAudit(message,
+            "colors:" .. tostring(delivered) .. "/" .. tostring(#colors) .. ":" .. table.concat(routes, ","),
+            delivered == #colors)
+        if delivered == #colors then return true end
+        chatDiagnostic("falha ao entregar para " .. tostring(#colors - delivered) .. " jogador(es).")
         return delivered > 0
     end
 
+    -- Compatibility fallback for builds/harnesses where Player manager cannot
+    -- enumerate clients. This remains chat-only.
     if type(printToAll) == "function" then
-        local ok = pcall(function() printToAll(message, CHAT_COLOR) end)
+        local ok, failure = pcall(function() printToAll(message, chatColor()) end)
+        recordChatAudit(message, ok and "printToAll" or ("printToAll-error:" .. tostring(failure)), ok)
         if ok then return true end
+        chatDiagnostic("printToAll rejeitou a mensagem: " .. tostring(failure))
     end
 
+    -- Host-only debug fallback. Its route is deliberately explicit in the
+    -- audit because this is not considered successful public delivery.
     if type(print) == "function" then
-        pcall(function() print(message) end)
+        local ok = pcall(function() print(message) end)
+        recordChatAudit(message, "print-host-debug", false)
+        if ok then chatDiagnostic("mensagem enviada apenas ao host por print().") end
     end
+
+    recordChatAudit(message, "none", false)
     chatDiagnostic("nenhuma API pública de chat aceitou a mensagem.")
     return false
 end
 
 local function privateError(playerColor, message)
+    local relayed, accepted = safeParentCall("relayRuntimePrivate", {
+        message = "Corvan • " .. message,
+        playerColor = playerColor
+    })
+    if relayed and accepted == true then return end
     if type(playerColor) == "table" then playerColor = playerColor.color end
     if type(printToColor) == "function" and type(playerColor) == "string" and playerColor ~= "" then
-        local ok = pcall(function() printToColor("Corvan • " .. message, playerColor, ERROR_COLOR) end)
+        local ok = pcall(function() printToColor("Corvan • " .. message, playerColor, errorColor()) end)
         if ok then return end
     end
     if type(print) == "function" then print("Corvan • " .. message) end
@@ -593,12 +687,12 @@ local function completeRoll(token)
         state.lastResult = CorvanRules.formatRollResult(
             CHARACTER.weapons[roll.weaponKey].chatName, total,
             roll.count, roll.sides, values, roll.modifier, threat and "ameaça" or nil)
-        publicMessage(CHARACTER.shortName .. ": " .. state.lastResult)
+        publicMessage(CHARACTER.shortName .. ": " .. state.lastResult, roll.playerColor)
     elseif roll.kind == "skill" then
         local total = values[1] + roll.modifier
         state.lastResult = CorvanRules.formatRollResult(
             roll.label, total, roll.count, roll.sides, values, roll.modifier)
-        publicMessage(CHARACTER.shortName .. ": " .. state.lastResult)
+        publicMessage(CHARACTER.shortName .. ": " .. state.lastResult, roll.playerColor)
     elseif roll.kind == "damage" then
         local total = roll.bonus
         for _, value in ipairs(values) do total = total + value end
@@ -606,11 +700,11 @@ local function completeRoll(token)
         state.pendingThreat = nil
         state.lastResult = CorvanRules.formatRollResult(
             label, total, roll.count, roll.sides, values, roll.bonus)
-        publicMessage(CHARACTER.shortName .. ": " .. state.lastResult)
+        publicMessage(CHARACTER.shortName .. ": " .. state.lastResult, roll.playerColor)
     elseif roll.kind == "calibration" then
         state.lastResult = CorvanRules.formatRollResult(
             "Calibração", values[1], roll.count, roll.sides, values, 0)
-        publicMessage(CHARACTER.shortName .. ": " .. state.lastResult)
+        publicMessage(CHARACTER.shortName .. ": " .. state.lastResult, roll.playerColor)
     end
     cacheAndRender()
 end
@@ -895,7 +989,7 @@ local function activatePower(playerColor, effectKey, configKey, announcement)
     state.mp = state.mp - cost
     state.effects[effectKey] = true
     cacheAndRender()
-    if announcement then publicMessage(announcement) end
+    if announcement then publicMessage(announcement, playerColor) end
     return true
 end
 
@@ -1098,6 +1192,10 @@ function healthCheck(_)
         parentGuid = parentGuid,
         rollInProgress = rollInProgress
     }
+end
+
+function getChatAudit()
+    return deepCopy(chatAudit)
 end
 
 local function notifyReady()

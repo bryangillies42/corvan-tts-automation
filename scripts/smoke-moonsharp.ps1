@@ -82,6 +82,7 @@ if ($actual -ne $expected) {
 $runtimeFlowHarness = @'
 local attributes = {}
 local publicChat = {}
+local spectatorChat = {}
 local privateChat = {}
 local diceByGuid = {}
 local dieValues = {}
@@ -96,15 +97,17 @@ local velocityFallbackCalls = 0
 local angularFallbackCalls = 0
 local frameCalls = 0
 
+print = function(message) table.insert(publicChat, message) end
+
 local whitePlayer = {
     steam_id = 'steam-white',
     color = 'White',
-    print = function(message, _) table.insert(publicChat, 'White|' .. message) end
+    print = function(message, _) table.insert(publicChat, message) end
 }
 local greyPlayer = {
     steam_id = 'steam-grey',
     color = 'Grey',
-    print = function(message, _) table.insert(publicChat, 'Grey|' .. message) end
+    print = function(message, _) table.insert(spectatorChat, message) end
 }
 Player = {
     getPlayers = function() return {whitePlayer} end,
@@ -124,6 +127,11 @@ parentObject = {
     call = function(name, payload)
         if name == 'setRuntimeUiAttribute' then
             attributes[payload.id] = payload.value
+        elseif name == 'relayRuntimeChat' then
+            table.insert(publicChat, payload.message)
+            table.insert(spectatorChat, payload.message)
+        elseif name == 'relayRuntimePrivate' then
+            table.insert(privateChat, payload.message)
         end
         return true
     end
@@ -138,8 +146,23 @@ end
 destroyObject = function(object)
     diceByGuid[object.getGUID()] = nil
 end
-printToAll = function(_, _) globalChatCalls = globalChatCalls + 1 end
-printToColor = function(message, _, _) table.insert(privateChat, message) end
+printToAll = function(message, _)
+    globalChatCalls = globalChatCalls + 1
+    table.insert(publicChat, message)
+end
+printToColor = function(message, color, _)
+    if string.sub(message, 1, 8) == 'Corvan: ' then
+        if color == 'White' then
+            table.insert(publicChat, message)
+        elseif color == 'Grey' then
+            table.insert(spectatorChat, message)
+        else
+            error('unexpected public chat color: ' .. tostring(color))
+        end
+    else
+        table.insert(privateChat, message)
+    end
+end
 Wait = {
     condition = function(callback, condition, _, timeout)
         if condition() then error('runtime accepted initial resting face before motion') end
@@ -221,8 +244,7 @@ dieValues = {6}
 assert(handleUiEvent({id = 'roll_damage', playerColor = 'White'}))
 local afterTower = exportState()
 assert(not afterTower.effects.armedTower and afterTower.lastResult == 'Dano - 15 (d8[6] + 9)')
-assert(publicChat[1] == 'White|Corvan: Dano - 15 (d8[6] + 9)')
-assert(publicChat[2] == 'Grey|Corvan: Dano - 15 (d8[6] + 9)')
+assert(publicChat[1] == 'Corvan: Dano - 15 (d8［6］ + 9)')
 
 assert(handleUiEvent({id = 'power_combat_defensive', playerColor = 'White'}))
 dieValues = {19}
@@ -237,21 +259,31 @@ dieValues = {6, 3}
 assert(handleUiEvent({id = 'roll_critical', playerColor = 'White'}))
 local afterCritical = exportState()
 assert(afterCritical.pendingThreat == nil and afterCritical.lastResult == 'Crítico - 13 (2d8[6,3] + 4)')
-assert(publicChat[#publicChat] == 'Grey|Corvan: Crítico - 13 (2d8[6,3] + 4)')
+assert(publicChat[#publicChat] == 'Corvan: Crítico - 13 (2d8［6,3］ + 4)')
 
 dieValues = {7}
 panelPosition = {x = 35, y = 4, z = 42}
 assert(handleUiEvent({id = 'skill_iniciativa', playerColor = 'White'}))
 local afterInitiative = exportState()
 assert(afterInitiative.lastResult == 'Iniciativa - 10 (d20[7] + 3)')
-assert(publicChat[#publicChat] == 'Grey|Corvan: Iniciativa - 10 (d20[7] + 3)')
-assert(#publicChat == 8 and globalChatCalls == 0)
+assert(publicChat[#publicChat] == 'Corvan: Iniciativa - 10 (d20［7］ + 3)')
+
+dieValues = {11}
+assert(handleUiEvent({id = 'skill_luta', playerColor = 'White'}))
+assert(exportState().lastResult == 'Luta - 19 (d20[11] + 8)')
+assert(publicChat[#publicChat] == 'Corvan: Luta - 19 (d20［11］ + 8)')
+
+dieValues = {9}
+assert(handleUiEvent({id = 'skill_percepcao', playerColor = 'White'}))
+assert(exportState().lastResult == 'Percepção - 14 (d20[9] + 5)')
+assert(publicChat[#publicChat] == 'Corvan: Percepção - 14 (d20［9］ + 5)')
+assert(#publicChat == 6 and #spectatorChat == 6 and globalChatCalls == 0)
 local latestSpawn = spawnPositions[#spawnPositions]
 assert(latestSpawn.x == 35 and math.abs(latestSpawn.y - 7.2) < 0.001 and latestSpawn.z == 42,
     'spawn did not follow panel: ' .. tostring(latestSpawn.x) .. ','
         .. tostring(latestSpawn.y) .. ',' .. tostring(latestSpawn.z))
-assert(launchCalls == 1 and torqueCalls == 1 and frameCalls == 5
-        and velocityFallbackCalls == 4 and angularFallbackCalls == 4,
+assert(launchCalls == 1 and torqueCalls == 1 and frameCalls == 7
+        and velocityFallbackCalls == 6 and angularFallbackCalls == 6,
     'unexpected launch counts: ' .. tostring(launchCalls) .. ','
         .. tostring(torqueCalls) .. ',' .. tostring(frameCalls) .. ','
         .. tostring(velocityFallbackCalls) .. ',' .. tostring(angularFallbackCalls))
@@ -268,12 +300,12 @@ assert(not handleUiEvent({id = 'power_duel', playerColor = 'White'}))
 assert(#privateChat >= 3)
 
 return afterDuel.mp, afterTurn.mp, afterTower.lastResult, afterAttack.pendingThreat.natural,
-    afterCritical.lastResult, #publicChat, #privateChat
+    afterCritical.lastResult, #publicChat, globalChatCalls, #privateChat
 '@
 
 $runtimeFlowRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $runtimeFlowResult = $runtimeFlowRunner.DoString($runtime + "`n" + $runtimeFlowHarness).ToString()
-$expectedRuntimeFlow = '10, 9, "Dano - 15 (d8[6] + 9)", 19, "Crítico - 13 (2d8[6,3] + 4)", 8, 3'
+$expectedRuntimeFlow = '10, 9, "Dano - 15 (d8[6] + 9)", 19, "Crítico - 13 (2d8[6,3] + 4)", 6, 0, 3'
 if ($runtimeFlowResult -ne $expectedRuntimeFlow) {
     throw "Smoke do fluxo de combate retornou '$runtimeFlowResult'; esperado '$expectedRuntimeFlow'."
 }
@@ -290,6 +322,7 @@ local failedPlayer = {
     print = function(_, _) directCalls = directCalls + 1; error('direct chat unavailable') end
 }
 Player = {
+    Blue = failedPlayer,
     getPlayers = function() return {failedPlayer} end,
     getSpectators = function() return {failedPlayer} end
 }
@@ -298,25 +331,48 @@ printToColor = function(message, color, _)
     colorFallbackCalls = colorFallbackCalls + 1
 end
 printToAll = function(_, _) globalFallbackCalls = globalFallbackCalls + 1 end
-print = function(_) hostPrintCalls = hostPrintCalls + 1 end
+local printFails = true
+print = function(_)
+    hostPrintCalls = hostPrintCalls + 1
+    if printFails then error('global print unavailable') end
+end
 log = function(_, _) diagnostics = diagnostics + 1 end
 
+printToAll = function(_, _) error('global chat unavailable') end
 assert(publicMessage('Corvan: fallback por cor'))
-assert(directCalls == 1 and colorFallbackCalls == 1 and globalFallbackCalls == 0)
+assert(directCalls == 0 and colorFallbackCalls == 1 and globalFallbackCalls == 0)
+
+local hostPlayer = {
+    steam_id = 'steam-host',
+    color = 'White',
+    host = true,
+    print = function(_, _) directCalls = directCalls + 1 end
+}
+printFails = false
+printToColor = function(_, _, _) error('color route unavailable') end
+Player = {
+    White = hostPlayer,
+    getPlayers = function() return {hostPlayer} end,
+    getSpectators = function() return {} end
+}
+assert(publicMessage('Corvan: rota visível do host'))
+assert(directCalls == 1 and hostPrintCalls == 0)
 
 Player = nil
+printFails = true
+printToAll = function(_, _) globalFallbackCalls = globalFallbackCalls + 1 end
 assert(publicMessage('Corvan: fallback global'))
 assert(globalFallbackCalls == 1)
 
 printToAll = function(_, _) error('global chat unavailable') end
 assert(not publicMessage('Corvan: falha total'))
-assert(hostPrintCalls == 1 and diagnostics == 1)
+assert(hostPrintCalls == 1 and diagnostics == 2)
 return directCalls, colorFallbackCalls, globalFallbackCalls, hostPrintCalls, diagnostics
 '@
 
 $chatFallbackRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $chatFallbackResult = $chatFallbackRunner.DoString($runtime + "`n" + $chatFallbackHarness).ToString()
-$expectedChatFallback = '1, 1, 1, 1, 1'
+$expectedChatFallback = '1, 1, 1, 1, 2'
 if ($chatFallbackResult -ne $expectedChatFallback) {
     throw "Smoke dos fallbacks de chat retornou '$chatFallbackResult'; esperado '$expectedChatFallback'."
 }
@@ -420,15 +476,15 @@ spawnObject = function(params)
                 xml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
             })
             if not accepted then error('bootstrap rejected valid UI') end
-            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.1.4'})
+            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.1.5'})
             setRuntimeUiAttribute({id = 'missing', attribute = 'text', value = 'must stay queued'})
             return helper
         end,
         call = function(name, _)
             if name == 'healthCheck' then
-                return {ok = true, version = '0.1.4', parentGuid = 'panel1'}
+                return {ok = true, version = '0.1.5', parentGuid = 'panel1'}
             elseif name == 'exportState' then
-                return {schemaVersion = 1, runtimeVersion = '0.1.4'}
+                return {schemaVersion = 1, runtimeVersion = '0.1.5'}
             end
             return true
         end
@@ -466,7 +522,7 @@ return xmlSetCalls, attributeCalls, invalidAttributeCalls, info.helperGuid, info
 
 $onLoadRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $onLoadResult = $onLoadRunner.DoString($bootstrap + "`n" + $onLoadHarness).ToString()
-$expectedOnLoad = '2, 5, 0, "helper1", "0.1.4"'
+$expectedOnLoad = '2, 5, 0, "helper1", "0.1.5"'
 if ($onLoadResult -ne $expectedOnLoad) {
     throw "Smoke de onLoad retornou '$onLoadResult'; esperado '$expectedOnLoad'."
 }
@@ -475,7 +531,7 @@ $copyPersistenceHarness = @'
 local timeQueue = {}
 local helper = nil
 local helperState = nil
-local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.4', mp = 12, effects = {duel = false}}
+local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.5', mp = 12, effects = {duel = false}}
 local persistedRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.2', mp = 10, effects = {duel = true}}
 
 JSON = {
@@ -524,7 +580,7 @@ spawnObject = function(params)
                 cacheRuntimeState({state = helperState or defaultRuntimeState})
                 return true
             elseif name == 'healthCheck' then
-                return {ok = true, version = '0.1.4', parentGuid = 'panel-copy'}
+                return {ok = true, version = '0.1.5', parentGuid = 'panel-copy'}
             elseif name == 'importState' then
                 helperState = payload
                 return true
@@ -603,7 +659,7 @@ if ($webRequestResult -ne $expectedWebRequest) {
 $transactionHarness = @'
 local oldXml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
 local candidateXml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/><Text id="activeWeaponLabel"/></Panel>'
-local candidateSource = '-- CORVAN_RUNTIME candidate v0.1.4'
+local candidateSource = '-- CORVAN_RUNTIME candidate v0.1.5'
 local oldSource = SEED_RUNTIME
 local timers = {}
 local currentGuid = 'helper1'
@@ -654,7 +710,7 @@ helper = {
     reload = function()
         if loadedSource == candidateSource then
             currentGuid = 'candidate-guid'
-            activeVersion = CANDIDATE_HEALTH_OK and '0.1.4' or 'broken'
+            activeVersion = CANDIDATE_HEALTH_OK and '0.1.5' or 'broken'
             applyRuntimeUi({xml = candidateXml})
         else
             currentGuid = 'rollback-guid'
@@ -691,7 +747,7 @@ update.playerColor = 'White'
 update.phase = 'install'
 
 installCandidate(9, {
-    manifest = {version = '0.1.4', commitSha = '0123456789abcdef0123456789abcdef01234567'},
+    manifest = {version = '0.1.5', commitSha = '0123456789abcdef0123456789abcdef01234567'},
     source = candidateSource,
     etag = 'etag-2'
 })
@@ -721,7 +777,7 @@ function Invoke-TransactionSmoke([bool]$healthy) {
 }
 
 $updateSuccess = Invoke-TransactionSmoke $true
-$expectedUpdateSuccess = '"0.1.4", true, false, false, "candidate-guid", 23, true, false'
+$expectedUpdateSuccess = '"0.1.5", true, false, false, "candidate-guid", 23, true, false'
 if ($updateSuccess -ne $expectedUpdateSuccess) {
     throw "Smoke de update retornou '$updateSuccess'; esperado '$expectedUpdateSuccess'."
 }
