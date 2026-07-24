@@ -11,7 +11,7 @@ const PROJECT_ROOT = resolve(dirname(SCRIPT_PATH), "..");
 const VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const SHA_PATTERN = /^[0-9a-f]{7,40}$/i;
 const DEFAULT_COMMIT_SHA = "0000000000000000000000000000000000000000";
-const ASSET_URL = "https://raw.githubusercontent.com/bryangillies42/corvan-tts-automation/main/assets/panel-board.png";
+const RAW_ASSET_BASE_URL = "https://raw.githubusercontent.com/bryangillies42/corvan-tts-automation";
 const RELEASE_BASE_URL = "https://github.com/bryangillies42/corvan-tts-automation/releases/download";
 
 const PLACEHOLDERS = Object.freeze({
@@ -267,6 +267,7 @@ export function validateUi(input) {
     "skill_fortitude", "skill_reflexos", "skill_vontade",
     "end_turn", "end_scene", "undo", "toggle_settings", "settingsPanel",
     "offset_x", "offset_y", "offset_z", "calibrate_roll", "reset_state", "refresh",
+    "refreshStatus",
   ]) {
     assert(ids.has(requiredId), `src/ui.xml não declara o ID obrigatório ${requiredId}.`);
   }
@@ -313,7 +314,7 @@ function createManifest(version, commitSha, runtime, previousVersion) {
   return {
     schemaVersion: 1,
     version,
-    minBootstrapVersion: "1.0.0",
+    minBootstrapVersion: "1.0.1",
     commitSha,
     runtime: {
       url: `${RELEASE_BASE_URL}/v${version}/corvan-runtime.lua`,
@@ -324,7 +325,11 @@ function createManifest(version, commitSha, runtime, previousVersion) {
   };
 }
 
-function createSavedObject(bootstrap, version) {
+function createSavedObject(bootstrap, version, commitSha) {
+  // Release builds pin the board art to the exact source commit. A local build
+  // without CORVAN_COMMIT_SHA keeps using main so it remains directly importable.
+  const assetRef = commitSha === DEFAULT_COMMIT_SHA ? "main" : commitSha;
+  const assetUrl = `${RAW_ASSET_BASE_URL}/${assetRef}/assets/panel-board.png`;
   return {
     SaveName: "Corvan Duras Console",
     GameMode: "",
@@ -369,7 +374,7 @@ function createSavedObject(bootstrap, version) {
         HideWhenFaceDown: false,
         Hands: false,
         CustomImage: {
-          ImageURL: ASSET_URL,
+          ImageURL: assetUrl,
           ImageSecondaryURL: "",
           ImageScalar: 1,
           WidthScale: 0,
@@ -453,7 +458,7 @@ export async function buildProject({
     runtime,
     validatePreviousVersion(previousVersion, packageJson.version),
   );
-  const savedObject = createSavedObject(bootstrap, packageJson.version);
+  const savedObject = createSavedObject(bootstrap, packageJson.version, manifest.commitSha);
   const files = {
     "corvan-runtime.lua": runtime,
     "manifest.json": stableJson(manifest),

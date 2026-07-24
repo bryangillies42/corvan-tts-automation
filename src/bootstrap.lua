@@ -2,10 +2,10 @@
 -- This file deliberately contains no character rules. The replaceable runtime lives
 -- on an invisible helper so this visible panel never needs to be reloaded to update.
 
-local BOOTSTRAP_VERSION = "1.0.0"
+local BOOTSTRAP_VERSION = "1.0.1"
 local STATE_SCHEMA_VERSION = 1
 local MANIFEST_SCHEMA_VERSION = 1
-local SEED_RUNTIME_VERSION = "0.1.0"
+local SEED_RUNTIME_VERSION = "0.1.1"
 local SEED_RUNTIME = __SEED_RUNTIME_LITERAL__
 
 local RELEASE_API_URL = "https://api.github.com/repos/bryangillies42/corvan-tts-automation/releases/latest"
@@ -14,10 +14,18 @@ local RUNTIME_MARKER = "CORVAN_RUNTIME"
 local MAX_RUNTIME_BYTES = 1572864
 local HELPER_PROBE_INTERVAL = 0.25
 local HELPER_HEALTH_TIMEOUT = 10
+local WEB_REQUEST_TIMEOUT = 20
 
 local PLAYER_COLORS = {
     "White", "Brown", "Red", "Orange", "Yellow", "Green", "Teal",
     "Blue", "Purple", "Pink", "Grey", "Black"
+}
+
+local UI_ATTRIBUTES = {
+    active = true,
+    colors = true,
+    interactable = true,
+    text = true,
 }
 
 local state = nil
@@ -25,6 +33,12 @@ local helperSpawnPending = false
 local startupSerial = 0
 local startupInstallAttempts = 0
 local runtimeReadyPayload = nil
+local uiReady = false
+local uiLoadSerial = 0
+local uiIds = {}
+local uiAttributeValues = {}
+local pendingRefreshText = ""
+local pendingRefreshBusy = false
 local update = {
     active = false,
     serial = 0,
@@ -339,6 +353,13 @@ local function safeEncode(value)
     return ""
 end
 
+local function runtimeSourceIsValid(source)
+    return type(source) == "string"
+        and #source > 0
+        and #source <= MAX_RUNTIME_BYTES
+        and string.find(source, RUNTIME_MARKER, 1, true) ~= nil
+end
+
 local function sanitizePersistedState(decoded)
     local clean = defaultState()
     if type(decoded) ~= "table" then
@@ -348,23 +369,22 @@ local function sanitizePersistedState(decoded)
     if type(decoded.helperGuid) == "string" and decoded.helperGuid ~= "" then
         clean.helperGuid = decoded.helperGuid
     end
-    if type(decoded.releaseEtag) == "string" and decoded.releaseEtag ~= "" then
-        clean.releaseEtag = decoded.releaseEtag
-    end
-    if type(decoded.runtimeVersion) == "string"
-        and string.match(decoded.runtimeVersion, "^%d+%.%d+%.%d+$")
-    then
-        clean.runtimeVersion = decoded.runtimeVersion
-    end
-    if type(decoded.runtimeCommitSha) == "string" then
-        clean.runtimeCommitSha = decoded.runtimeCommitSha
-    end
-    if type(decoded.runtimeSource) == "string"
-        and #decoded.runtimeSource > 0
-        and #decoded.runtimeSource <= MAX_RUNTIME_BYTES
-        and string.find(decoded.runtimeSource, RUNTIME_MARKER, 1, true)
-    then
+    local persistedRuntimeIsValid = runtimeSourceIsValid(decoded.runtimeSource)
+        and type(decoded.runtimeVersion) == "string"
+        and string.match(decoded.runtimeVersion, "^%d+%.%d+%.%d+$") ~= nil
+    if persistedRuntimeIsValid then
         clean.runtimeSource = decoded.runtimeSource
+        clean.runtimeVersion = decoded.runtimeVersion
+        if type(decoded.runtimeCommitSha) == "string"
+            and #decoded.runtimeCommitSha >= 7
+            and #decoded.runtimeCommitSha <= 40
+            and string.match(decoded.runtimeCommitSha, "^[0-9a-fA-F]+$")
+        then
+            clean.runtimeCommitSha = decoded.runtimeCommitSha
+        end
+        if type(decoded.releaseEtag) == "string" and decoded.releaseEtag ~= "" then
+            clean.releaseEtag = decoded.releaseEtag
+        end
     end
     if type(decoded.runtimeState) == "table" then
         clean.runtimeState = decoded.runtimeState
@@ -395,17 +415,112 @@ local function tell(playerColor, message, tint)
     pcall(printToColor, "Corvan • " .. message, color, tint or {0.80, 0.68, 0.38})
 end
 
-local function setUiAttribute(id, attribute, value)
-    pcall(function()
+local function collectUiIds(xml)
+    local ids = {}
+    for id in string.gmatch(xml, "id%s*=%s*\"([^\"]+)\"") do
+        ids[id] = true
+    end
+    for id in string.gmatch(xml, "id%s*=%s*'([^']+)'") do
+        ids[id] = true
+    end
+    return ids
+end
+
+local function applyUiAttribute(id, attribute, value)
+    if not uiReady or uiIds[id] ~= true then
+        return false
+    end
+    local loadingOk, loading = pcall(function()
+        return self.UI.loading
+    end)
+    if loadingOk and loading == true then
+        return false
+    end
+    local ok = pcall(function()
         self.UI.setAttribute(id, attribute, tostring(value))
     end)
+    return ok
+end
+
+local function setUiAttribute(id, attribute, value)
+    if type(id) ~= "string" or UI_ATTRIBUTES[attribute] ~= true then
+        return false
+    end
+    uiAttributeValues[id] = uiAttributeValues[id] or {}
+    uiAttributeValues[id][attribute] = tostring(value)
+    return applyUiAttribute(id, attribute, value)
 end
 
 local function setRefreshFeedback(text, busy)
-    setUiAttribute("update_status", "text", text or "")
-    setUiAttribute("refreshStatus", "text", text == "" and "ATUALIZAÇÃO  •  pronta" or ("ATUALIZAÇÃO  •  " .. text))
-    setUiAttribute("refresh", "interactable", busy and "false" or "true")
-    setUiAttribute("settings_refresh", "interactable", busy and "false" or "true")
+    pendingRefreshText = text or ""
+    pendingRefreshBusy = busy == true
+    setUiAttribute(
+        "refreshStatus",
+        "text",
+        pendingRefreshText == "" and "ATUALIZAÇÃO  •  pronta" or ("ATUALIZAÇÃO  •  " .. pendingRefreshText)
+    )
+    setUiAttribute("refresh", "interactable", pendingRefreshBusy and "false" or "true")
+end
+
+local function installUiXml(xml)
+    if type(xml) ~= "string" or xml == "" then
+        return false
+    end
+
+    local nextUiIds = collectUiIds(xml)
+    if nextUiIds.refresh == nil or nextUiIds.refreshStatus == nil then
+        log("Corvan bootstrap: interface recusada por não declarar os controles estáveis.")
+        return false
+    end
+
+    local previousUiIds = uiIds
+    local previousUiReady = uiReady
+    uiReady = false
+    uiLoadSerial = uiLoadSerial + 1
+    local serial = uiLoadSerial
+    local installed = pcall(function()
+        self.UI.setXml(xml)
+    end)
+    if not installed then
+        uiIds = previousUiIds
+        uiReady = previousUiReady
+        return false
+    end
+    uiIds = nextUiIds
+
+    local function finishLoading()
+        if serial ~= uiLoadSerial then
+            return
+        end
+        uiReady = true
+        for id, attributes in pairs(uiAttributeValues) do
+            for attribute, value in pairs(attributes) do
+                applyUiAttribute(id, attribute, value)
+            end
+        end
+        setRefreshFeedback(pendingRefreshText, pendingRefreshBusy)
+    end
+
+    local function hasFinishedLoading()
+        local ok, loading = pcall(function()
+            return self.UI.loading
+        end)
+        return ok and loading == false
+    end
+
+    if type(Wait) == "table" and type(Wait.condition) == "function" then
+        local scheduled = pcall(function()
+            Wait.condition(finishLoading, hasFinishedLoading, 5, function()
+                log("Corvan bootstrap: a interface não terminou de carregar.")
+            end)
+        end)
+        if not scheduled then
+            log("Corvan bootstrap: não foi possível aguardar o carregamento da interface.")
+        end
+    else
+        log("Corvan bootstrap: Wait.condition indisponível; interface mantida em modo seguro.")
+    end
+    return true
 end
 
 local function isCurrentUpdate(serial)
@@ -610,13 +725,6 @@ local function configureHelper(helper)
         helper.tooltip = false
     end)
     state.helperGuid = helper.getGUID()
-end
-
-local function runtimeSourceIsValid(source)
-    return type(source) == "string"
-        and #source > 0
-        and #source <= MAX_RUNTIME_BYTES
-        and string.find(source, RUNTIME_MARKER, 1, true) ~= nil
 end
 
 local function healthIsValid(health, expectedVersion)
@@ -844,12 +952,46 @@ local function webGet(url, headers, callback)
     local requestHeaders = shallowCopy(headers)
     requestHeaders.Accept = requestHeaders.Accept or "application/vnd.github+json"
     requestHeaders["User-Agent"] = "corvan-tts-automation/" .. BOOTSTRAP_VERSION
+    local completed = false
+    local request = nil
+
+    local function complete(result)
+        if completed then
+            return
+        end
+        completed = true
+        callback(result)
+    end
+
     local ok, errorMessage = pcall(function()
         -- TTS order is data before headers; a GET has an empty request body.
-        WebRequest.custom(url, "GET", true, "", requestHeaders, callback)
+        request = WebRequest.custom(url, "GET", true, "", requestHeaders, complete)
     end)
     if not ok then
-        callback({is_error = true, error = tostring(errorMessage), response_code = 0, text = ""})
+        complete({is_error = true, error = tostring(errorMessage), response_code = 0, text = ""})
+        return
+    end
+
+    local timeoutScheduled = type(Wait) == "table" and type(Wait.time) == "function" and pcall(function()
+        Wait.time(function()
+            if completed then
+                return
+            end
+            if request ~= nil then
+                pcall(function()
+                    request.dispose()
+                end)
+            end
+            complete({is_error = true, error = "timeout de rede", response_code = 0, text = ""})
+        end, WEB_REQUEST_TIMEOUT)
+    end)
+    if not timeoutScheduled then
+        if request ~= nil then
+            pcall(function()
+                request.dispose()
+            end)
+        end
+        complete({is_error = true, error = "timeout indisponível", response_code = 0, text = ""})
     end
 end
 
@@ -894,7 +1036,11 @@ local function validateManifest(manifest, releaseTag)
     if type(releaseTag) == "string" and compareSemver(manifest.version, releaseTag) ~= 0 then
         return false, "release e manifesto não correspondem"
     end
-    if type(manifest.commitSha) ~= "string" or not string.match(manifest.commitSha, "^[0-9a-fA-F]+$") or #manifest.commitSha < 7 then
+    if type(manifest.commitSha) ~= "string"
+        or not string.match(manifest.commitSha, "^[0-9a-fA-F]+$")
+        or #manifest.commitSha < 7
+        or #manifest.commitSha > 40
+    then
         return false, "commitSha inválido"
     end
     local runtimeUrl, runtimeSize, runtimeSha256 = manifestRuntime(manifest)
@@ -918,12 +1064,13 @@ end
 
 local function applyDeferredUi(xml)
     if type(xml) ~= "string" then
-        return
+        return false
+    end
+    if not installUiXml(xml) then
+        return false
     end
     state.uiXml = xml
-    pcall(function()
-        self.UI.setXml(xml)
-    end)
+    return true
 end
 
 local function commitUpdate(serial, helper, health)
@@ -946,15 +1093,16 @@ local function commitUpdate(serial, helper, health)
         rollbackUpdate(serial, "novo runtime não exportou o estado")
         return
     end
+    if update.pendingUiXml == nil or not applyDeferredUi(update.pendingUiXml) then
+        rollbackUpdate(serial, "novo runtime não forneceu uma interface válida")
+        return
+    end
     state.helperGuid = helper.getGUID()
     state.runtimeSource = candidate.source
     state.runtimeVersion = candidate.manifest.version
     state.runtimeCommitSha = candidate.manifest.commitSha
     state.releaseEtag = candidate.etag or state.releaseEtag
     state.runtimeState = exported
-    if update.pendingUiXml ~= nil then
-        applyDeferredUi(update.pendingUiXml)
-    end
     finishUpdate(serial, "atualizado para v" .. state.runtimeVersion .. ".", false)
 end
 
@@ -964,9 +1112,6 @@ beginReloadProbe = function(serial, mode, expectedVersion, attemptsRemaining)
     end
     local snapshot = update.snapshot
     local helperGuid = state.helperGuid
-    if mode == "rollback" and snapshot ~= nil then
-        helperGuid = snapshot.helperGuid
-    end
     local helper = getObjectFromGUID(helperGuid)
     if helper ~= nil and ownsHelper(helper) then
         registerHelper(helper)
@@ -982,10 +1127,8 @@ beginReloadProbe = function(serial, mode, expectedVersion, attemptsRemaining)
                 state.runtimeState = snapshot.runtimeState
                 state.uiXml = snapshot.uiXml
                 state.helperGuid = helper.getGUID()
-                if type(snapshot.uiXml) == "string" then
-                    pcall(function()
-                        self.UI.setXml(snapshot.uiXml)
-                    end)
+                if type(snapshot.uiXml) == "string" and snapshot.uiXml ~= "" then
+                    installUiXml(snapshot.uiXml)
                 end
                 if restored then
                     finishUpdate(serial, "atualização cancelada; versão anterior restaurada.", true)
@@ -1075,7 +1218,6 @@ local function installCandidate(serial, candidate)
         return
     end
     update.snapshot = {
-        helperGuid = helper.getGUID(),
         runtimeSource = state.runtimeSource,
         runtimeVersion = state.runtimeVersion,
         runtimeCommitSha = state.runtimeCommitSha,
@@ -1190,9 +1332,7 @@ function onLoad(savedData)
     state.schemaVersion = STATE_SCHEMA_VERSION
     startupInstallAttempts = 0
     if type(state.uiXml) == "string" and state.uiXml ~= "" then
-        pcall(function()
-            self.UI.setXml(state.uiXml)
-        end)
+        installUiXml(state.uiXml)
     end
     setRefreshFeedback("", false)
     ensureHelper()
@@ -1319,8 +1459,17 @@ function applyRuntimeUi(payload)
         update.pendingUiXml = xml
         return true
     end
-    applyDeferredUi(xml)
-    return true
+    return applyDeferredUi(xml)
+end
+
+function setRuntimeUiAttribute(payload)
+    if type(payload) ~= "table"
+        or type(payload.id) ~= "string"
+        or type(payload.attribute) ~= "string"
+    then
+        return false
+    end
+    return setUiAttribute(payload.id, payload.attribute, payload.value or "")
 end
 
 function getBootstrapInfo()

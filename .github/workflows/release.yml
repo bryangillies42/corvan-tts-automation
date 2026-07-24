@@ -50,15 +50,34 @@ jobs:
           CORVAN_COMMIT_SHA: ${{ github.sha }}
         run: npm run build
 
-      - name: Create GitHub Release
+      - name: Stage release assets in a draft
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh release create "${GITHUB_REF_NAME}" \
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            if [[ "$(gh release view "${GITHUB_REF_NAME}" --json isDraft --jq .isDraft)" != "true" ]]; then
+              echo "Release ${GITHUB_REF_NAME} já está publicada; nada para substituir."
+              exit 0
+            fi
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              --verify-tag \
+              --generate-notes \
+              --title "Corvan Duras Console ${GITHUB_REF_NAME}" \
+              --draft
+          fi
+          gh release upload "${GITHUB_REF_NAME}" \
             dist/corvan-runtime.lua \
             dist/manifest.json \
             dist/Corvan_Duras_Console.json \
-            --verify-tag \
-            --generate-notes \
-            --title "Corvan Duras Console ${GITHUB_REF_NAME}"
+            --clobber
+
+      - name: Publish release atomically
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if [[ "$(gh release view "${GITHUB_REF_NAME}" --json isDraft --jq .isDraft)" == "true" ]]; then
+            gh release edit "${GITHUB_REF_NAME}" --draft=false --latest
+          fi

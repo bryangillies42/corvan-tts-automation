@@ -126,7 +126,8 @@ test('runtime expõe o contrato público e o estado de busy para o bootstrap', (
   assert.match(runtime, /safeParentCall\("runtimeReady"/);
   assert.match(runtime, /parent\.call\(functionName, payload\)/);
   assert.match(runtime, /cacheRuntimeState/);
-  assert.match(runtime, /parent\.UI\.setAttribute/);
+  assert.match(runtime, /safeParentCall\("setRuntimeUiAttribute"/);
+  assert.doesNotMatch(runtime, /parent\.UI\.setAttribute/);
 });
 
 test('todo ID atualizado pelo runtime existe no XML', () => {

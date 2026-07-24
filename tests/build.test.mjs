@@ -86,7 +86,7 @@ test("literal Lua escolhe delimitador sem colidir com o conteúdo", () => {
 
 test("a ficha possui o schema e os valores canônicos do Corvan", async () => {
   const character = JSON.parse(await readFile(join(ROOT, "src", "character.json"), "utf8"));
-  validateCharacter(character, "0.1.0");
+  validateCharacter(character, "0.1.1");
 
   assert.equal(character.schemaVersion, 1);
   assert.equal(character.name, "Corvan Duras");
@@ -128,7 +128,7 @@ test("validadores rejeitam character e UI estruturalmente inválidos", async () 
   const character = JSON.parse(await readFile(join(ROOT, "src", "character.json"), "utf8"));
   const invalidCharacter = structuredClone(character);
   invalidCharacter.weapons.sword.damage.sides = 1;
-  assert.throws(() => validateCharacter(invalidCharacter, "0.1.0"), /damage\.sides/);
+  assert.throws(() => validateCharacter(invalidCharacter, "0.1.1"), /damage\.sides/);
 
   const prereleaseCharacter = structuredClone(character);
   prereleaseCharacter.version = "0.1.0-rc.1";
@@ -153,12 +153,12 @@ test("manifesto e Saved Object possuem o contrato publicável", async (t) => {
   const saved = JSON.parse(await readFile(join(outDir, "Corvan_Duras_Console.json"), "utf8"));
 
   assert.equal(manifest.schemaVersion, 1);
-  assert.equal(manifest.version, "0.1.0");
-  assert.equal(manifest.minBootstrapVersion, "1.0.0");
+  assert.equal(manifest.version, "0.1.1");
+  assert.equal(manifest.minBootstrapVersion, "1.0.1");
   assert.equal(manifest.commitSha, FIXED_SHA);
   assert.equal(
     manifest.runtime.url,
-    "https://github.com/bryangillies42/corvan-tts-automation/releases/download/v0.1.0/corvan-runtime.lua",
+    "https://github.com/bryangillies42/corvan-tts-automation/releases/download/v0.1.1/corvan-runtime.lua",
   );
   assert.equal(manifest.runtime.size, Buffer.byteLength(runtime, "utf8"));
   assert.equal(manifest.runtime.sha256, createHash("sha256").update(runtime, "utf8").digest("hex"));
@@ -179,7 +179,7 @@ test("manifesto e Saved Object possuem o contrato publicável", async (t) => {
   assert.equal(object.Locked, false);
   assert.equal(
     object.CustomImage.ImageURL,
-    "https://raw.githubusercontent.com/bryangillies42/corvan-tts-automation/main/assets/panel-board.png",
+    `https://raw.githubusercontent.com/bryangillies42/corvan-tts-automation/${FIXED_SHA}/assets/panel-board.png`,
   );
   assert.deepEqual(object.CustomImage.CustomTile, {
     Type: 0,
@@ -207,7 +207,7 @@ test("manifesto aceita somente uma versão anterior estável e realmente menor",
       rootDir: project,
       outDir: join(project, "dist-invalid-previous"),
       commitSha: FIXED_SHA,
-      previousVersion: "0.1.0",
+      previousVersion: "0.1.1",
     }),
     /deve ser anterior/,
   );

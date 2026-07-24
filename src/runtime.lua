@@ -39,7 +39,7 @@ end
 
 local DEFAULT_CHARACTER = {
     schemaVersion = 1,
-    version = "0.1.0",
+    version = "0.1.1",
     name = "Corvan Duras",
     shortName = "Corvan",
     resources = {hp = {max = 47}, mp = {max = 12}},
@@ -255,8 +255,12 @@ local function safeParentCall(functionName, payload)
 end
 
 local function safeSetAttribute(id, attribute, value)
-    if not parent then return end
-    pcall(function() parent.UI.setAttribute(id, attribute, tostring(value)) end)
+    local ok, accepted = safeParentCall("setRuntimeUiAttribute", {
+        id = id,
+        attribute = attribute,
+        value = tostring(value)
+    })
+    return ok and accepted ~= false
 end
 
 local function signed(value)
@@ -334,26 +338,17 @@ end
 
 local function scheduleRender()
     if not parent then return end
-    if type(Wait) == "table" and type(Wait.condition) == "function" then
-        pcall(function()
-            Wait.condition(renderNow, function()
-                local ok, loading = pcall(function() return parent.UI.loading end)
-                return not ok or loading == false
-            end, 3, renderNow)
-        end)
-    else
-        renderNow()
-    end
+    -- O bootstrap mantém o último valor de cada atributo e o aplica somente
+    -- depois que o XML termina de carregar. Assim o runtime nunca toca
+    -- diretamente em parent.UI, cuja exceção Unity não é capturada por pcall.
+    renderNow()
 end
 
 local function applyUi()
     if not parent then return false end
-    local ok = safeParentCall("applyRuntimeUi", {xml = UI_XML, version = CHARACTER.version})
-    if not ok then
-        ok = pcall(function() parent.UI.setXml(UI_XML) end)
-    end
+    local ok, accepted = safeParentCall("applyRuntimeUi", {xml = UI_XML, version = CHARACTER.version})
     scheduleRender()
-    return ok
+    return ok and accepted ~= false
 end
 
 local function snapshotState()

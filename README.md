@@ -18,7 +18,7 @@ npm run build
 npm run test:lua
 ```
 
-`test:lua` é o smoke opcional de Windows (PowerShell 7): usa o MoonSharp instalado junto do próprio TTS para compilar runtime/bootstrap e executar as fórmulas centrais.
+`test:lua` é o smoke opcional de Windows (PowerShell 7): usa o MoonSharp instalado junto do próprio TTS para compilar runtime/bootstrap, executar as fórmulas centrais e simular `onLoad`, timeout de rede, update e rollback.
 
 O build valida `src/character.json` e `src/ui.xml`, incorpora ambos ao runtime Lua e inclui uma cópia offline do runtime no bootstrap. Os três artefatos determinísticos são escritos em `dist/`:
 
@@ -42,7 +42,7 @@ O painel oferece PV/PM editáveis, Defesa/RD, seleção de Espada Longa ou Escud
 
 O bootstrap embutido é estável. Ao acionar **Refresh**, ele consulta o manifesto da release estável mais recente, baixa todo o runtime antes de aplicá-lo e mantém o runtime anterior para rollback. A prancha visível não é recarregada, portanto GUID, posição, rotação e escala permanecem intactos.
 
-Uma tag `v*` que corresponda à versão de `package.json` executa testes, gera os artefatos com o SHA do commit e cria uma GitHub Release. Tags e artefatos publicados devem ser tratados como imutáveis; uma correção exige uma nova versão SemVer.
+Uma tag `v*` que corresponda à versão de `package.json` executa testes, gera os artefatos com o SHA do commit, anexa tudo a um draft e só então publica a GitHub Release. A imutabilidade de releases deve estar habilitada nas configurações do repositório; uma correção exige uma nova versão SemVer.
 
 ## Limitações do TTS
 
