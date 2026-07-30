@@ -219,32 +219,44 @@ end
 
 assert(registerParent({parentGuid = 'panel1'}))
 local legacyState = exportState()
+legacyState.runtimeVersion = '0.1.5'
+legacyState.hp = 47
+legacyState.mp = 12
 legacyState.diceOffset = {x = 0, y = 2.5, z = -5}
 assert(importState(legacyState))
 local migratedOffset = exportState().diceOffset
+assert(exportState().hp == 55 and exportState().mp == 15,
+    'level 5 full-resource migration failed')
 assert(migratedOffset.x == 0 and migratedOffset.y == 3.2 and migratedOffset.z == 0,
     'legacy offset migration failed: ' .. tostring(migratedOffset.x) .. ','
         .. tostring(migratedOffset.y) .. ',' .. tostring(migratedOffset.z))
 assert(handleUiEvent({id = 'power_duel', playerColor = 'White'}))
 local afterDuel = exportState()
-assert(afterDuel.mp == 10 and afterDuel.effects.duel)
+assert(afterDuel.mp == 13 and afterDuel.effects.duel)
 assert(not handleUiEvent({id = 'power_duel', playerColor = 'White'}))
-assert(exportState().mp == 10)
+assert(exportState().mp == 13)
 assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
+assert(exportState().effects.baluarte == 2 and exportState().mp == 12)
+assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
+assert(exportState().effects.baluarte == 4 and exportState().mp == 11)
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 24)
+assert(CorvanRules.calculateSkillModifier(CHARACTER, exportState(), 'fortitude') == 13)
+assert(not handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
+assert(exportState().mp == 11)
 assert(handleUiEvent({id = 'end_turn', playerColor = 'White'}))
 local afterTurn = exportState()
 assert(afterTurn.effects.duel and not afterTurn.effects.baluarte)
 assert(handleUiEvent({id = 'end_scene', playerColor = 'White'}))
-assert(not exportState().effects.duel and exportState().mp == 9)
+assert(not exportState().effects.duel and exportState().mp == 11)
 
 assert(handleUiEvent({id = 'pm_input', value = '99', playerColor = 'White'}))
-assert(exportState().mp == 12)
+assert(exportState().mp == 15)
 assert(handleUiEvent({id = 'power_torre_armada', playerColor = 'White'}))
 dieValues = {6}
 assert(handleUiEvent({id = 'roll_damage', playerColor = 'White'}))
 local afterTower = exportState()
-assert(not afterTower.effects.armedTower and afterTower.lastResult == 'Dano - 15 (d8[6] + 9)')
-assert(publicChat[1] == 'Corvan: Dano - 15 (d8［6］ + 9)')
+assert(not afterTower.effects.armedTower and afterTower.lastResult == 'Dano - 16 (d8[6] + 10)')
+assert(publicChat[1] == 'Corvan: Dano - 16 (d8［6］ + 10)')
 
 assert(handleUiEvent({id = 'power_combat_defensive', playerColor = 'White'}))
 dieValues = {19}
@@ -253,13 +265,13 @@ local afterAttack = exportState()
 assert(afterAttack.effects.combatDefensiveDefense and not afterAttack.effects.combatDefensiveArmed)
 assert(afterAttack.pendingThreat and afterAttack.pendingThreat.natural == 19)
 assert(CorvanRules.calculateDefense(CHARACTER, afterAttack) == 25)
-assert(afterAttack.lastResult == 'Espada - 25 (d20[19] + 6) • ameaça')
+assert(afterAttack.lastResult == 'Espada - 26 (d20[19] + 7) • ameaça')
 
 dieValues = {6, 3}
 assert(handleUiEvent({id = 'roll_critical', playerColor = 'White'}))
 local afterCritical = exportState()
-assert(afterCritical.pendingThreat == nil and afterCritical.lastResult == 'Crítico - 13 (2d8[6,3] + 4)')
-assert(publicChat[#publicChat] == 'Corvan: Crítico - 13 (2d8［6,3］ + 4)')
+assert(afterCritical.pendingThreat == nil and afterCritical.lastResult == 'Crítico - 14 (2d8[6,3] + 5)')
+assert(publicChat[#publicChat] == 'Corvan: Crítico - 14 (2d8［6,3］ + 5)')
 
 dieValues = {7}
 panelPosition = {x = 35, y = 4, z = 42}
@@ -270,13 +282,13 @@ assert(publicChat[#publicChat] == 'Corvan: Iniciativa - 10 (d20［7］ + 3)')
 
 dieValues = {11}
 assert(handleUiEvent({id = 'skill_luta', playerColor = 'White'}))
-assert(exportState().lastResult == 'Luta - 19 (d20[11] + 8)')
-assert(publicChat[#publicChat] == 'Corvan: Luta - 19 (d20［11］ + 8)')
+assert(exportState().lastResult == 'Luta - 20 (d20[11] + 9)')
+assert(publicChat[#publicChat] == 'Corvan: Luta - 20 (d20［11］ + 9)')
 
 dieValues = {9}
 assert(handleUiEvent({id = 'skill_percepcao', playerColor = 'White'}))
-assert(exportState().lastResult == 'Percepção - 14 (d20[9] + 5)')
-assert(publicChat[#publicChat] == 'Corvan: Percepção - 14 (d20［9］ + 5)')
+assert(exportState().lastResult == 'Percepção - 12 (d20[9] + 3)')
+assert(publicChat[#publicChat] == 'Corvan: Percepção - 12 (d20［9］ + 3)')
 assert(#publicChat == 6 and #spectatorChat == 6 and globalChatCalls == 0)
 local latestSpawn = spawnPositions[#spawnPositions]
 assert(latestSpawn.x == 35 and math.abs(latestSpawn.y - 7.2) < 0.001 and latestSpawn.z == 42,
@@ -305,7 +317,7 @@ return afterDuel.mp, afterTurn.mp, afterTower.lastResult, afterAttack.pendingThr
 
 $runtimeFlowRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $runtimeFlowResult = $runtimeFlowRunner.DoString($runtime + "`n" + $runtimeFlowHarness).ToString()
-$expectedRuntimeFlow = '10, 9, "Dano - 15 (d8[6] + 9)", 19, "Crítico - 13 (2d8[6,3] + 4)", 6, 0, 3'
+$expectedRuntimeFlow = '13, 11, "Dano - 16 (d8[6] + 10)", 19, "Crítico - 14 (2d8[6,3] + 5)", 6, 0, 4'
 if ($runtimeFlowResult -ne $expectedRuntimeFlow) {
     throw "Smoke do fluxo de combate retornou '$runtimeFlowResult'; esperado '$expectedRuntimeFlow'."
 }
@@ -476,15 +488,15 @@ spawnObject = function(params)
                 xml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
             })
             if not accepted then error('bootstrap rejected valid UI') end
-            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.1.5'})
+            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.1.6'})
             setRuntimeUiAttribute({id = 'missing', attribute = 'text', value = 'must stay queued'})
             return helper
         end,
         call = function(name, _)
             if name == 'healthCheck' then
-                return {ok = true, version = '0.1.5', parentGuid = 'panel1'}
+                return {ok = true, version = '0.1.6', parentGuid = 'panel1'}
             elseif name == 'exportState' then
-                return {schemaVersion = 1, runtimeVersion = '0.1.5'}
+                return {schemaVersion = 1, runtimeVersion = '0.1.6'}
             end
             return true
         end
@@ -522,7 +534,7 @@ return xmlSetCalls, attributeCalls, invalidAttributeCalls, info.helperGuid, info
 
 $onLoadRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $onLoadResult = $onLoadRunner.DoString($bootstrap + "`n" + $onLoadHarness).ToString()
-$expectedOnLoad = '2, 5, 0, "helper1", "0.1.5"'
+$expectedOnLoad = '2, 5, 0, "helper1", "0.1.6"'
 if ($onLoadResult -ne $expectedOnLoad) {
     throw "Smoke de onLoad retornou '$onLoadResult'; esperado '$expectedOnLoad'."
 }
@@ -531,7 +543,7 @@ $copyPersistenceHarness = @'
 local timeQueue = {}
 local helper = nil
 local helperState = nil
-local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.5', mp = 12, effects = {duel = false}}
+local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.6', mp = 15, effects = {duel = false}}
 local persistedRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.2', mp = 10, effects = {duel = true}}
 
 JSON = {
@@ -580,7 +592,7 @@ spawnObject = function(params)
                 cacheRuntimeState({state = helperState or defaultRuntimeState})
                 return true
             elseif name == 'healthCheck' then
-                return {ok = true, version = '0.1.5', parentGuid = 'panel-copy'}
+                return {ok = true, version = '0.1.6', parentGuid = 'panel-copy'}
             elseif name == 'importState' then
                 helperState = payload
                 return true
@@ -659,7 +671,7 @@ if ($webRequestResult -ne $expectedWebRequest) {
 $transactionHarness = @'
 local oldXml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
 local candidateXml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/><Text id="activeWeaponLabel"/></Panel>'
-local candidateSource = '-- CORVAN_RUNTIME candidate v0.1.5'
+local candidateSource = '-- CORVAN_RUNTIME candidate v0.1.6'
 local oldSource = SEED_RUNTIME
 local timers = {}
 local currentGuid = 'helper1'
@@ -710,7 +722,7 @@ helper = {
     reload = function()
         if loadedSource == candidateSource then
             currentGuid = 'candidate-guid'
-            activeVersion = CANDIDATE_HEALTH_OK and '0.1.5' or 'broken'
+            activeVersion = CANDIDATE_HEALTH_OK and '0.1.6' or 'broken'
             applyRuntimeUi({xml = candidateXml})
         else
             currentGuid = 'rollback-guid'
@@ -747,7 +759,7 @@ update.playerColor = 'White'
 update.phase = 'install'
 
 installCandidate(9, {
-    manifest = {version = '0.1.5', commitSha = '0123456789abcdef0123456789abcdef01234567'},
+    manifest = {version = '0.1.6', commitSha = '0123456789abcdef0123456789abcdef01234567'},
     source = candidateSource,
     etag = 'etag-2'
 })
@@ -777,7 +789,7 @@ function Invoke-TransactionSmoke([bool]$healthy) {
 }
 
 $updateSuccess = Invoke-TransactionSmoke $true
-$expectedUpdateSuccess = '"0.1.5", true, false, false, "candidate-guid", 23, true, false'
+$expectedUpdateSuccess = '"0.1.6", true, false, false, "candidate-guid", 23, true, false'
 if ($updateSuccess -ne $expectedUpdateSuccess) {
     throw "Smoke de update retornou '$updateSuccess'; esperado '$expectedUpdateSuccess'."
 }

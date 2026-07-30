@@ -104,7 +104,7 @@
                         <Text text="CORVAN DURAS" fontSize="39" resizeTextMaxSize="42"
                               alignment="MiddleLeft" color="#E8E2D5" preferredHeight="43"
                               shadow="#000000CC" shadowDistance="2 -2" />
-                        <Text text="VANGUARDA  //  CAVALEIRO 4" class="gold" fontSize="19"
+                        <Text text="VANGUARDA  //  CAVALEIRO 5" class="gold" fontSize="19"
                               alignment="MiddleLeft" preferredHeight="22" />
                         <Text text="Humano  •  Soldado  •  Valkaria" class="muted"
                               alignment="MiddleLeft" preferredHeight="17" />
@@ -116,10 +116,10 @@
                                     spacing="3" childForceExpandWidth="true" childForceExpandHeight="false">
                         <HorizontalLayout preferredHeight="34" spacing="3" childForceExpandWidth="false">
                             <Text text="PV" class="caption red" preferredWidth="42" />
-                            <Text id="pvCurrent" text="47" class="red" fontSize="28" preferredWidth="50" />
+                            <Text id="pvCurrent" text="55" class="red" fontSize="28" preferredWidth="50" />
                             <Text text="/" class="muted" preferredWidth="16" />
-                            <Text id="pvMax" text="47" fontSize="24" preferredWidth="46" />
-                            <InputField id="pv_input" class="numberInput" text="47" onEndEdit="dispatch"
+                            <Text id="pvMax" text="55" fontSize="24" preferredWidth="46" />
+                            <InputField id="pv_input" class="numberInput" text="55" onEndEdit="dispatch"
                                         preferredWidth="54" />
                         </HorizontalLayout>
                         <HorizontalLayout preferredHeight="34" spacing="3" childForceExpandWidth="true">
@@ -136,10 +136,10 @@
                                     spacing="3" childForceExpandWidth="true" childForceExpandHeight="false">
                         <HorizontalLayout preferredHeight="34" spacing="3" childForceExpandWidth="false">
                             <Text text="PM" class="caption blue" preferredWidth="45" />
-                            <Text id="pmCurrent" text="12" class="blue" fontSize="28" preferredWidth="48" />
+                            <Text id="pmCurrent" text="15" class="blue" fontSize="28" preferredWidth="48" />
                             <Text text="/" class="muted" preferredWidth="16" />
-                            <Text id="pmMax" text="12" fontSize="24" preferredWidth="44" />
-                            <InputField id="pm_input" class="numberInput" text="12" onEndEdit="dispatch"
+                            <Text id="pmMax" text="15" fontSize="24" preferredWidth="44" />
+                            <InputField id="pm_input" class="numberInput" text="15" onEndEdit="dispatch"
                                         preferredWidth="52" />
                         </HorizontalLayout>
                         <HorizontalLayout preferredHeight="34" spacing="3" childForceExpandWidth="true">
@@ -163,7 +163,7 @@
                     <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="8 8" offsetMax="-8 -8"
                                     spacing="1" childForceExpandHeight="true">
                         <Text text="RD" class="caption gold" preferredHeight="25" alignment="MiddleCenter" />
-                        <Text id="rdValue" text="3" fontSize="35" resizeTextMaxSize="38" />
+                        <Text id="rdValue" text="8" fontSize="35" resizeTextMaxSize="38" />
                     </VerticalLayout>
                 </Panel>
 
@@ -190,9 +190,9 @@
                                 <Button id="weapon_sword" class="weaponButton" onClick="dispatch"
                                         colors="#302712|#493A18|#1D180D|#090B0D88"
                                         outline="#BE9139" outlineSize="2 2"
-                                        text="ESPADA LONGA  •  ATIVA&#10;ATAQUE +8   •   DANO 1d8+4&#10;CRÍTICO 19–20/x2   •   CORTE" />
+                                        text="ESPADA LONGA  •  ATIVA&#10;ATAQUE +9   •   DANO 1d8+5&#10;CRÍTICO 19–20/x2   •   CORTE" />
                                 <Button id="weapon_shield" class="weaponButton" onClick="dispatch"
-                                        text="ESCUDO PESADO&#10;ATAQUE +8   •   DANO 1d6+4&#10;CRÍTICO 20/x2   •   IMPACTO" />
+                                        text="ESCUDO PESADO&#10;ATAQUE +9   •   DANO 1d6+5&#10;CRÍTICO 20/x2   •   IMPACTO" />
                             </HorizontalLayout>
                         </VerticalLayout>
                     </Panel>
@@ -205,13 +205,13 @@
                                 <Panel class="card">
                                     <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="4 2" offsetMax="-4 -2">
                                         <Text text="ATAQUE" class="caption" preferredHeight="16" alignment="MiddleCenter" />
-                                        <Text id="attackValue" text="+8" fontSize="24" />
+                                        <Text id="attackValue" text="+9" fontSize="24" />
                                     </VerticalLayout>
                                 </Panel>
                                 <Panel class="card">
                                     <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="4 2" offsetMax="-4 -2">
                                         <Text text="DANO" class="caption" preferredHeight="16" alignment="MiddleCenter" />
-                                        <Text id="damageValue" text="1d8+4" class="gold" fontSize="24" />
+                                        <Text id="damageValue" text="1d8+5" class="gold" fontSize="24" />
                                     </VerticalLayout>
                                 </Panel>
                                 <Panel class="card">
@@ -263,7 +263,7 @@
                                 text="DUELO  •  2 PM&#10;+2 ataque e dano&#10;dura até o fim da cena" />
                         <Button id="power_baluarte" class="powerButton" onClick="dispatch"
                                 colors="#111C24|#1C3444|#0A1116|#090B0D88" outline="#315F7A"
-                                text="BALUARTE  •  1 PM&#10;+2 DEF e resistências&#10;até fim do turno" />
+                                text="BALUARTE  •  1/2 PM&#10;+2 ou +4 DEF e resistências&#10;até fim do turno" />
                         <Button id="power_torre_armada" class="powerButton" onClick="dispatch"
                                 colors="#211B10|#3C2F14|#151006|#090B0D88" outline="#765B22"
                                 text="TORRE ARMADA  •  1 PM&#10;+5 no próximo dano&#10;consome ao rolar dano" />
@@ -275,8 +275,8 @@
                                             spacing="2" childForceExpandWidth="true" childForceExpandHeight="true">
                                 <Text text="SOLIDEZ" class="gold" fontSize="18" preferredHeight="28" />
                                 <Text text="bônus já refletidos nas resistências" class="muted" fontSize="14" />
-                                <Text text="PLACAS DA IRA" class="gold" fontSize="18" preferredHeight="28" />
-                                <Text text="RD 3  •  PASSIVOS" class="muted" fontSize="14" />
+                                <Text text="BASTIÃO + PLACAS DA IRA" class="gold" fontSize="17" preferredHeight="28" />
+                                <Text text="RD 5 + 3 = 8  •  PASSIVOS" class="muted" fontSize="14" />
                             </VerticalLayout>
                         </Panel>
                     </GridLayout>
@@ -293,9 +293,9 @@
                                       spacing="6" childForceExpandWidth="true" childForceExpandHeight="true">
                         <Text text="ATALHOS&#10;RÁPIDOS" class="caption gold" preferredWidth="104" alignment="MiddleLeft" />
                         <Button id="skill_iniciativa" class="skillButton" text="INICIATIVA  +3" onClick="dispatch" />
-                        <Button id="skill_luta" class="skillButton" text="LUTA  +8" onClick="dispatch" />
+                        <Button id="skill_luta" class="skillButton" text="LUTA  +9" onClick="dispatch" />
                         <Button id="skill_intimidacao" class="skillButton" text="INTIMIDAÇÃO  +7" onClick="dispatch" />
-                        <Button id="skill_percepcao" class="skillButton" text="PERCEPÇÃO  +5" onClick="dispatch" />
+                        <Button id="skill_percepcao" class="skillButton" text="PERCEPÇÃO  +3" onClick="dispatch" />
                         <Button id="skill_fortitude" class="skillButton" text="FORTITUDE  +9" onClick="dispatch" />
                         <Button id="skill_reflexos" class="skillButton" text="REFLEXOS  +5" onClick="dispatch" />
                         <Button id="skill_vontade" class="skillButton" text="VONTADE  +5" onClick="dispatch" />
@@ -318,7 +318,7 @@
                                             childForceExpandWidth="true" childForceExpandHeight="false">
                                 <HorizontalLayout preferredHeight="22" childForceExpandWidth="false">
                                     <Text text="RUNTIME" class="caption gold" preferredWidth="82" />
-                                    <Text id="versionLabel" text="v0.1.5 • offline pronto" class="muted"
+                                    <Text id="versionLabel" text="v0.1.6 • offline pronto" class="muted"
                                           alignment="MiddleRight" flexibleWidth="1" />
                                 </HorizontalLayout>
                                 <Text id="refreshStatus" text="ATUALIZAÇÃO  •  pronta"

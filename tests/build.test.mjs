@@ -92,21 +92,21 @@ test("literal Lua escolhe delimitador sem colidir com o conteúdo", () => {
 
 test("a ficha possui o schema e os valores canônicos do Corvan", async () => {
   const character = JSON.parse(await readFile(join(ROOT, "src", "character.json"), "utf8"));
-  validateCharacter(character, "0.1.5");
+  validateCharacter(character, "0.1.6");
 
   assert.equal(character.schemaVersion, 1);
   assert.equal(character.name, "Corvan Duras");
   assert.deepEqual(
     { hp: character.resources.hp.max, mp: character.resources.mp.max },
-    { hp: 47, mp: 12 },
+    { hp: 55, mp: 15 },
   );
   assert.equal(character.defense, 20);
-  assert.equal(character.damageReduction, 3);
+  assert.equal(character.damageReduction, 8);
   assert.deepEqual(character.weapons.sword, {
     name: "Espada Longa",
     chatName: "Espada",
-    attack: 8,
-    damage: { count: 1, sides: 8, bonus: 4 },
+    attack: 9,
+    damage: { count: 1, sides: 8, bonus: 5 },
     critical: { min: 19, multiplier: 2 },
     type: "Corte",
     range: "Curto",
@@ -114,19 +114,31 @@ test("a ficha possui o schema e os valores canônicos do Corvan", async () => {
   assert.deepEqual(character.weapons.shield, {
     name: "Escudo Pesado",
     chatName: "Escudo",
-    attack: 8,
-    damage: { count: 1, sides: 6, bonus: 4 },
+    attack: 9,
+    damage: { count: 1, sides: 6, bonus: 5 },
     critical: { min: 20, multiplier: 2 },
     type: "Impacto",
     range: "Curto",
   });
   assert.deepEqual(
     Object.fromEntries(Object.entries(character.skills).map(([id, skill]) => [id, skill.modifier])),
-    { initiative: 3, fight: 8, intimidation: 7, perception: 5, fortitude: 9, reflex: 5, will: 5 },
+    { initiative: 3, fight: 9, intimidation: 7, perception: 3, fortitude: 9, reflex: 5, will: 5 },
   );
   assert.deepEqual(
     Object.fromEntries(Object.entries(character.powers).map(([id, power]) => [id, power.cost ?? 0])),
-    { combatDefensive: 0, duel: 2, baluarte: 1, armedTower: 1, provocation: 2, solidity: 0, platesOfWrath: 0 },
+    { combatDefensive: 0, duel: 2, baluarte: 1, armedTower: 1, provocation: 2, solidity: 0, platesOfWrath: 0, bastion: 0 },
+  );
+  assert.equal(
+    character.powers.bastion.damageReduction + character.powers.platesOfWrath.damageReduction,
+    character.damageReduction,
+  );
+  assert.deepEqual(
+    {
+      base: character.powers.baluarte.defenseModifier,
+      upgraded: character.powers.baluarte.upgradedDefenseModifier,
+      totalUpgradeCost: character.powers.baluarte.cost + character.powers.baluarte.upgradeCost,
+    },
+    { base: 2, upgraded: 4, totalUpgradeCost: 2 },
   );
 });
 
@@ -134,7 +146,7 @@ test("validadores rejeitam character e UI estruturalmente inválidos", async () 
   const character = JSON.parse(await readFile(join(ROOT, "src", "character.json"), "utf8"));
   const invalidCharacter = structuredClone(character);
   invalidCharacter.weapons.sword.damage.sides = 1;
-  assert.throws(() => validateCharacter(invalidCharacter, "0.1.5"), /damage\.sides/);
+  assert.throws(() => validateCharacter(invalidCharacter, "0.1.6"), /damage\.sides/);
 
   const prereleaseCharacter = structuredClone(character);
   prereleaseCharacter.version = "0.1.0-rc.1";
@@ -161,12 +173,12 @@ test("manifesto e Saved Object possuem o contrato publicável", async (t) => {
   const saved = JSON.parse(await readFile(join(outDir, "Corvan_Duras_Console.json"), "utf8"));
 
   assert.equal(manifest.schemaVersion, 1);
-  assert.equal(manifest.version, "0.1.5");
+  assert.equal(manifest.version, "0.1.6");
   assert.equal(manifest.minBootstrapVersion, "1.0.2");
   assert.equal(manifest.commitSha, FIXED_SHA);
   assert.equal(
     manifest.runtime.url,
-    "https://github.com/bryangillies42/corvan-tts-automation/releases/download/v0.1.5/corvan-runtime.lua",
+    "https://github.com/bryangillies42/corvan-tts-automation/releases/download/v0.1.6/corvan-runtime.lua",
   );
   assert.equal(manifest.runtime.size, Buffer.byteLength(runtime, "utf8"));
   assert.equal(manifest.runtime.sha256, createHash("sha256").update(runtime, "utf8").digest("hex"));
@@ -211,16 +223,16 @@ test("manifesto aceita somente uma versão anterior estável e realmente menor",
     rootDir: project,
     outDir: join(project, "dist-previous"),
     commitSha: FIXED_SHA,
-      previousVersion: "0.1.4",
+    previousVersion: "0.1.5",
   });
-  assert.equal(valid.manifest.previousVersion, "0.1.4");
+  assert.equal(valid.manifest.previousVersion, "0.1.5");
 
   await assert.rejects(
     buildProject({
       rootDir: project,
       outDir: join(project, "dist-invalid-previous"),
       commitSha: FIXED_SHA,
-      previousVersion: "0.1.5",
+      previousVersion: "0.1.6",
     }),
     /deve ser anterior/,
   );

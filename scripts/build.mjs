@@ -148,11 +148,14 @@ export function validateCharacter(character, expectedVersion) {
   }
 
   assert(isObject(character.powers), "character.powers deve ser um objeto.");
-  for (const id of ["combatDefensive", "duel", "baluarte", "armedTower", "provocation", "solidity", "platesOfWrath"]) {
+  for (const id of ["combatDefensive", "duel", "baluarte", "armedTower", "provocation", "solidity", "platesOfWrath", "bastion"]) {
     const power = character.powers[id];
     assert(isObject(power), `character.powers.${id} deve ser um objeto.`);
     assertString(power.name, `character.powers.${id}.name`);
     if (power.cost !== undefined) assertInteger(power.cost, `character.powers.${id}.cost`, 0);
+    if (power.upgradeCost !== undefined) {
+      assertInteger(power.upgradeCost, `character.powers.${id}.upgradeCost`, 0);
+    }
     if (power.duration !== undefined) assertString(power.duration, `character.powers.${id}.duration`);
     if (power.passive !== undefined) {
       assert(typeof power.passive === "boolean", `character.powers.${id}.passive deve ser booleano.`);
@@ -164,6 +167,8 @@ export function validateCharacter(character, expectedVersion) {
       "resistanceModifier",
       "willDifficulty",
       "damageReduction",
+      "upgradedDefenseModifier",
+      "upgradedResistanceModifier",
     ]) {
       if (power[field] !== undefined) assertNumber(power[field], `character.powers.${id}.${field}`);
     }

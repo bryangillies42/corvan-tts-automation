@@ -34,7 +34,7 @@ function attackModifier(state, weaponKey = state.activeWeapon) {
 function defense(state) {
   return character.defense
     + (state.effects.combatDefensiveDefense ? character.powers.combatDefensive.defenseModifier : 0)
-    + (state.effects.baluarte ? character.powers.baluarte.defenseModifier : 0);
+    + (Number(state.effects.baluarte) || 0);
 }
 
 function damageSpec(state, weaponKey, critical) {
@@ -57,38 +57,65 @@ function activate(state, effect, configKey) {
   return true;
 }
 
+function activateBaluarte(state) {
+  const current = Number(state.effects.baluarte) || 0;
+  if (current >= character.powers.baluarte.upgradedDefenseModifier) return false;
+  const upgrading = current > 0;
+  const cost = upgrading ? character.powers.baluarte.upgradeCost : character.powers.baluarte.cost;
+  if (state.mp < cost) return false;
+  state.mp -= cost;
+  state.effects.baluarte = upgrading
+    ? character.powers.baluarte.upgradedDefenseModifier
+    : character.powers.baluarte.defenseModifier;
+  return true;
+}
+
 test('fórmulas de ataque, defesa e crítico seguem os números da ficha', () => {
   const state = initialState();
-  assert.equal(attackModifier(state), 8);
+  assert.equal(attackModifier(state), 9);
   state.effects.duel = true;
-  assert.equal(attackModifier(state), 10);
+  assert.equal(attackModifier(state), 11);
   state.effects.combatDefensiveArmed = true;
-  assert.equal(attackModifier(state), 8);
+  assert.equal(attackModifier(state), 9);
   state.effects.combatDefensiveArmed = false;
   state.effects.combatDefensiveDefense = true;
-  state.effects.baluarte = true;
-  assert.equal(defense(state), 27);
+  state.effects.baluarte = 4;
+  assert.equal(defense(state), 29);
 
   state.effects.armedTower = true;
-  assert.deepEqual(damageSpec(state, 'sword', false), { count: 1, sides: 8, bonus: 11 });
-  assert.deepEqual(damageSpec(state, 'sword', true), { count: 2, sides: 8, bonus: 11 });
-  assert.deepEqual(damageSpec(state, 'shield', true), { count: 2, sides: 6, bonus: 11 });
+  assert.deepEqual(damageSpec(state, 'sword', false), { count: 1, sides: 8, bonus: 12 });
+  assert.deepEqual(damageSpec(state, 'sword', true), { count: 2, sides: 8, bonus: 12 });
+  assert.deepEqual(damageSpec(state, 'shield', true), { count: 2, sides: 6, bonus: 12 });
 });
 
 test('custos, repetição, insuficiência e limites de recursos são determinísticos', () => {
   const state = initialState();
   assert.equal(activate(state, 'duel', 'duel'), true);
-  assert.equal(state.mp, 10);
+  assert.equal(state.mp, 13);
   assert.equal(activate(state, 'duel', 'duel'), false);
-  assert.equal(state.mp, 10, 'repetir um poder não gasta PM novamente');
+  assert.equal(state.mp, 13, 'repetir um poder não gasta PM novamente');
+  assert.equal(activateBaluarte(state), true);
+  assert.equal(state.effects.baluarte, 2);
+  assert.equal(state.mp, 12);
+  assert.equal(activateBaluarte(state), true);
+  assert.equal(state.effects.baluarte, 4);
+  assert.equal(state.mp, 11);
+  assert.equal(activateBaluarte(state), false, 'Baluarte +4 não acumula além do limite');
+  assert.equal(state.mp, 11);
   state.mp = 0;
   assert.equal(activate(state, 'provocation', 'provocation'), false);
   assert.equal(state.mp, 0);
 
   const clamp = (value, max) => Math.min(max, Math.max(0, Math.floor(value)));
   assert.equal(clamp(-99, character.resources.hp.max), 0);
-  assert.equal(clamp(999, character.resources.hp.max), 47);
-  assert.equal(clamp(999, character.resources.mp.max), 12);
+  assert.equal(clamp(999, character.resources.hp.max), 55);
+  assert.equal(clamp(999, character.resources.mp.max), 15);
+});
+
+test('migração de nível aumenta apenas recursos que estavam cheios na v0.1.5', () => {
+  assert.match(runtime, /source\.runtimeVersion ~= "0\.1\.6"/);
+  assert.match(runtime, /source\.hp or source\.pv, 0\) == 47[\s\S]*normalized\.hp = 55/);
+  assert.match(runtime, /source\.mp or source\.pm, 0\) == 12[\s\S]*normalized\.mp = 15/);
 });
 
 test('fim do turno preserva Duelo; fim da cena remove todos os efeitos', () => {
@@ -113,7 +140,7 @@ test('snapshot de undo restaura a última mutação sem representar reroll', () 
   state.effects.duel = true;
   const diceResultOutsideState = 17;
   state = structuredClone(snapshot);
-  assert.equal(state.mp, 12);
+  assert.equal(state.mp, 15);
   assert.equal(state.effects.duel, false);
   assert.equal(diceResultOutsideState, 17, 'undo não apaga ou rerrola um dado físico');
 });

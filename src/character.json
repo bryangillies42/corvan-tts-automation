@@ -1,29 +1,29 @@
 {
   "schemaVersion": 1,
-  "version": "0.1.5",
+  "version": "0.1.6",
   "name": "Corvan Duras",
   "shortName": "Corvan",
   "resources": {
     "hp": {
       "label": "PV",
-      "max": 47
+      "max": 55
     },
     "mp": {
       "label": "PM",
-      "max": 12
+      "max": 15
     }
   },
   "defense": 20,
-  "damageReduction": 3,
+  "damageReduction": 8,
   "weapons": {
     "sword": {
       "name": "Espada Longa",
       "chatName": "Espada",
-      "attack": 8,
+      "attack": 9,
       "damage": {
         "count": 1,
         "sides": 8,
-        "bonus": 4
+        "bonus": 5
       },
       "critical": {
         "min": 19,
@@ -35,11 +35,11 @@
     "shield": {
       "name": "Escudo Pesado",
       "chatName": "Escudo",
-      "attack": 8,
+      "attack": 9,
       "damage": {
         "count": 1,
         "sides": 6,
-        "bonus": 4
+        "bonus": 5
       },
       "critical": {
         "min": 20,
@@ -57,7 +57,7 @@
     },
     "fight": {
       "name": "Luta",
-      "modifier": 8,
+      "modifier": 9,
       "resistance": false
     },
     "intimidation": {
@@ -67,7 +67,7 @@
     },
     "perception": {
       "name": "Percepção",
-      "modifier": 5,
+      "modifier": 3,
       "resistance": false
     },
     "fortitude": {
@@ -104,8 +104,11 @@
     "baluarte": {
       "name": "Baluarte",
       "cost": 1,
+      "upgradeCost": 1,
       "defenseModifier": 2,
       "resistanceModifier": 2,
+      "upgradedDefenseModifier": 4,
+      "upgradedResistanceModifier": 4,
       "duration": "turn"
     },
     "armedTower": {
@@ -128,6 +131,11 @@
       "name": "Placas da Ira",
       "passive": true,
       "damageReduction": 3
+    },
+    "bastion": {
+      "name": "Bastião",
+      "passive": true,
+      "damageReduction": 5
     }
   },
   "diceOffset": {

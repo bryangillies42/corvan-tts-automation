@@ -49,29 +49,29 @@ end
 
 local DEFAULT_CHARACTER = {
     schemaVersion = 1,
-    version = "0.1.5",
+    version = "0.1.6",
     name = "Corvan Duras",
     shortName = "Corvan",
-    resources = {hp = {max = 47}, mp = {max = 12}},
+    resources = {hp = {max = 55}, mp = {max = 15}},
     defense = 20,
-    damageReduction = 3,
+    damageReduction = 8,
     weapons = {
         sword = {
-            name = "Espada Longa", chatName = "Espada", attack = 8,
-            damage = {count = 1, sides = 8, bonus = 4},
+            name = "Espada Longa", chatName = "Espada", attack = 9,
+            damage = {count = 1, sides = 8, bonus = 5},
             critical = {min = 19, multiplier = 2}
         },
         shield = {
-            name = "Escudo Pesado", chatName = "Escudo", attack = 8,
-            damage = {count = 1, sides = 6, bonus = 4},
+            name = "Escudo Pesado", chatName = "Escudo", attack = 9,
+            damage = {count = 1, sides = 6, bonus = 5},
             critical = {min = 20, multiplier = 2}
         }
     },
     skills = {
         initiative = {name = "Iniciativa", modifier = 3},
-        fight = {name = "Luta", modifier = 8},
+        fight = {name = "Luta", modifier = 9},
         intimidation = {name = "Intimidação", modifier = 7},
-        perception = {name = "Percepção", modifier = 5},
+        perception = {name = "Percepção", modifier = 3},
         fortitude = {name = "Fortitude", modifier = 9, resistance = true},
         reflex = {name = "Reflexos", modifier = 5, resistance = true},
         will = {name = "Vontade", modifier = 5, resistance = true}
@@ -79,7 +79,11 @@ local DEFAULT_CHARACTER = {
     powers = {
         combatDefensive = {cost = 0, attackModifier = -2, defenseModifier = 5},
         duel = {cost = 2, attackModifier = 2, damageModifier = 2},
-        baluarte = {cost = 1, defenseModifier = 2, resistanceModifier = 2},
+        baluarte = {
+            cost = 1, upgradeCost = 1,
+            defenseModifier = 2, resistanceModifier = 2,
+            upgradedDefenseModifier = 4, upgradedResistanceModifier = 4
+        },
         armedTower = {cost = 1, damageModifier = 5},
         provocation = {cost = 2, willDifficulty = 13}
     },
@@ -119,15 +123,25 @@ function CorvanRules.calculateAttackModifier(character, currentState, weaponKey)
     return result
 end
 
+local function baluarteModifier(character, currentState, upgradedField, baseField)
+    local active = currentState.effects and currentState.effects.baluarte
+    if active == true then return finiteNumber(character.powers.baluarte[baseField], 0) end
+    local value = finiteNumber(active, 0)
+    local upgraded = finiteNumber(character.powers.baluarte[upgradedField], 4)
+    local base = finiteNumber(character.powers.baluarte[baseField], 2)
+    if value >= upgraded then return upgraded end
+    if value >= base then return base end
+    return 0
+end
+
 function CorvanRules.calculateDefense(character, currentState)
     local result = finiteNumber(character.defense, 0)
     local effects = currentState.effects or {}
     if effects.combatDefensiveDefense then
         result = result + finiteNumber(character.powers.combatDefensive.defenseModifier, 0)
     end
-    if effects.baluarte then
-        result = result + finiteNumber(character.powers.baluarte.defenseModifier, 0)
-    end
+    result = result + baluarteModifier(character, currentState,
+        "upgradedDefenseModifier", "defenseModifier")
     return result
 end
 
@@ -135,8 +149,9 @@ function CorvanRules.calculateSkillModifier(character, currentState, skillKey)
     local skill = character.skills[skillKey]
     if not skill then return 0 end
     local result = finiteNumber(skill.modifier, 0)
-    if skill.resistance and currentState.effects and currentState.effects.baluarte then
-        result = result + finiteNumber(character.powers.baluarte.resistanceModifier, 0)
+    if skill.resistance then
+        result = result + baluarteModifier(character, currentState,
+            "upgradedResistanceModifier", "resistanceModifier")
     end
     return result
 end
@@ -181,8 +196,8 @@ local function defaultState()
     return {
         schemaVersion = STATE_SCHEMA_VERSION,
         runtimeVersion = CHARACTER.version,
-        hp = finiteNumber(CHARACTER.resources.hp.max, 47),
-        mp = finiteNumber(CHARACTER.resources.mp.max, 12),
+        hp = finiteNumber(CHARACTER.resources.hp.max, 55),
+        mp = finiteNumber(CHARACTER.resources.mp.max, 15),
         activeWeapon = "sword",
         effects = defaultEffects(),
         pendingThreat = nil,
@@ -201,7 +216,25 @@ local function normalizeSnapshot(source)
     normalized.mp = math.floor(clamp(source.mp or source.pm, 0, CHARACTER.resources.mp.max))
     if CHARACTER.weapons[source.activeWeapon] then normalized.activeWeapon = source.activeWeapon end
     if type(source.effects) == "table" then
-        for key in pairs(normalized.effects) do normalized.effects[key] = source.effects[key] == true end
+        for key in pairs(normalized.effects) do
+            if key == "baluarte" then
+                local saved = source.effects.baluarte
+                local base = finiteNumber(CHARACTER.powers.baluarte.defenseModifier, 2)
+                local upgraded = finiteNumber(CHARACTER.powers.baluarte.upgradedDefenseModifier, 4)
+                if saved == true then normalized.effects.baluarte = base
+                elseif finiteNumber(saved, 0) >= upgraded then normalized.effects.baluarte = upgraded
+                elseif finiteNumber(saved, 0) >= base then normalized.effects.baluarte = base end
+            else
+                normalized.effects[key] = source.effects[key] == true
+            end
+        end
+    end
+    -- Ao subir do nível 4 para o 5, personagens que estavam com o recurso
+    -- cheio também recebem o novo máximo. Valores gastos/ferimentos são
+    -- preservados para não curar ou restaurar PM silenciosamente.
+    if CHARACTER.version == "0.1.6" and source.runtimeVersion ~= "0.1.6" then
+        if finiteNumber(source.hp or source.pv, 0) == 47 then normalized.hp = 55 end
+        if finiteNumber(source.mp or source.pm, 0) == 12 then normalized.mp = 15 end
     end
     if type(source.pendingThreat) == "table" and CHARACTER.weapons[source.pendingThreat.weaponKey] then
         normalized.pendingThreat = {
@@ -340,7 +373,8 @@ local function effectsLabel()
     if state.effects.combatDefensiveArmed then table.insert(labels, "Combate Defensivo: próximo ataque") end
     if state.effects.combatDefensiveDefense then table.insert(labels, "Combate Defensivo: +5 DEF") end
     if state.effects.duel then table.insert(labels, "Duelo") end
-    if state.effects.baluarte then table.insert(labels, "Baluarte") end
+    local baluarte = finiteNumber(state.effects.baluarte, state.effects.baluarte == true and 2 or 0)
+    if baluarte > 0 then table.insert(labels, "Baluarte +" .. tostring(baluarte)) end
     if state.effects.armedTower then table.insert(labels, "Torre Armada") end
     if state.effects.provocation then table.insert(labels, "Provocação") end
     if #labels == 0 then return "Nenhum efeito ativo" end
@@ -375,6 +409,14 @@ local function renderNow()
     safeSetAttribute("settingsPanel", "active", state.settingsOpen and "true" or "false")
     safeSetAttribute("toggle_settings", "text", state.settingsOpen and "FECHAR" or "CONFIG")
     safeSetAttribute("roll_critical", "interactable", state.pendingThreat and "true" or "false")
+    local baluarte = finiteNumber(state.effects.baluarte, state.effects.baluarte == true and 2 or 0)
+    local baluarteText = "BALUARTE  •  1/2 PM\n+2 ou +4 DEF e resistências\naté fim do turno"
+    if baluarte == 2 then
+        baluarteText = "BALUARTE +2  •  ATIVO\nclique novamente: +4 (+1 PM)\naté fim do turno"
+    elseif baluarte >= 4 then
+        baluarteText = "BALUARTE +4  •  ATIVO\nDEF e resistências\naté fim do turno"
+    end
+    safeSetAttribute("power_baluarte", "text", baluarteText)
     safeSetAttribute("weapon_sword", "colors", state.activeWeapon == "sword" and "#75591D|#98752B|#4F3B13|#22222288" or "#22282E|#303A43|#151A1F|#22222288")
     safeSetAttribute("weapon_shield", "colors", state.activeWeapon == "shield" and "#75591D|#98752B|#4F3B13|#22222288" or "#22282E|#303A43|#151A1F|#22222288")
     local powerColors = {
@@ -993,6 +1035,34 @@ local function activatePower(playerColor, effectKey, configKey, announcement)
     return true
 end
 
+local function activateBaluarte(playerColor)
+    local power = CHARACTER.powers.baluarte
+    local base = finiteNumber(power.defenseModifier, 2)
+    local upgraded = finiteNumber(power.upgradedDefenseModifier, 4)
+    local current = finiteNumber(state.effects.baluarte, state.effects.baluarte == true and base or 0)
+    local cost
+    local target
+    if current <= 0 then
+        cost = finiteNumber(power.cost, 1)
+        target = base
+    elseif current < upgraded then
+        cost = finiteNumber(power.upgradeCost, 1)
+        target = upgraded
+    else
+        privateError(playerColor, "Baluarte +4 já está ativo.")
+        return false
+    end
+    if state.mp < cost then
+        privateError(playerColor, "PM insuficiente.")
+        return false
+    end
+    pushUndo()
+    state.mp = state.mp - cost
+    state.effects.baluarte = target
+    cacheAndRender()
+    return true
+end
+
 local function activateCombatDefensive(playerColor)
     if state.effects.combatDefensiveArmed or state.effects.combatDefensiveDefense then
         privateError(playerColor, "Combate Defensivo já está ativo.")
@@ -1105,7 +1175,7 @@ function handleUiEvent(payload)
     if SKILL_IDS[id] then return rollSkill(playerColor, SKILL_IDS[id]) end
     if id == "power_combat_defensive" then return activateCombatDefensive(playerColor) end
     if id == "power_duel" then return activatePower(playerColor, "duel", "duel") end
-    if id == "power_baluarte" then return activatePower(playerColor, "baluarte", "baluarte") end
+    if id == "power_baluarte" then return activateBaluarte(playerColor) end
     if id == "power_torre_armada" then return activatePower(playerColor, "armedTower", "armedTower") end
     if id == "power_provocacao" then
         local cd = CHARACTER.powers.provocation.willDifficulty
