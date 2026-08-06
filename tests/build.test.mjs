@@ -19,6 +19,9 @@ const FIXED_SHA = "0123456789abcdef0123456789abcdef01234567";
 const PLACEHOLDERS = [
   "__UI_XML_LITERAL__",
   "__CHARACTER_JSON_LITERAL__",
+  "__PANEL_IMAGE_URL_LITERAL__",
+  "__PANEL_UI_IMAGE_URL_LITERAL__",
+  "__PANEL_UI_IMAGE_URL_XML__",
   "__SEED_UI_LITERAL__",
   "__SEED_RUNTIME_LITERAL__",
 ];
@@ -57,6 +60,9 @@ test("placeholders obrigatórios precisam aparecer exatamente uma vez", async (t
   const cases = [
     { file: "runtime.lua", placeholder: "__UI_XML_LITERAL__" },
     { file: "runtime.lua", placeholder: "__CHARACTER_JSON_LITERAL__" },
+    { file: "runtime.lua", placeholder: "__PANEL_IMAGE_URL_LITERAL__" },
+    { file: "runtime.lua", placeholder: "__PANEL_UI_IMAGE_URL_LITERAL__" },
+    { file: "ui.xml", placeholder: "__PANEL_UI_IMAGE_URL_XML__" },
     { file: "bootstrap.lua", placeholder: "__SEED_UI_LITERAL__" },
     { file: "bootstrap.lua", placeholder: "__SEED_RUNTIME_LITERAL__" },
   ];
@@ -92,7 +98,7 @@ test("literal Lua escolhe delimitador sem colidir com o conteúdo", () => {
 
 test("a ficha possui o schema e os valores canônicos do Corvan", async () => {
   const character = JSON.parse(await readFile(join(ROOT, "src", "character.json"), "utf8"));
-  validateCharacter(character, "0.1.6");
+  validateCharacter(character, "0.1.7");
 
   assert.equal(character.schemaVersion, 1);
   assert.equal(character.name, "Corvan Duras");
@@ -146,7 +152,7 @@ test("validadores rejeitam character e UI estruturalmente inválidos", async () 
   const character = JSON.parse(await readFile(join(ROOT, "src", "character.json"), "utf8"));
   const invalidCharacter = structuredClone(character);
   invalidCharacter.weapons.sword.damage.sides = 1;
-  assert.throws(() => validateCharacter(invalidCharacter, "0.1.6"), /damage\.sides/);
+  assert.throws(() => validateCharacter(invalidCharacter, "0.1.7"), /damage\.sides/);
 
   const prereleaseCharacter = structuredClone(character);
   prereleaseCharacter.version = "0.1.0-rc.1";
@@ -158,6 +164,7 @@ test("validadores rejeitam character e UI estruturalmente inválidos", async () 
   const ui = await readFile(join(ROOT, "src", "ui.xml"), "utf8");
   validateUi(ui);
   assert.match(ui, /<Panel id="corvanConsole"[^>]*position="[^"]+"[^>]*rotation="[^"]+"[^>]*scale="[^"]+"/s);
+  assert.ok(ui.indexOf('id="panelBoardArt"') < ui.indexOf('id="mainLayout"'));
   assert.doesNotMatch(ui, /\btooltip(?:Position|FontSize|TextColor|BackgroundColor|BorderColor)?\s*=/i);
   assert.ok(ui.indexOf("<Defaults>") < ui.indexOf('<Panel id="corvanConsole"'));
   assert.throws(() => validateUi(ui.replace(/<\/Panel>\s*$/, "")), /não foi fechada/);
@@ -173,12 +180,12 @@ test("manifesto e Saved Object possuem o contrato publicável", async (t) => {
   const saved = JSON.parse(await readFile(join(outDir, "Corvan_Duras_Console.json"), "utf8"));
 
   assert.equal(manifest.schemaVersion, 1);
-  assert.equal(manifest.version, "0.1.6");
+  assert.equal(manifest.version, "0.1.7");
   assert.equal(manifest.minBootstrapVersion, "1.0.2");
   assert.equal(manifest.commitSha, FIXED_SHA);
   assert.equal(
     manifest.runtime.url,
-    "https://github.com/bryangillies42/corvan-tts-automation/releases/download/v0.1.6/corvan-runtime.lua",
+    "https://github.com/bryangillies42/corvan-tts-automation/releases/download/v0.1.7/corvan-runtime.lua",
   );
   assert.equal(manifest.runtime.size, Buffer.byteLength(runtime, "utf8"));
   assert.equal(manifest.runtime.sha256, createHash("sha256").update(runtime, "utf8").digest("hex"));
@@ -190,6 +197,10 @@ test("manifesto e Saved Object possuem o contrato publicável", async (t) => {
   assert.match(runtime, /CORVAN_RUNTIME/);
   assert.match(runtime, /<Panel id="corvanConsole"/);
   assert.match(runtime, /Corvan Duras/);
+  const expectedPanelUrl = `https://raw.githubusercontent.com/bryangillies42/corvan-tts-automation/${FIXED_SHA}/assets/panel-board.png`;
+  const expectedUiPanelUrl = `https://raw.githubusercontent.com/bryangillies42/corvan-tts-automation/${FIXED_SHA}/assets/panel-board-ui.jpg`;
+  assert.match(runtime, new RegExp(expectedPanelUrl.replaceAll('.', '\\.')));
+  assert.match(runtime, new RegExp(expectedUiPanelUrl.replaceAll('.', '\\.')));
 
   assert.equal(saved.SaveName, "Corvan Duras Console");
   assert.equal(saved.ObjectStates.length, 1);
@@ -200,7 +211,7 @@ test("manifesto e Saved Object possuem o contrato publicável", async (t) => {
   assert.equal(object.Locked, false);
   assert.equal(
     object.CustomImage.ImageURL,
-    `https://raw.githubusercontent.com/bryangillies42/corvan-tts-automation/${FIXED_SHA}/assets/panel-board.png`,
+    expectedPanelUrl,
   );
   assert.deepEqual(object.CustomImage.CustomTile, {
     Type: 0,
@@ -212,9 +223,41 @@ test("manifesto e Saved Object possuem o contrato publicável", async (t) => {
   assert.match(object.XmlUI, /position="0 0 -50"/);
   assert.match(object.XmlUI, /rotation="0 0 180"/);
   assert.match(object.XmlUI, /scale="0\.25 0\.25 1"/);
+  assert.match(object.XmlUI, new RegExp(`id="panelBoardArt"[^>]*image="${expectedUiPanelUrl.replaceAll('.', '\\.')}"`, 's'));
+  assert.ok(object.XmlUI.indexOf('id="panelBoardArt"') < object.XmlUI.indexOf('id="mainLayout"'));
   assert.match(object.LuaScript, /CORVAN_RUNTIME/);
   assert.match(object.LuaScript, /<Panel id="corvanConsole"/);
   for (const placeholder of PLACEHOLDERS) assert.equal(object.LuaScript.includes(placeholder), false);
+});
+
+test("URLs locais de textura, camada e fixture legado permanecem independentes", async (t) => {
+  const project = await temporaryProject(t);
+  const physicalUrl = "C:\\Teste\\painel atual.png";
+  const uiUrl = 'https://example.test/painel.jpg?x=1&label="Corvan"';
+  const legacyUrl = "https://example.test/painel-antigo.png";
+  const result = await buildProject({
+    rootDir: project,
+    outDir: join(project, "dist-local"),
+    commitSha: FIXED_SHA,
+    assetUrl: physicalUrl,
+    uiAssetUrl: uiUrl,
+    savedObjectAssetUrl: legacyUrl,
+    savedObjectName: "Corvan • teste legado",
+  });
+
+  const object = result.savedObject.ObjectStates[0];
+  assert.equal(result.panelImageUrl, physicalUrl);
+  assert.equal(result.panelUiImageUrl, uiUrl);
+  assert.equal(object.CustomImage.ImageURL, legacyUrl);
+  assert.equal(result.savedObject.SaveName, "Corvan • teste legado");
+  assert.equal(object.Nickname, "Corvan • teste legado");
+  assert.ok(result.files["corvan-runtime.lua"].includes(physicalUrl));
+  assert.match(object.XmlUI, /image="https:\/\/example\.test\/painel\.jpg\?x=1&amp;label=&quot;Corvan&quot;"/);
+  for (const placeholder of PLACEHOLDERS) {
+    assert.equal(result.files["corvan-runtime.lua"].includes(placeholder), false);
+    assert.equal(object.LuaScript.includes(placeholder), false);
+    assert.equal(object.XmlUI.includes(placeholder), false);
+  }
 });
 
 test("manifesto aceita somente uma versão anterior estável e realmente menor", async (t) => {
@@ -223,16 +266,16 @@ test("manifesto aceita somente uma versão anterior estável e realmente menor",
     rootDir: project,
     outDir: join(project, "dist-previous"),
     commitSha: FIXED_SHA,
-    previousVersion: "0.1.5",
+    previousVersion: "0.1.6",
   });
-  assert.equal(valid.manifest.previousVersion, "0.1.5");
+  assert.equal(valid.manifest.previousVersion, "0.1.6");
 
   await assert.rejects(
     buildProject({
       rootDir: project,
       outDir: join(project, "dist-invalid-previous"),
       commitSha: FIXED_SHA,
-      previousVersion: "0.1.6",
+      previousVersion: "0.1.7",
     }),
     /deve ser anterior/,
   );

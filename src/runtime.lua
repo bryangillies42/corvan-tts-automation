@@ -1,8 +1,10 @@
 -- CORVAN_RUNTIME
 -- Runtime atualizável do helper invisível. Este arquivo é empacotado pelo build:
--- os dois marcadores abaixo viram literais Lua contendo o XML e o JSON da ficha.
+-- os marcadores abaixo viram literais com o XML, os dados e o asset físico esperado.
 local UI_XML = __UI_XML_LITERAL__
 local CHARACTER_JSON = __CHARACTER_JSON_LITERAL__
+local PANEL_IMAGE_URL = __PANEL_IMAGE_URL_LITERAL__
+local PANEL_UI_IMAGE_URL = __PANEL_UI_IMAGE_URL_LITERAL__
 
 local STATE_SCHEMA_VERSION = 1
 local ROLL_TIMEOUT_SECONDS = 15
@@ -49,7 +51,7 @@ end
 
 local DEFAULT_CHARACTER = {
     schemaVersion = 1,
-    version = "0.1.6",
+    version = "0.1.7",
     name = "Corvan Duras",
     shortName = "Corvan",
     resources = {hp = {max = 55}, mp = {max = 15}},
@@ -104,6 +106,7 @@ local function decodeCharacter()
 end
 
 local CHARACTER = decodeCharacter()
+local parentGuid = nil
 
 -- Funções puras expostas para um harness Lua sem depender das APIs do TTS.
 CorvanRules = {}
@@ -204,7 +207,9 @@ local function defaultState()
         undo = nil,
         diceOffset = deepCopy(CHARACTER.diceOffset or {x = 0, y = 3.2, z = 0}),
         ownedDiceGuids = {},
+        ownedDiceOwnerGuid = parentGuid,
         lastResult = "—",
+        automaticResourceSpending = true,
         settingsOpen = false
     }
 end
@@ -232,7 +237,9 @@ local function normalizeSnapshot(source)
     -- Ao subir do nível 4 para o 5, personagens que estavam com o recurso
     -- cheio também recebem o novo máximo. Valores gastos/ferimentos são
     -- preservados para não curar ou restaurar PM silenciosamente.
-    if CHARACTER.version == "0.1.6" and source.runtimeVersion ~= "0.1.6" then
+    if (CHARACTER.version == "0.1.6" or CHARACTER.version == "0.1.7")
+        and source.runtimeVersion ~= "0.1.6"
+        and source.runtimeVersion ~= "0.1.7" then
         if finiteNumber(source.hp or source.pv, 0) == 47 then normalized.hp = 55 end
         if finiteNumber(source.mp or source.pm, 0) == 12 then normalized.mp = 15 end
     end
@@ -255,17 +262,30 @@ local function normalizeSnapshot(source)
         end
     end
     if type(source.lastResult) == "string" then normalized.lastResult = source.lastResult end
+    -- Campo opcional no schema 1: saves anteriores não o possuem e continuam
+    -- com o comportamento histórico de desconto automático.
+    normalized.automaticResourceSpending = source.automaticResourceSpending ~= false
     normalized.settingsOpen = source.settingsOpen == true
     normalized.undo = nil
     normalized.ownedDiceGuids = {}
+    normalized.ownedDiceOwnerGuid = nil
     return normalized
 end
 
 local function normalizeState(source)
     local normalized = normalizeSnapshot(source or {}) or defaultState()
+    normalized.ownedDiceOwnerGuid = parentGuid
     if type(source) == "table" then
         normalized.undo = normalizeSnapshot(source.undo)
-        if type(source.ownedDiceGuids) == "table" then
+        -- A v0.1.6 já exportava parentGuid, então ele funciona como ownership
+        -- legado. Cópias do painel recebem outro GUID e descartam as referências
+        -- herdadas sem tocar nos dados físicos do objeto original.
+        local sourceOwner = source.ownedDiceOwnerGuid
+        if type(sourceOwner) ~= "string" or sourceOwner == "" then
+            sourceOwner = source.parentGuid
+        end
+        if type(parentGuid) == "string" and parentGuid ~= ""
+            and sourceOwner == parentGuid and type(source.ownedDiceGuids) == "table" then
             for _, guid in ipairs(source.ownedDiceGuids) do
                 if type(guid) == "string" and #normalized.ownedDiceGuids < 32 then
                     table.insert(normalized.ownedDiceGuids, guid)
@@ -277,13 +297,18 @@ local function normalizeState(source)
 end
 
 local state = defaultState()
-local parentGuid = nil
+-- Texto digitado é estado transitório da interface. Ele não participa de
+-- save/load, Refresh ou Desfazer; somente a aplicação válida altera a ficha.
+local resourceAdjustments = {hp = "", mp = ""}
 local parent = nil
 local rollInProgress = false
 local currentRoll = nil
 local rollSequence = 0
 local chatAudit = {}
 local chatAuditSequence = 0
+local panelBoardArtNeeded = false
+local panelBoardArtReady = false
+local panelBoardArtRequestSerial = 0
 
 local function recordChatAudit(message, route, accepted)
     chatAuditSequence = chatAuditSequence + 1
@@ -370,8 +395,11 @@ end
 
 local function effectsLabel()
     local labels = {}
-    if state.effects.combatDefensiveArmed then table.insert(labels, "Combate Defensivo: próximo ataque") end
-    if state.effects.combatDefensiveDefense then table.insert(labels, "Combate Defensivo: +5 DEF") end
+    if state.effects.combatDefensiveArmed then
+        table.insert(labels, "Combate Defensivo: −2 ataque, +5 DEF")
+    elseif state.effects.combatDefensiveDefense then
+        table.insert(labels, "Combate Defensivo: +5 DEF")
+    end
     if state.effects.duel then table.insert(labels, "Duelo") end
     local baluarte = finiteNumber(state.effects.baluarte, state.effects.baluarte == true and 2 or 0)
     if baluarte > 0 then table.insert(labels, "Baluarte +" .. tostring(baluarte)) end
@@ -379,6 +407,55 @@ local function effectsLabel()
     if state.effects.provocation then table.insert(labels, "Provocação") end
     if #labels == 0 then return "Nenhum efeito ativo" end
     return table.concat(labels, " • ")
+end
+
+local function comparablePanelImageUrl(value)
+    if type(value) ~= "string" then return nil end
+    local normalized = value:gsub("\\", "/")
+    if normalized:match("^file:/") then
+        normalized = normalized:gsub("^file:/+", "")
+        normalized = normalized:gsub("%%(%x%x)", function(hex)
+            return string.char(tonumber(hex, 16))
+        end)
+        return normalized:lower()
+    end
+    if normalized:match("^%a:/") then return normalized:lower() end
+    return normalized
+end
+
+local function panelBoardOverlayNeeded()
+    if not parent then return true end
+    local ok, custom = pcall(function() return parent.getCustomObject() end)
+    if not ok or type(custom) ~= "table" or type(custom.image) ~= "string" then return true end
+    return comparablePanelImageUrl(custom.image) ~= comparablePanelImageUrl(PANEL_IMAGE_URL)
+end
+
+local function panelBoardOverlayActive()
+    return panelBoardArtNeeded and panelBoardArtReady
+end
+
+local function preparePanelBoardArt()
+    panelBoardArtRequestSerial = panelBoardArtRequestSerial + 1
+    local serial = panelBoardArtRequestSerial
+    panelBoardArtNeeded = panelBoardOverlayNeeded()
+    panelBoardArtReady = false
+    safeSetAttribute("panelBoardArt", "active", "false")
+    if not panelBoardArtNeeded or WebRequest == nil then return end
+
+    -- Uma URL direta inválida faz o Image do TTS ficar branco. Primeiro
+    -- verificamos se o JPEG responde; em erro, a camada permanece inativa e a
+    -- textura física antiga continua sendo o fallback visual do painel.
+    local started = pcall(function()
+        WebRequest.get(PANEL_UI_IMAGE_URL, function(request)
+            if serial ~= panelBoardArtRequestSerial then return end
+            local status = finiteNumber(request and request.response_code, 0)
+            if request and not request.is_error and status >= 200 and status < 300 then
+                panelBoardArtReady = true
+                safeSetAttribute("panelBoardArt", "active", "true")
+            end
+        end)
+    end)
+    if not started then panelBoardArtReady = false end
 end
 
 local function renderNow()
@@ -400,8 +477,11 @@ local function renderNow()
     safeSetAttribute("pvMax", "text", CHARACTER.resources.hp.max)
     safeSetAttribute("pmCurrent", "text", state.mp)
     safeSetAttribute("pmMax", "text", CHARACTER.resources.mp.max)
-    safeSetAttribute("pv_input", "text", state.hp)
-    safeSetAttribute("pm_input", "text", state.mp)
+    safeSetAttribute("pv_adjust", "text", resourceAdjustments.hp)
+    safeSetAttribute("pm_adjust", "text", resourceAdjustments.mp)
+    safeSetAttribute("automatic_resource_spending", "isOn",
+        state.automaticResourceSpending and "true" or "false")
+    safeSetAttribute("panelBoardArt", "active", panelBoardOverlayActive() and "true" or "false")
     safeSetAttribute("offset_x", "text", state.diceOffset.x)
     safeSetAttribute("offset_y", "text", state.diceOffset.y)
     safeSetAttribute("offset_z", "text", state.diceOffset.z)
@@ -409,6 +489,8 @@ local function renderNow()
     safeSetAttribute("settingsPanel", "active", state.settingsOpen and "true" or "false")
     safeSetAttribute("toggle_settings", "text", state.settingsOpen and "FECHAR" or "CONFIG")
     safeSetAttribute("roll_critical", "interactable", state.pendingThreat and "true" or "false")
+    safeSetAttribute("clear_dice", "interactable",
+        not rollInProgress and #(state.ownedDiceGuids or {}) > 0 and "true" or "false")
     local baluarte = finiteNumber(state.effects.baluarte, state.effects.baluarte == true and 2 or 0)
     local baluarteText = "BALUARTE  •  1/2 PM\n+2 ou +4 DEF e resistências\naté fim do turno"
     if baluarte == 2 then
@@ -441,7 +523,21 @@ end
 
 local function applyUi()
     if not parent then return false end
-    local ok, accepted = safeParentCall("applyRuntimeUi", {xml = UI_XML, version = CHARACTER.version})
+    -- O XML completo também carrega o valor atual do toggle. Isso mantém a
+    -- preferência sincronizada até em painéis importados com um bootstrap
+    -- anterior, cujo whitelist ainda não conhecia o atributo isOn.
+    local toggleValue = state.automaticResourceSpending and "true" or "false"
+    local renderedXml = UI_XML:gsub(
+        'id="automatic_resource_spending" isOn="[^"]*"',
+        'id="automatic_resource_spending" isOn="' .. toggleValue .. '"', 1)
+    -- A camada sempre começa inativa. Ela só é exibida após o preflight HTTP
+    -- confirmar a imagem, evitando o retângulo branco do fallback do Unity.
+    local overlayValue = "false"
+    renderedXml = renderedXml:gsub(
+        'id="panelBoardArt" active="[^"]*"',
+        'id="panelBoardArt" active="' .. overlayValue .. '"', 1)
+    local ok, accepted = safeParentCall("applyRuntimeUi", {xml = renderedXml, version = CHARACTER.version})
+    preparePanelBoardArt()
     scheduleRender()
     return ok and accepted ~= false
 end
@@ -626,18 +722,57 @@ local function privateError(playerColor, message)
     if type(print) == "function" then print("Corvan • " .. message) end
 end
 
+local function ownedDieMetadata(object)
+    if not object or type(JSON) ~= "table" or type(JSON.decode) ~= "function" then return nil, false end
+    local notesOk, notes = pcall(function() return object.getGMNotes() end)
+    if not notesOk or type(notes) ~= "string" or notes == "" then return nil, false end
+    local decodedOk, metadata = pcall(function() return JSON.decode(notes) end)
+    if not decodedOk or type(metadata) ~= "table" then return nil, true end
+    return metadata, true
+end
+
+local function dieBelongsToParent(object)
+    local metadata, hasNotes = ownedDieMetadata(object)
+    if hasNotes then
+        return metadata ~= nil
+            and metadata.project == "corvan-tts-automation"
+            and metadata.kind == "owned-die"
+            and metadata.ownerPanelGuid == parentGuid
+    end
+    -- Dados criados até a v0.1.6 não possuíam metadados próprios. Eles só são
+    -- aceitos quando o owner persistido (migrado de parentGuid) ainda coincide.
+    return type(parentGuid) == "string" and state.ownedDiceOwnerGuid == parentGuid
+end
+
+local function markOwnedDie(object)
+    if not object or type(JSON) ~= "table" or type(JSON.encode) ~= "function" then return false end
+    local encodedOk, notes = pcall(function()
+        return JSON.encode({
+            project = "corvan-tts-automation",
+            kind = "owned-die",
+            ownerPanelGuid = parentGuid
+        })
+    end)
+    if not encodedOk or type(notes) ~= "string" then return false end
+    return pcall(function() object.setGMNotes(notes) end)
+end
+
 local function clearOwnedDice()
+    local removed = 0
     for _, guid in ipairs(state.ownedDiceGuids or {}) do
         local object = nil
         if type(getObjectFromGUID) == "function" then
             local ok, found = pcall(function() return getObjectFromGUID(guid) end)
             if ok then object = found end
         end
-        if object and type(destroyObject) == "function" then
-            pcall(function() destroyObject(object) end)
+        if object and dieBelongsToParent(object) and type(destroyObject) == "function" then
+            local destroyed = pcall(function() destroyObject(object) end)
+            if destroyed then removed = removed + 1 end
         end
     end
     state.ownedDiceGuids = {}
+    state.ownedDiceOwnerGuid = parentGuid
+    return removed
 end
 
 local function diceType(sides)
@@ -699,6 +834,8 @@ local function finishRollFailure(token, message)
     clearOwnedDice()
     if rollback then
         state = normalizeState(rollback)
+        state.ownedDiceGuids = {}
+        state.ownedDiceOwnerGuid = parentGuid
     end
     cacheAndRender()
     privateError(playerColor, message or "a rolagem falhou.")
@@ -895,6 +1032,8 @@ local function onDieSpawned(token, index, object)
     currentRoll.objects[index] = object
     currentRoll.pendingSpawns = currentRoll.pendingSpawns - 1
     local guid = safeObjectGuid(object)
+    state.ownedDiceOwnerGuid = parentGuid
+    markOwnedDie(object)
     if guid then table.insert(state.ownedDiceGuids, guid) end
     pcall(function() object.setName("Corvan • dado da ferramenta") end)
     -- O TTS congela objetos recém-criados por um frame. Aplicar a força no
@@ -983,7 +1122,6 @@ local function rollAttack(playerColor)
         rollback = normalizeState(state)
         pushUndo()
         state.effects.combatDefensiveArmed = false
-        state.effects.combatDefensiveDefense = true
     end
     return startPhysicalRoll({kind = "attack", count = 1, sides = 20, modifier = modifier,
         weaponKey = state.activeWeapon, playerColor = playerColor, rollback = rollback})
@@ -1016,6 +1154,28 @@ local function rollSkill(playerColor, skillKey)
         label = skill.name, playerColor = playerColor})
 end
 
+local function canSpendPowerResource(playerColor, power, cost)
+    if not state.automaticResourceSpending then return true end
+    local resource = power and power.resource or "mp"
+    local resourceLabel = resource == "hp" and "PV" or string.upper(resource)
+    local amount = math.max(0, finiteNumber(cost, 0))
+    if state[resource] == nil or not CHARACTER.resources[resource] then
+        privateError(playerColor, "recurso do poder inválido.")
+        return false
+    end
+    if state[resource] < amount then
+        privateError(playerColor, resourceLabel .. " insuficiente.")
+        return false
+    end
+    return true
+end
+
+local function spendPowerResource(power, cost)
+    if not state.automaticResourceSpending then return end
+    local resource = power and power.resource or "mp"
+    state[resource] = state[resource] - math.max(0, finiteNumber(cost, 0))
+end
+
 local function activatePower(playerColor, effectKey, configKey, announcement)
     if state.effects[effectKey] then
         privateError(playerColor, "esse poder já está ativo.")
@@ -1023,12 +1183,9 @@ local function activatePower(playerColor, effectKey, configKey, announcement)
     end
     local power = CHARACTER.powers[configKey]
     local cost = finiteNumber(power and power.cost, 0)
-    if state.mp < cost then
-        privateError(playerColor, "PM insuficiente.")
-        return false
-    end
+    if not canSpendPowerResource(playerColor, power, cost) then return false end
     pushUndo()
-    state.mp = state.mp - cost
+    spendPowerResource(power, cost)
     state.effects[effectKey] = true
     cacheAndRender()
     if announcement then publicMessage(announcement, playerColor) end
@@ -1052,12 +1209,9 @@ local function activateBaluarte(playerColor)
         privateError(playerColor, "Baluarte +4 já está ativo.")
         return false
     end
-    if state.mp < cost then
-        privateError(playerColor, "PM insuficiente.")
-        return false
-    end
+    if not canSpendPowerResource(playerColor, power, cost) then return false end
     pushUndo()
-    state.mp = state.mp - cost
+    spendPowerResource(power, cost)
     state.effects.baluarte = target
     cacheAndRender()
     return true
@@ -1070,22 +1224,40 @@ local function activateCombatDefensive(playerColor)
     end
     pushUndo()
     state.effects.combatDefensiveArmed = true
+    state.effects.combatDefensiveDefense = true
     cacheAndRender()
     return true
 end
 
-local function changeResource(playerColor, resource, value, absolute)
-    local maximum = CHARACTER.resources[resource].max
-    local current = state[resource]
-    local target = absolute and finiteNumber(value, nil) or current + value
-    if target == nil then
-        privateError(playerColor, "valor inválido.")
+local function storeResourceAdjustment(resource, value)
+    resourceAdjustments[resource] = tostring(value or "")
+    scheduleRender()
+    return true
+end
+
+local function resourceAdjustmentMagnitude(resource)
+    local number = finiteNumber(resourceAdjustments[resource], nil)
+    if number == nil then return nil end
+    number = math.abs(number)
+    if number ~= math.floor(number) or number < 1 or number > 999 then return nil end
+    return number
+end
+
+local function applyResourceAdjustment(playerColor, resource, direction)
+    local magnitude = resourceAdjustmentMagnitude(resource)
+    if magnitude == nil then
+        privateError(playerColor, "informe um ajuste inteiro maior que zero (até 999).")
+        scheduleRender()
         return false
     end
-    target = math.floor(clamp(target, 0, maximum))
-    if target == current then return true end
-    pushUndo()
-    state[resource] = target
+    local maximum = CHARACTER.resources[resource].max
+    local current = state[resource]
+    local target = math.floor(clamp(current + direction * magnitude, 0, maximum))
+    if target ~= current then
+        pushUndo()
+        state[resource] = target
+    end
+    resourceAdjustments[resource] = ""
     cacheAndRender()
     return true
 end
@@ -1132,9 +1304,13 @@ local function undoLast(playerColor)
         return false
     end
     local dice = state.ownedDiceGuids
+    local diceOwner = state.ownedDiceOwnerGuid
+    local automaticResourceSpending = state.automaticResourceSpending
     local restored = normalizeState(state.undo)
     restored.undo = nil
     restored.ownedDiceGuids = dice
+    restored.ownedDiceOwnerGuid = diceOwner
+    restored.automaticResourceSpending = automaticResourceSpending
     state = restored
     cacheAndRender()
     return true
@@ -1144,9 +1320,6 @@ local ID_ALIASES = {
     select_weapon_sword = "weapon_sword", weapon_espada = "weapon_sword",
     select_weapon_shield = "weapon_shield", weapon_escudo = "weapon_shield",
     attack = "roll_attack", damage = "roll_damage", critical = "roll_critical",
-    hp_minus_5 = "pv_m5", hp_minus_1 = "pv_m1", hp_plus_1 = "pv_p1", hp_plus_5 = "pv_p5",
-    hp_input = "pv_input", mp_minus_5 = "pm_m5", mp_minus_1 = "pm_m1",
-    mp_plus_1 = "pm_p1", mp_plus_5 = "pm_p5", mp_input = "pm_input",
     skill_initiative = "skill_iniciativa", skill_fight = "skill_luta",
     skill_intimidation = "skill_intimidacao", skill_perception = "skill_percepcao",
     skill_reflex = "skill_reflexos", skill_will = "skill_vontade",
@@ -1182,18 +1355,36 @@ function handleUiEvent(payload)
         return activatePower(playerColor, "provocation", "provocation",
             CHARACTER.shortName .. ": Provocação - Vontade CD " .. tostring(cd))
     end
+    local resourceInputs = {pv_adjust = "hp", pm_adjust = "mp"}
+    if resourceInputs[id] then
+        return storeResourceAdjustment(resourceInputs[id], value)
+    end
     local resourceButtons = {
-        pv_m5 = {"hp", -5}, pv_m1 = {"hp", -1}, pv_p1 = {"hp", 1}, pv_p5 = {"hp", 5},
-        pm_m5 = {"mp", -5}, pm_m1 = {"mp", -1}, pm_p1 = {"mp", 1}, pm_p5 = {"mp", 5}
+        pv_subtract = {"hp", -1}, pv_add = {"hp", 1},
+        pm_subtract = {"mp", -1}, pm_add = {"mp", 1}
     }
     if resourceButtons[id] then
-        return changeResource(playerColor, resourceButtons[id][1], resourceButtons[id][2], false)
+        return applyResourceAdjustment(playerColor, resourceButtons[id][1], resourceButtons[id][2])
     end
-    if id == "pv_input" then return changeResource(playerColor, "hp", value, true) end
-    if id == "pm_input" then return changeResource(playerColor, "mp", value, true) end
+    if id == "automatic_resource_spending" then
+        local enabled = value == true or tostring(value):lower() == "true" or tostring(value) == "1"
+        state.automaticResourceSpending = enabled
+        safeParentCall("cacheRuntimeState", {state = exportState()})
+        applyUi()
+        return true
+    end
     if id == "end_turn" then return endTurn() end
     if id == "end_scene" then return endScene() end
     if id == "undo" then return undoLast(playerColor) end
+    if id == "clear_dice" then
+        if rollInProgress then
+            privateError(playerColor, "aguarde a rolagem atual terminar.")
+            return false
+        end
+        clearOwnedDice()
+        cacheAndRender()
+        return true
+    end
     if id == "toggle_settings" then
         state.settingsOpen = not state.settingsOpen
         cacheAndRender()
@@ -1215,10 +1406,18 @@ function handleUiEvent(payload)
         return startPhysicalRoll({kind = "calibration", count = 1, sides = 20, playerColor = playerColor})
     end
     if id == "reset_state" or id == "settings_reset" then
+        if rollInProgress then
+            privateError(playerColor, "aguarde a rolagem atual terminar.")
+            return false
+        end
         pushUndo()
         local previous = state.undo
+        local automaticResourceSpending = state.automaticResourceSpending
+        clearOwnedDice()
         state = defaultState()
         state.undo = previous
+        state.automaticResourceSpending = automaticResourceSpending
+        resourceAdjustments = {hp = "", mp = ""}
         cacheAndRender()
         return true
     end
@@ -1248,6 +1447,7 @@ function importState(payload)
     if type(payload.state) == "table" then payload = payload.state end
     if finiteNumber(payload.schemaVersion, 1) > STATE_SCHEMA_VERSION then return false end
     state = normalizeState(payload)
+    resourceAdjustments = {hp = "", mp = ""}
     currentRoll = nil
     rollInProgress = false
     cacheAndRender()

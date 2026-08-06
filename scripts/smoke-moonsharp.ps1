@@ -20,6 +20,23 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Add-Type -Path $moonSharpDll
+$panelUiAsset = Join-Path $projectRoot 'assets\panel-board-ui.jpg'
+if (-not (Test-Path -LiteralPath $panelUiAsset)) {
+    throw 'Asset otimizado da moldura não foi encontrado.'
+}
+Add-Type -AssemblyName System.Drawing
+$panelUiImage = [System.Drawing.Image]::FromFile($panelUiAsset)
+try {
+    if ($panelUiImage.Width -ne 1600 -or $panelUiImage.Height -ne 720) {
+        throw "A moldura otimizada possui $($panelUiImage.Width)x$($panelUiImage.Height); esperado 1600x720."
+    }
+} finally {
+    $panelUiImage.Dispose()
+}
+$panelUiSize = (Get-Item -LiteralPath $panelUiAsset).Length
+if ($panelUiSize -gt 180KB) {
+    throw "A moldura otimizada possui $panelUiSize bytes; esperado no máximo 180 KB."
+}
 $runtime = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'dist\corvan-runtime.lua')
 $savedObject = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'dist\Corvan_Duras_Console.json') | ConvertFrom-Json
 $manifest = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'dist\manifest.json') | ConvertFrom-Json
@@ -96,6 +113,35 @@ local torqueCalls = 0
 local velocityFallbackCalls = 0
 local angularFallbackCalls = 0
 local frameCalls = 0
+local panelPhysicalImage = 'legacy-panel.png'
+local customObjectInspectionFails = false
+local appliedUiXml = nil
+local panelArtRequestFails = false
+local panelArtRequests = 0
+
+WebRequest = {
+    get = function(url, callback)
+        assert(url == PANEL_UI_IMAGE_URL)
+        panelArtRequests = panelArtRequests + 1
+        callback({is_error = panelArtRequestFails, response_code = panelArtRequestFails and 0 or 200})
+    end
+}
+
+JSON = {
+    encode = function(value)
+        if type(value) == 'table' and value.kind == 'owned-die' then
+            return 'owned-die|' .. tostring(value.ownerPanelGuid)
+        end
+        return '{}'
+    end,
+    decode = function(value)
+        local owner = type(value) == 'string' and string.match(value, '^owned%-die|(.+)$') or nil
+        if owner then
+            return {project = 'corvan-tts-automation', kind = 'owned-die', ownerPanelGuid = owner}
+        end
+        return {}
+    end
+}
 
 print = function(message) table.insert(publicChat, message) end
 
@@ -124,9 +170,15 @@ parentObject = {
         }
     end,
     getPosition = function() return panelPosition end,
+    getCustomObject = function()
+        if customObjectInspectionFails then error('custom object unavailable') end
+        return {image = panelPhysicalImage}
+    end,
     call = function(name, payload)
         if name == 'setRuntimeUiAttribute' then
             attributes[payload.id] = payload.value
+        elseif name == 'applyRuntimeUi' then
+            appliedUiXml = payload.xml
         elseif name == 'relayRuntimeChat' then
             table.insert(publicChat, payload.message)
             table.insert(spectatorChat, payload.message)
@@ -140,7 +192,7 @@ self = {
     getGUID = function() return 'helper1' end
 }
 getObjectFromGUID = function(guid)
-    if guid == 'panel1' then return parentObject end
+    if guid == 'panel1' or guid == 'panel-copy' then return parentObject end
     return diceByGuid[guid]
 end
 destroyObject = function(object)
@@ -187,9 +239,12 @@ spawnObject = function(params)
     local guid = 'die' .. tostring(dieSequence)
     local value = table.remove(dieValues, 1)
     table.insert(spawnPositions, params.position)
+    local notes = ''
     local die = {
         resting = true,
         getGUID = function() return guid end,
+        getGMNotes = function() return notes end,
+        setGMNotes = function(value) notes = value end,
         setName = function(_) end,
         roll = function() end,
         setVelocity = function(force)
@@ -218,6 +273,27 @@ spawnObject = function(params)
 end
 
 assert(registerParent({parentGuid = 'panel1'}))
+assert(string.find(appliedUiXml, 'id="panelBoardArt" active="false"', 1, true),
+    'legacy panel did not start with safe inactive UI art')
+assert(attributes.panelBoardArt == 'true')
+panelPhysicalImage = PANEL_IMAGE_URL
+assert(registerParent({parentGuid = 'panel1'}))
+assert(string.find(appliedUiXml, 'id="panelBoardArt" active="false"', 1, true),
+    'current physical art did not disable redundant UI art')
+assert(attributes.panelBoardArt == 'false')
+customObjectInspectionFails = true
+assert(registerParent({parentGuid = 'panel1'}))
+assert(string.find(appliedUiXml, 'id="panelBoardArt" active="false"', 1, true),
+    'inspection failure did not keep UI art safe during preflight')
+assert(attributes.panelBoardArt == 'true')
+customObjectInspectionFails = false
+panelPhysicalImage = 'legacy-panel.png'
+panelArtRequestFails = true
+assert(registerParent({parentGuid = 'panel1'}))
+assert(attributes.panelBoardArt == 'false', 'network failure exposed the white image fallback')
+panelArtRequestFails = false
+assert(registerParent({parentGuid = 'panel1'}))
+assert(attributes.panelBoardArt == 'true' and panelArtRequests == 4)
 local legacyState = exportState()
 legacyState.runtimeVersion = '0.1.5'
 legacyState.hp = 47
@@ -249,7 +325,36 @@ assert(afterTurn.effects.duel and not afterTurn.effects.baluarte)
 assert(handleUiEvent({id = 'end_scene', playerColor = 'White'}))
 assert(not exportState().effects.duel and exportState().mp == 11)
 
-assert(handleUiEvent({id = 'pm_input', value = '99', playerColor = 'White'}))
+assert(handleUiEvent({id = 'pv_adjust', value = '10', playerColor = 'White'}))
+assert(handleUiEvent({id = 'pv_subtract', playerColor = 'White'}))
+assert(exportState().hp == 45 and attributes.pv_adjust == '')
+assert(handleUiEvent({id = 'pv_adjust', value = '5', playerColor = 'White'}))
+assert(handleUiEvent({id = 'pv_add', playerColor = 'White'}))
+assert(exportState().hp == 50 and attributes.pv_adjust == '')
+assert(handleUiEvent({id = 'pv_adjust', value = 'texto', playerColor = 'White'}))
+assert(not handleUiEvent({id = 'pv_subtract', playerColor = 'White'}))
+assert(exportState().hp == 50 and attributes.pv_adjust == 'texto')
+assert(handleUiEvent({id = 'pv_adjust', value = '0', playerColor = 'White'}))
+assert(not handleUiEvent({id = 'pv_add', playerColor = 'White'}))
+assert(attributes.pv_adjust == '0')
+assert(handleUiEvent({id = 'pv_adjust', value = '', playerColor = 'White'}))
+assert(not handleUiEvent({id = 'pv_subtract', playerColor = 'White'}))
+assert(attributes.pv_adjust == '')
+assert(handleUiEvent({id = 'pv_adjust', value = '10.5', playerColor = 'White'}))
+assert(not handleUiEvent({id = 'pv_add', playerColor = 'White'}))
+assert(attributes.pv_adjust == '10.5')
+assert(handleUiEvent({id = 'pv_adjust', value = '-5', playerColor = 'White'}))
+assert(handleUiEvent({id = 'pv_add', playerColor = 'White'}))
+assert(exportState().hp == 55 and attributes.pv_adjust == '')
+local undoAtMaximum = state.undo
+assert(handleUiEvent({id = 'pv_adjust', value = '999', playerColor = 'White'}))
+assert(handleUiEvent({id = 'pv_add', playerColor = 'White'}))
+assert(exportState().hp == 55 and attributes.pv_adjust == '' and state.undo == undoAtMaximum)
+assert(handleUiEvent({id = 'pm_adjust', value = '-5', playerColor = 'White'}))
+assert(handleUiEvent({id = 'pm_subtract', playerColor = 'White'}))
+assert(exportState().mp == 6 and attributes.pm_adjust == '')
+assert(handleUiEvent({id = 'pm_adjust', value = '999', playerColor = 'White'}))
+assert(handleUiEvent({id = 'pm_add', playerColor = 'White'}))
 assert(exportState().mp == 15)
 assert(handleUiEvent({id = 'power_torre_armada', playerColor = 'White'}))
 dieValues = {6}
@@ -259,19 +364,68 @@ assert(not afterTower.effects.armedTower and afterTower.lastResult == 'Dano - 16
 assert(publicChat[1] == 'Corvan: Dano - 16 (d8［6］ + 10)')
 
 assert(handleUiEvent({id = 'power_combat_defensive', playerColor = 'White'}))
+assert(CorvanRules.calculateAttackModifier(CHARACTER, exportState(), 'sword') == 7)
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 25)
+assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 27)
+assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 29)
 dieValues = {19}
 assert(handleUiEvent({id = 'roll_attack', playerColor = 'White'}))
 local afterAttack = exportState()
 assert(afterAttack.effects.combatDefensiveDefense and not afterAttack.effects.combatDefensiveArmed)
 assert(afterAttack.pendingThreat and afterAttack.pendingThreat.natural == 19)
-assert(CorvanRules.calculateDefense(CHARACTER, afterAttack) == 25)
+assert(CorvanRules.calculateDefense(CHARACTER, afterAttack) == 29)
 assert(afterAttack.lastResult == 'Espada - 26 (d20[19] + 7) • ameaça')
+assert(#afterAttack.ownedDiceGuids == 1 and afterAttack.ownedDiceOwnerGuid == 'panel1')
+local attackDieGuid = afterAttack.ownedDiceGuids[1]
+assert(diceByGuid[attackDieGuid].getGMNotes() == 'owned-die|panel1')
+local publicBeforeClear = #publicChat
+local privateBeforeClear = #privateChat
+local undoBeforeClear = state.undo
+assert(handleUiEvent({id = 'clear_dice', playerColor = 'White'}))
+local afterAttackClear = exportState()
+assert(#afterAttackClear.ownedDiceGuids == 0 and diceByGuid[attackDieGuid] == nil)
+assert(afterAttackClear.lastResult == afterAttack.lastResult)
+assert(afterAttackClear.pendingThreat and afterAttackClear.pendingThreat.natural == 19)
+assert(afterAttackClear.mp == afterAttack.mp
+    and afterAttackClear.effects.combatDefensiveDefense == afterAttack.effects.combatDefensiveDefense)
+assert(state.undo == undoBeforeClear)
+assert(#publicChat == publicBeforeClear and #privateChat == privateBeforeClear)
+assert(attributes.clear_dice == 'false')
 
 dieValues = {6, 3}
 assert(handleUiEvent({id = 'roll_critical', playerColor = 'White'}))
 local afterCritical = exportState()
 assert(afterCritical.pendingThreat == nil and afterCritical.lastResult == 'Crítico - 14 (2d8[6,3] + 5)')
 assert(publicChat[#publicChat] == 'Corvan: Crítico - 14 (2d8［6,3］ + 5)')
+assert(#afterCritical.ownedDiceGuids == 2)
+local criticalDieOne = afterCritical.ownedDiceGuids[1]
+local criticalDieTwo = afterCritical.ownedDiceGuids[2]
+assert(handleUiEvent({id = 'clear_dice', playerColor = 'White'}))
+assert(diceByGuid[criticalDieOne] == nil and diceByGuid[criticalDieTwo] == nil)
+assert(#exportState().ownedDiceGuids == 0 and exportState().lastResult == afterCritical.lastResult)
+assert(handleUiEvent({id = 'end_turn', playerColor = 'White'}))
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 20)
+
+local rollbackState = normalizeState(exportState())
+rollbackState.effects.combatDefensiveArmed = true
+rollbackState.effects.combatDefensiveDefense = true
+state.effects.combatDefensiveArmed = false
+state.effects.combatDefensiveDefense = false
+currentRoll = {token = 998, playerColor = 'White', rollback = rollbackState}
+rollInProgress = true
+finishRollFailure(998, 'falha simulada.')
+assert(exportState().effects.combatDefensiveArmed and exportState().effects.combatDefensiveDefense)
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 25)
+assert(handleUiEvent({id = 'end_turn', playerColor = 'White'}))
+
+local privateBeforeBusyActions = #privateChat
+rollInProgress = true
+assert(not handleUiEvent({id = 'clear_dice', playerColor = 'White'}))
+assert(not handleUiEvent({id = 'reset_state', playerColor = 'White'}))
+assert(#privateChat == privateBeforeBusyActions + 2)
+rollInProgress = false
 
 dieValues = {7}
 panelPosition = {x = 35, y = 4, z = 42}
@@ -306,10 +460,84 @@ rollInProgress = true
 finishRollFailure(999, 'a rolagem expirou.')
 assert(#publicChat == chatBeforeFailure)
 
-assert(handleUiEvent({id = 'pm_input', value = '-5', playerColor = 'White'}))
+assert(handleUiEvent({id = 'pm_adjust', value = '999', playerColor = 'White'}))
+assert(handleUiEvent({id = 'pm_subtract', playerColor = 'White'}))
 assert(exportState().mp == 0)
 assert(not handleUiEvent({id = 'power_duel', playerColor = 'White'}))
-assert(#privateChat >= 3)
+local undoBeforeToggle = state.undo
+assert(handleUiEvent({id = 'automatic_resource_spending', value = 'False', playerColor = 'White'}))
+assert(not exportState().automaticResourceSpending and state.undo == undoBeforeToggle)
+assert(handleUiEvent({id = 'power_duel', playerColor = 'White'}))
+assert(handleUiEvent({id = 'power_torre_armada', playerColor = 'White'}))
+assert(handleUiEvent({id = 'power_provocacao', playerColor = 'White'}))
+assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
+assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
+assert(exportState().mp == 0 and exportState().effects.baluarte == 4)
+assert(handleUiEvent({id = 'undo', playerColor = 'White'}))
+assert(not exportState().automaticResourceSpending and exportState().effects.baluarte == 2)
+local persistedAutomation = exportState()
+assert(importState(persistedAutomation) and not exportState().automaticResourceSpending)
+
+local legacyGuid = 'legacy-reset-die'
+diceByGuid[legacyGuid] = {
+    getGUID = function() return legacyGuid end,
+    getGMNotes = function() return '' end
+}
+state.ownedDiceGuids = {legacyGuid}
+state.ownedDiceOwnerGuid = 'panel1'
+state.mp = 3
+assert(handleUiEvent({id = 'reset_state', playerColor = 'White'}))
+assert(diceByGuid[legacyGuid] == nil and #exportState().ownedDiceGuids == 0)
+assert(exportState().mp == 15 and exportState().undo ~= nil
+    and not exportState().automaticResourceSpending)
+assert(handleUiEvent({id = 'undo', playerColor = 'White'}))
+assert(exportState().mp == 3 and #exportState().ownedDiceGuids == 0
+    and not exportState().automaticResourceSpending)
+
+local originalGuid = 'original-panel-die'
+local originalNotes = 'owned-die|panel1'
+diceByGuid[originalGuid] = {
+    getGUID = function() return originalGuid end,
+    getGMNotes = function() return originalNotes end
+}
+local inheritedState = exportState()
+inheritedState.parentGuid = 'panel1'
+inheritedState.ownedDiceOwnerGuid = 'panel1'
+inheritedState.ownedDiceGuids = {originalGuid}
+assert(registerParent({parentGuid = 'panel-copy', state = inheritedState}))
+assert(exportState().ownedDiceOwnerGuid == 'panel-copy' and #exportState().ownedDiceGuids == 0)
+assert(not exportState().automaticResourceSpending)
+assert(handleUiEvent({id = 'clear_dice', playerColor = 'White'}))
+assert(diceByGuid[originalGuid] ~= nil, 'panel copy removed a die owned by the original')
+
+local sameOwnerLegacyGuid = 'same-owner-legacy-die'
+diceByGuid[sameOwnerLegacyGuid] = {
+    getGUID = function() return sameOwnerLegacyGuid end,
+    getGMNotes = function() return '' end
+}
+assert(registerParent({parentGuid = 'panel1', state = {
+    schemaVersion = 1,
+    runtimeVersion = '0.1.6',
+    parentGuid = 'panel1',
+    ownedDiceGuids = {sameOwnerLegacyGuid}
+}}))
+assert(exportState().automaticResourceSpending, 'old saves must default automatic spending to on')
+assert(handleUiEvent({id = 'clear_dice', playerColor = 'White'}))
+assert(diceByGuid[sameOwnerLegacyGuid] == nil, 'same-owner legacy die was not removed')
+local foreignGuid = 'foreign-owned-die'
+diceByGuid[foreignGuid] = {
+    getGUID = function() return foreignGuid end,
+    getGMNotes = function() return 'owned-die|another-panel' end
+}
+state.ownedDiceGuids = {foreignGuid}
+state.ownedDiceOwnerGuid = 'panel1'
+assert(handleUiEvent({id = 'clear_dice', playerColor = 'White'}))
+assert(diceByGuid[foreignGuid] ~= nil, 'metadata from another panel was ignored')
+state.ownedDiceGuids = {'missing-die'}
+state.ownedDiceOwnerGuid = 'panel1'
+assert(handleUiEvent({id = 'clear_dice', playerColor = 'White'}))
+assert(#exportState().ownedDiceGuids == 0)
+assert(#privateChat >= 5)
 
 return afterDuel.mp, afterTurn.mp, afterTower.lastResult, afterAttack.pendingThreat.natural,
     afterCritical.lastResult, #publicChat, globalChatCalls, #privateChat
@@ -317,7 +545,7 @@ return afterDuel.mp, afterTurn.mp, afterTower.lastResult, afterAttack.pendingThr
 
 $runtimeFlowRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $runtimeFlowResult = $runtimeFlowRunner.DoString($runtime + "`n" + $runtimeFlowHarness).ToString()
-$expectedRuntimeFlow = '13, 11, "Dano - 16 (d8[6] + 10)", 19, "Crítico - 14 (2d8[6,3] + 5)", 6, 0, 4'
+$expectedRuntimeFlow = '13, 11, "Dano - 16 (d8[6] + 10)", 19, "Crítico - 14 (2d8[6,3] + 5)", 7, 0, 11'
 if ($runtimeFlowResult -ne $expectedRuntimeFlow) {
     throw "Smoke do fluxo de combate retornou '$runtimeFlowResult'; esperado '$expectedRuntimeFlow'."
 }
@@ -488,15 +716,15 @@ spawnObject = function(params)
                 xml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
             })
             if not accepted then error('bootstrap rejected valid UI') end
-            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.1.6'})
+            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.1.7'})
             setRuntimeUiAttribute({id = 'missing', attribute = 'text', value = 'must stay queued'})
             return helper
         end,
         call = function(name, _)
             if name == 'healthCheck' then
-                return {ok = true, version = '0.1.6', parentGuid = 'panel1'}
+                return {ok = true, version = '0.1.7', parentGuid = 'panel1'}
             elseif name == 'exportState' then
-                return {schemaVersion = 1, runtimeVersion = '0.1.6'}
+                return {schemaVersion = 1, runtimeVersion = '0.1.7'}
             end
             return true
         end
@@ -534,7 +762,7 @@ return xmlSetCalls, attributeCalls, invalidAttributeCalls, info.helperGuid, info
 
 $onLoadRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $onLoadResult = $onLoadRunner.DoString($bootstrap + "`n" + $onLoadHarness).ToString()
-$expectedOnLoad = '2, 5, 0, "helper1", "0.1.6"'
+$expectedOnLoad = '2, 5, 0, "helper1", "0.1.7"'
 if ($onLoadResult -ne $expectedOnLoad) {
     throw "Smoke de onLoad retornou '$onLoadResult'; esperado '$expectedOnLoad'."
 }
@@ -543,7 +771,7 @@ $copyPersistenceHarness = @'
 local timeQueue = {}
 local helper = nil
 local helperState = nil
-local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.6', mp = 15, effects = {duel = false}}
+local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.7', mp = 15, effects = {duel = false}}
 local persistedRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.2', mp = 10, effects = {duel = true}}
 
 JSON = {
@@ -592,7 +820,7 @@ spawnObject = function(params)
                 cacheRuntimeState({state = helperState or defaultRuntimeState})
                 return true
             elseif name == 'healthCheck' then
-                return {ok = true, version = '0.1.6', parentGuid = 'panel-copy'}
+                return {ok = true, version = '0.1.7', parentGuid = 'panel-copy'}
             elseif name == 'importState' then
                 helperState = payload
                 return true
@@ -671,7 +899,7 @@ if ($webRequestResult -ne $expectedWebRequest) {
 $transactionHarness = @'
 local oldXml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
 local candidateXml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/><Text id="activeWeaponLabel"/></Panel>'
-local candidateSource = '-- CORVAN_RUNTIME candidate v0.1.6'
+local candidateSource = '-- CORVAN_RUNTIME candidate v0.1.7'
 local oldSource = SEED_RUNTIME
 local timers = {}
 local currentGuid = 'helper1'
@@ -722,7 +950,7 @@ helper = {
     reload = function()
         if loadedSource == candidateSource then
             currentGuid = 'candidate-guid'
-            activeVersion = CANDIDATE_HEALTH_OK and '0.1.6' or 'broken'
+            activeVersion = CANDIDATE_HEALTH_OK and '0.1.7' or 'broken'
             applyRuntimeUi({xml = candidateXml})
         else
             currentGuid = 'rollback-guid'
@@ -759,7 +987,7 @@ update.playerColor = 'White'
 update.phase = 'install'
 
 installCandidate(9, {
-    manifest = {version = '0.1.6', commitSha = '0123456789abcdef0123456789abcdef01234567'},
+    manifest = {version = '0.1.7', commitSha = '0123456789abcdef0123456789abcdef01234567'},
     source = candidateSource,
     etag = 'etag-2'
 })
@@ -789,7 +1017,7 @@ function Invoke-TransactionSmoke([bool]$healthy) {
 }
 
 $updateSuccess = Invoke-TransactionSmoke $true
-$expectedUpdateSuccess = '"0.1.6", true, false, false, "candidate-guid", 23, true, false'
+$expectedUpdateSuccess = '"0.1.7", true, false, false, "candidate-guid", 23, true, false'
 if ($updateSuccess -ne $expectedUpdateSuccess) {
     throw "Smoke de update retornou '$updateSuccess'; esperado '$expectedUpdateSuccess'."
 }

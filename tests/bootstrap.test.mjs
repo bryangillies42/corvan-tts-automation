@@ -11,7 +11,7 @@ test('keeps one build-time placeholder for the seed UI and runtime', () => {
   assert.equal((source.match(/__SEED_UI_LITERAL__/g) ?? []).length, 1);
   assert.equal((source.match(/__SEED_RUNTIME_LITERAL__/g) ?? []).length, 1);
   assert.match(source, /local BOOTSTRAP_VERSION = "1\.0\.2"/);
-  assert.match(source, /local SEED_RUNTIME_VERSION = "0\.1\.6"/);
+  assert.match(source, /local SEED_RUNTIME_VERSION = "0\.1\.7"/);
   assert.match(source, /local SEED_UI = __SEED_UI_LITERAL__/);
   assert.match(source, /local SEED_RUNTIME = __SEED_RUNTIME_LITERAL__/);
   assert.match(source, /uiXml = SEED_UI/);
@@ -36,6 +36,10 @@ test('exposes the complete stable panel callback contract', () => {
   assert.match(source, /playerColor = playerColor/);
   assert.match(source, /value = value/);
   assert.match(source, /id = id/);
+  assert.match(source, /active = true/);
+  assert.match(runtimeSource, /safeParentCall\("applyRuntimeUi"/);
+  assert.match(runtimeSource, /safeParentCall\("setRuntimeUiAttribute"/);
+  assert.doesNotMatch(runtimeSource, /safeParentCall\("(?:setPanelArt|reloadPanel|updateCustomImage)"/);
 });
 
 test('uses copy-safe helper ownership and a non-interactive hidden scripting zone', () => {
@@ -80,6 +84,7 @@ test('waits for object UI loading and only targets IDs declared by the XML', () 
   );
   assert.match(source, /local uiReady = false/);
   assert.match(source, /local uiAttributeValues = \{\}/);
+  assert.match(source, /isOn = true/);
   assert.match(source, /if not uiReady or uiIds\[id\] ~= true then\s+return false/);
   assert.match(source, /return self\.UI\.loading/);
   assert.match(source, /Wait\.frames\(function\(\)\s+Wait\.condition\(finishLoading, hasFinishedLoading/);

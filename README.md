@@ -38,11 +38,13 @@ Com uma mesa aberta e a API de editor externo do TTS disponível, `scripts/tts-d
 3. Abra a mesa, acesse **Objects > Saved Objects** e posicione **Corvan Duras Console**.
 4. Mova, gire e redimensione o objeto como desejar. Para manter painel, texto e hitboxes alinhados, aplique o mesmo fator de escala aos três eixos, preservando a proporção inicial. Esse mesmo objeto será preservado nas atualizações.
 
-O painel oferece PV/PM editáveis, Defesa/RD, seleção de Espada Longa ou Escudo Pesado, rolagens físicas de ataque/dano/crítico, poderes, perícias, fim de turno/cena, desfazer e calibração da posição dos dados. As mensagens de resultado aparecem de forma curta no chat.
+O painel oferece PV/PM ajustáveis por magnitude (digite um valor e use `−` ou `+`), Defesa/RD, seleção de Espada Longa ou Escudo Pesado, rolagens físicas de ataque/dano/crítico, poderes, perícias, fim de turno/cena, desfazer e calibração da posição dos dados. Em **Configurações**, o toggle de gasto automático permite decidir se os poderes devem validar e descontar PV/PM; desligá-lo não interfere nos ajustes manuais. As mensagens de resultado aparecem de forma curta no chat. Uma nova rolagem remove automaticamente os dados anteriores do próprio painel; o botão **Limpar Dados** permite removê-los manualmente sem alterar o resultado ou o estado do personagem.
 
 ## Refresh e releases
 
 O bootstrap embutido é estável. Ao acionar **Refresh**, ele consulta o manifesto da release estável mais recente, baixa todo o runtime antes de aplicá-lo e mantém o runtime anterior para rollback. A prancha visível não é recarregada, portanto GUID, posição, rotação e escala permanecem intactos.
+
+A partir da v0.1.7, painéis legados recebem também a moldura nova como uma camada visual da UI. Isso permite atualizar um painel v0.1.6 com o próprio **Refresh**, sem substituir o JSON e sem alterar sua textura física original. Importações novas já usam a moldura como textura física e mantêm essa camada redundante desativada. Se a imagem remota da camada não puder ser carregada, a textura antiga continua visível como fallback.
 
 Uma tag `v*` que corresponda à versão de `package.json` executa testes, gera os artefatos com o SHA do commit, anexa tudo a um draft e só então publica a GitHub Release. A imutabilidade de releases deve estar habilitada nas configurações do repositório; uma correção exige uma nova versão SemVer.
 

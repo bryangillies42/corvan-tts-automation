@@ -8,7 +8,7 @@
   Dynamic visual state: weapon_sword, weapon_shield, roll_attack, roll_damage,
                         roll_critical, power_combat_defensive, power_duel,
                         power_baluarte, power_torre_armada, power_provocacao.
-  Lua may update `text`, `textColor`, `colors`, `interactable`, and `active`
+  Lua may update `text`, `textColor`, `colors`, `interactable`, `isOn`, and `active`
   through self.UI.setAttribute. Buttons and inputs report their unique id.
 -->
 
@@ -85,6 +85,13 @@
                     selectionColor="#376987AA" outline="#52575C" outlineSize="1 1" />
 </Defaults>
 
+<!-- A camada visual é uma raiz independente e 12,5% maior que o canvas dos
+     controles. Isso cobre todo o tile físico legado sem alterar hitboxes. -->
+<Image id="panelBoardArt" active="false" image="__PANEL_UI_IMAGE_URL_XML__"
+       width="1800" height="810" rectAlignment="MiddleCenter"
+       position="0 0 -50" rotation="0 0 180" scale="0.25 0.25 1"
+       preserveAspect="false" raycastTarget="false" />
+
 <Panel id="corvanConsole" width="1600" height="720" rectAlignment="MiddleCenter"
        position="0 0 -50" rotation="0 0 180" scale="0.25 0.25 1"
        color="#07090CD8" outline="#8C6A2D" outlineSize="3 3" raycastTarget="true">
@@ -119,14 +126,14 @@
                             <Text id="pvCurrent" text="55" class="red" fontSize="28" preferredWidth="50" />
                             <Text text="/" class="muted" preferredWidth="16" />
                             <Text id="pvMax" text="55" fontSize="24" preferredWidth="46" />
-                            <InputField id="pv_input" class="numberInput" text="55" onEndEdit="dispatch"
-                                        preferredWidth="54" />
                         </HorizontalLayout>
-                        <HorizontalLayout preferredHeight="34" spacing="3" childForceExpandWidth="true">
-                            <Button id="pv_m5" class="miniButton" text="−5" onClick="dispatch" />
-                            <Button id="pv_m1" class="miniButton" text="−1" onClick="dispatch" />
-                            <Button id="pv_p1" class="miniButton" text="+1" onClick="dispatch" />
-                            <Button id="pv_p5" class="miniButton" text="+5" onClick="dispatch" />
+                        <HorizontalLayout preferredHeight="34" spacing="4" childForceExpandWidth="false">
+                            <Button id="pv_subtract" class="miniButton" text="−" onClick="dispatch"
+                                    preferredWidth="48" fontSize="24" />
+                            <InputField id="pv_adjust" class="numberInput" text="" placeholder="VALOR"
+                                        onEndEdit="dispatch" preferredWidth="113" characterLimit="4" />
+                            <Button id="pv_add" class="miniButton" text="+" onClick="dispatch"
+                                    preferredWidth="48" fontSize="24" />
                         </HorizontalLayout>
                     </VerticalLayout>
                 </Panel>
@@ -139,14 +146,14 @@
                             <Text id="pmCurrent" text="15" class="blue" fontSize="28" preferredWidth="48" />
                             <Text text="/" class="muted" preferredWidth="16" />
                             <Text id="pmMax" text="15" fontSize="24" preferredWidth="44" />
-                            <InputField id="pm_input" class="numberInput" text="15" onEndEdit="dispatch"
-                                        preferredWidth="52" />
                         </HorizontalLayout>
-                        <HorizontalLayout preferredHeight="34" spacing="3" childForceExpandWidth="true">
-                            <Button id="pm_m5" class="miniButton" text="−5" onClick="dispatch" />
-                            <Button id="pm_m1" class="miniButton" text="−1" onClick="dispatch" />
-                            <Button id="pm_p1" class="miniButton" text="+1" onClick="dispatch" />
-                            <Button id="pm_p5" class="miniButton" text="+5" onClick="dispatch" />
+                        <HorizontalLayout preferredHeight="34" spacing="4" childForceExpandWidth="false">
+                            <Button id="pm_subtract" class="miniButton" text="−" onClick="dispatch"
+                                    preferredWidth="46" fontSize="24" />
+                            <InputField id="pm_adjust" class="numberInput" text="" placeholder="VALOR"
+                                        onEndEdit="dispatch" preferredWidth="105" characterLimit="4" />
+                            <Button id="pm_add" class="miniButton" text="+" onClick="dispatch"
+                                    preferredWidth="46" fontSize="24" />
                         </HorizontalLayout>
                     </VerticalLayout>
                 </Panel>
@@ -311,6 +318,8 @@
                             text="FIM DA CENA&#10;encerra Duelo e efeitos" />
                     <Button id="undo" class="baseButton" onClick="dispatch"
                             text="DESFAZER&#10;última mudança de estado" />
+                    <Button id="clear_dice" class="baseButton" onClick="dispatch"
+                            text="LIMPAR DADOS&#10;remove os dados do painel" />
                     <Panel class="goldCard" preferredWidth="420">
                         <HorizontalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="8 5" offsetMax="-8 -5"
                                           spacing="8" childForceExpandWidth="false" childForceExpandHeight="true">
@@ -318,7 +327,7 @@
                                             childForceExpandWidth="true" childForceExpandHeight="false">
                                 <HorizontalLayout preferredHeight="22" childForceExpandWidth="false">
                                     <Text text="RUNTIME" class="caption gold" preferredWidth="82" />
-                                    <Text id="versionLabel" text="v0.1.6 • offline pronto" class="muted"
+                                    <Text id="versionLabel" text="v0.1.7 • offline pronto" class="muted"
                                           alignment="MiddleRight" flexibleWidth="1" />
                                 </HorizontalLayout>
                                 <Text id="refreshStatus" text="ATUALIZAÇÃO  •  pronta"
@@ -334,7 +343,7 @@
     </VerticalLayout>
 
     <!-- Overlay stays below the header gear, so toggle_settings remains reachable. -->
-    <Panel id="settingsPanel" active="false" width="620" height="430"
+    <Panel id="settingsPanel" active="false" width="620" height="510"
            rectAlignment="UpperRight" offsetXY="-18 -112"
            color="#090D11FC" outline="#B08738" outlineSize="3 3"
            showAnimation="SlideIn_Right" hideAnimation="SlideOut_Right"
@@ -370,6 +379,22 @@
             <Button id="calibrate_roll" class="baseButton" text="ROLAGEM DE TESTE  •  calibrar posição"
                     onClick="dispatch" preferredHeight="46"
                     colors="#152633|#204056|#0D1820|#090B0D88" outline="#35627D" />
+            <Panel class="card" preferredHeight="70">
+                <HorizontalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="10 6" offsetMax="-10 -6"
+                                  spacing="12" childForceExpandWidth="false" childForceExpandHeight="true">
+                    <VerticalLayout flexibleWidth="1" spacing="1"
+                                    childForceExpandWidth="true" childForceExpandHeight="false">
+                        <Text text="GASTO AUTOMÁTICO DE RECURSOS" class="caption gold"
+                              preferredHeight="23" />
+                        <Text text="Desconta e valida PV/PM ao ativar poderes."
+                              class="muted" alignment="MiddleLeft" />
+                    </VerticalLayout>
+                    <Toggle id="automatic_resource_spending" isOn="true" onValueChanged="dispatch"
+                            preferredWidth="78" text="AUTO" fontSize="14" fontStyle="Bold"
+                            textColor="#E8E2D5" checkColor="#D2AA55"
+                            colors="#171C21|#28323A|#0E1216|#090B0D88" />
+                </HorizontalLayout>
+            </Panel>
             <Panel class="card" preferredHeight="62">
                 <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="9 5" offsetMax="-9 -5" spacing="1">
                     <Text text="ATUALIZAÇÃO PELO GITHUB" class="caption gold" preferredHeight="22" />

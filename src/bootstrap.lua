@@ -5,7 +5,7 @@
 local BOOTSTRAP_VERSION = "1.0.2"
 local STATE_SCHEMA_VERSION = 1
 local MANIFEST_SCHEMA_VERSION = 1
-local SEED_RUNTIME_VERSION = "0.1.6"
+local SEED_RUNTIME_VERSION = "0.1.7"
 local SEED_UI = __SEED_UI_LITERAL__
 local SEED_RUNTIME = __SEED_RUNTIME_LITERAL__
 
@@ -26,6 +26,7 @@ local UI_ATTRIBUTES = {
     active = true,
     colors = true,
     interactable = true,
+    isOn = true,
     text = true,
 }
 

@@ -17,6 +17,9 @@ const RELEASE_BASE_URL = "https://github.com/bryangillies42/corvan-tts-automatio
 const PLACEHOLDERS = Object.freeze({
   ui: "__UI_XML_LITERAL__",
   character: "__CHARACTER_JSON_LITERAL__",
+  panelImageUrl: "__PANEL_IMAGE_URL_LITERAL__",
+  panelUiImageUrlLiteral: "__PANEL_UI_IMAGE_URL_LITERAL__",
+  panelUiImageUrl: "__PANEL_UI_IMAGE_URL_XML__",
   seedUi: "__SEED_UI_LITERAL__",
   seedRuntime: "__SEED_RUNTIME_LITERAL__",
 });
@@ -51,6 +54,14 @@ function normalizeText(value) {
 
 function withFinalNewline(value) {
   return `${value.replace(/\n*$/, "")}\n`;
+}
+
+function escapeXmlAttribute(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 function sortJsonValue(value) {
@@ -265,25 +276,27 @@ export function validateUi(input) {
   assert(stack.length === 0, `Tag XML <${stack.at(-1)}> não foi fechada.`);
   const visualRoots = roots.filter((name) => name !== "Defaults");
   assert(
-    roots.every((name) => name === "Defaults" || name === "Panel"),
-    "src/ui.xml pode declarar somente Defaults e o Panel visual no nível raiz.",
+    roots.every((name) => name === "Defaults" || name === "Image" || name === "Panel"),
+    "src/ui.xml pode declarar somente Defaults, Image e Panel no nível raiz.",
   );
   assert(
     roots.filter((name) => name === "Defaults").length <= 1,
     "src/ui.xml pode declarar no máximo um bloco Defaults raiz.",
   );
   assert(
-    visualRoots.length === 1 && visualRoots[0] === "Panel",
-    "src/ui.xml deve possuir um único Panel visual raiz.",
+    visualRoots.length === 2 && visualRoots[0] === "Image" && visualRoots[1] === "Panel",
+    "src/ui.xml deve possuir a Image da moldura antes do Panel visual raiz.",
   );
   assert(ids.has("corvanConsole"), "src/ui.xml deve declarar o painel raiz corvanConsole.");
   for (const requiredId of [
-    "pvCurrent", "pvMax", "pmCurrent", "pmMax", "defenseValue", "rdValue",
+    "pvCurrent", "pvMax", "pv_adjust", "pv_subtract", "pv_add",
+    "pmCurrent", "pmMax", "pm_adjust", "pm_subtract", "pm_add",
+    "automatic_resource_spending", "panelBoardArt", "defenseValue", "rdValue",
     "weapon_sword", "weapon_shield", "roll_attack", "roll_damage", "roll_critical",
     "power_combat_defensive", "power_duel", "power_baluarte", "power_torre_armada", "power_provocacao",
     "skill_iniciativa", "skill_luta", "skill_intimidacao", "skill_percepcao",
     "skill_fortitude", "skill_reflexos", "skill_vontade",
-    "end_turn", "end_scene", "undo", "toggle_settings", "settingsPanel",
+    "end_turn", "end_scene", "undo", "clear_dice", "toggle_settings", "settingsPanel",
     "offset_x", "offset_y", "offset_z", "calibrate_roll", "reset_state", "refresh",
     "refreshStatus",
   ]) {
@@ -343,13 +356,9 @@ function createManifest(version, commitSha, runtime, previousVersion) {
   };
 }
 
-function createSavedObject(bootstrap, ui, version, commitSha, assetUrlOverride = null) {
-  // Release builds pin the board art to the exact source commit. A local build
-  // without CORVAN_COMMIT_SHA keeps using main so it remains directly importable.
-  const assetRef = commitSha === DEFAULT_COMMIT_SHA ? "main" : commitSha;
-  const assetUrl = assetUrlOverride || `${RAW_ASSET_BASE_URL}/${assetRef}/assets/panel-board.png`;
+function createSavedObject(bootstrap, ui, version, assetUrl, savedObjectName) {
   return {
-    SaveName: "Corvan Duras Console",
+    SaveName: savedObjectName,
     GameMode: "",
     Gravity: 0.5,
     PlayArea: 0.5,
@@ -375,7 +384,7 @@ function createSavedObject(bootstrap, ui, version, commitSha, assetUrlOverride =
           scaleY: 1,
           scaleZ: 1,
         },
-        Nickname: "Corvan Duras Console",
+        Nickname: savedObjectName,
         Description: `Console de combate atualizável • v${version}`,
         GMNotes: stableJson({ project: "corvan-tts-automation", version, aspectRatio: "2.22:1" }).trim(),
         ColorDiffuse: { r: 1, g: 1, b: 1 },
@@ -420,11 +429,23 @@ export async function buildProject({
   commitSha = process.env.CORVAN_COMMIT_SHA || DEFAULT_COMMIT_SHA,
   previousVersion = process.env.CORVAN_PREVIOUS_VERSION || null,
   assetUrl = null,
+  uiAssetUrl = null,
+  savedObjectAssetUrl = null,
+  savedObjectName = "Corvan Duras Console",
 } = {}) {
   const absoluteRoot = resolve(rootDir);
   const absoluteOut = resolve(outDir);
   const packageJson = await loadPackage(absoluteRoot);
   const sourceDir = join(absoluteRoot, "src");
+  const validatedCommitSha = validateCommitSha(commitSha);
+  const assetRef = validatedCommitSha === DEFAULT_COMMIT_SHA ? "main" : validatedCommitSha;
+  const panelImageUrl = assetUrl || `${RAW_ASSET_BASE_URL}/${assetRef}/assets/panel-board.png`;
+  const panelUiImageUrl = uiAssetUrl || `${RAW_ASSET_BASE_URL}/${assetRef}/assets/panel-board-ui.jpg`;
+  const savedObjectImageUrl = savedObjectAssetUrl || panelImageUrl;
+  assertString(panelImageUrl, "assetUrl");
+  assertString(panelUiImageUrl, "uiAssetUrl");
+  assertString(savedObjectImageUrl, "savedObjectAssetUrl");
+  assertString(savedObjectName, "savedObjectName");
 
   const [runtimeTemplate, bootstrapTemplate, uiSource, characterSource] = await Promise.all([
     readSource(join(sourceDir, "runtime.lua"), "src/runtime.lua"),
@@ -440,7 +461,13 @@ export async function buildProject({
     fail(`src/character.json não é JSON válido: ${error.message}`);
   }
   validateCharacter(character, packageJson.version);
-  const ui = withFinalNewline(validateUi(uiSource));
+  const uiWithAsset = replaceSinglePlaceholder(
+    uiSource,
+    PLACEHOLDERS.panelUiImageUrl,
+    escapeXmlAttribute(panelUiImageUrl),
+    PLACEHOLDERS.panelUiImageUrl,
+  );
+  const ui = withFinalNewline(validateUi(uiWithAsset));
   const characterJson = stableJson(character);
 
   let runtime = replaceSinglePlaceholder(
@@ -454,6 +481,18 @@ export async function buildProject({
     PLACEHOLDERS.character,
     luaLongString(characterJson),
     PLACEHOLDERS.character,
+  );
+  runtime = replaceSinglePlaceholder(
+    runtime,
+    PLACEHOLDERS.panelImageUrl,
+    luaLongString(panelImageUrl),
+    PLACEHOLDERS.panelImageUrl,
+  );
+  runtime = replaceSinglePlaceholder(
+    runtime,
+    PLACEHOLDERS.panelUiImageUrlLiteral,
+    luaLongString(panelUiImageUrl),
+    PLACEHOLDERS.panelUiImageUrlLiteral,
   );
   runtime = withFinalNewline(runtime);
   assert(runtime.includes("CORVAN_RUNTIME"), "O runtime gerado deve conter o marcador CORVAN_RUNTIME.");
@@ -479,12 +518,17 @@ export async function buildProject({
 
   const manifest = createManifest(
     packageJson.version,
-    validateCommitSha(commitSha),
+    validatedCommitSha,
     runtime,
     validatePreviousVersion(previousVersion, packageJson.version),
   );
-  if (assetUrl !== null) assertString(assetUrl, "assetUrl");
-  const savedObject = createSavedObject(bootstrap, ui, packageJson.version, manifest.commitSha, assetUrl);
+  const savedObject = createSavedObject(
+    bootstrap,
+    ui,
+    packageJson.version,
+    savedObjectImageUrl,
+    savedObjectName,
+  );
   const files = {
     "corvan-runtime.lua": runtime,
     "manifest.json": stableJson(manifest),
@@ -501,6 +545,8 @@ export async function buildProject({
     version: packageJson.version,
     manifest,
     savedObject,
+    panelImageUrl,
+    panelUiImageUrl,
     files,
   };
 }
@@ -524,6 +570,15 @@ function parseCliArguments(argv) {
       index += 1;
     } else if (argument === "--asset-url" && value) {
       options.assetUrl = value;
+      index += 1;
+    } else if (argument === "--ui-asset-url" && value) {
+      options.uiAssetUrl = value;
+      index += 1;
+    } else if (argument === "--saved-object-asset-url" && value) {
+      options.savedObjectAssetUrl = value;
+      index += 1;
+    } else if (argument === "--saved-object-name" && value) {
+      options.savedObjectName = value;
       index += 1;
     } else {
       fail(`Argumento desconhecido ou sem valor: ${argument}`);
