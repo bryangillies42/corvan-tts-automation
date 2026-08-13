@@ -137,6 +137,9 @@ export function validateCharacter(character, expectedVersion) {
     assertNumber(weapon.attack, `character.weapons.${id}.attack`);
     assertString(weapon.type, `character.weapons.${id}.type`);
     assertString(weapon.range, `character.weapons.${id}.range`);
+    if (weapon.defenseModifier !== undefined) {
+      assertNumber(weapon.defenseModifier, `character.weapons.${id}.defenseModifier`);
+    }
 
     assert(isObject(weapon.damage), `character.weapons.${id}.damage deve ser um objeto.`);
     assertInteger(weapon.damage.count, `character.weapons.${id}.damage.count`, 1);
@@ -159,7 +162,10 @@ export function validateCharacter(character, expectedVersion) {
   }
 
   assert(isObject(character.powers), "character.powers deve ser um objeto.");
-  for (const id of ["combatDefensive", "duel", "baluarte", "armedTower", "provocation", "solidity", "platesOfWrath", "bastion"]) {
+  for (const id of [
+    "combatDefensive", "duel", "baluarte", "provocation", "solidity",
+    "duelistShielded", "ambitionWeapons", "armored", "platesOfWrath", "bastion",
+  ]) {
     const power = character.powers[id];
     assert(isObject(power), `character.powers.${id} deve ser um objeto.`);
     assertString(power.name, `character.powers.${id}.name`);
@@ -288,12 +294,40 @@ export function validateUi(input) {
     "src/ui.xml deve possuir a Image da moldura antes do Panel visual raiz.",
   );
   assert(ids.has("corvanConsole"), "src/ui.xml deve declarar o painel raiz corvanConsole.");
+  const rootGeometry = (id) => {
+    const tag = xml.match(new RegExp(`<(?:Image|Panel)\\b[^>]*\\bid=["']${id}["'][^>]*>`, "s"));
+    assert(tag !== null, `src/ui.xml não declara a raiz ${id}.`);
+    const attribute = (name) => {
+      const match = tag[0].match(new RegExp(`\\b${name}\\s*=\\s*(["'])(.*?)\\1`, "s"));
+      assert(match !== null, `A raiz ${id} não declara ${name}.`);
+      return match[2];
+    };
+    return {
+      transform: ["position", "rotation", "scale"].map(attribute),
+      dimensions: ["width", "height"].map(attribute),
+    };
+  };
+  const panelBoardGeometry = rootGeometry("panelBoardArt");
+  const consoleGeometry = rootGeometry("corvanConsole");
+  assert(
+    panelBoardGeometry.transform.every(
+      (value, index) => value === consoleGeometry.transform[index],
+    ),
+    "A moldura e os controles da UI devem compartilhar a mesma transformação 3D.",
+  );
+  assert(
+    panelBoardGeometry.dimensions[0] === "1800"
+      && panelBoardGeometry.dimensions[1] === "810"
+      && consoleGeometry.dimensions[0] === "1700"
+      && consoleGeometry.dimensions[1] === "750",
+    "A moldura deve usar 1800x810 e o painel deve preservar o inset 1700x750.",
+  );
   for (const requiredId of [
     "pvCurrent", "pvMax", "pv_adjust", "pv_subtract", "pv_add",
     "pmCurrent", "pmMax", "pm_adjust", "pm_subtract", "pm_add",
     "automatic_resource_spending", "panelBoardArt", "defenseValue", "rdValue",
     "weapon_sword", "weapon_shield", "roll_attack", "roll_damage", "roll_critical",
-    "power_combat_defensive", "power_duel", "power_baluarte", "power_torre_armada", "power_provocacao",
+    "power_combat_defensive", "power_duel", "power_baluarte", "passive_duelist_shielded", "power_provocacao",
     "skill_iniciativa", "skill_luta", "skill_intimidacao", "skill_percepcao",
     "skill_fortitude", "skill_reflexos", "skill_vontade",
     "end_turn", "end_scene", "undo", "clear_dice", "toggle_settings", "settingsPanel",

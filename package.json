@@ -1,6 +1,6 @@
 {
   "name": "corvan-tts-automation",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "type": "module",
   "description": "Console de combate do Corvan Duras para Tabletop Simulator",

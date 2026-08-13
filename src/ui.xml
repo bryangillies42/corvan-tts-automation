@@ -1,4 +1,4 @@
-<!-- O painel fica paralelo à face superior do Custom_Tile. Z -50 evita que a UI seja ocultada pela malha. -->
+<!-- O painel fica paralelo à face superior do Custom_Tile. Z -30 mantém a UI rente sem ocultá-la na malha. -->
 <!--
   Runtime contract (all values are shared because no visibility filter is used):
   Dynamic text: pvCurrent, pvMax, pmCurrent, pmMax, defenseValue, rdValue,
@@ -7,7 +7,7 @@
                 activePowersLabel.
   Dynamic visual state: weapon_sword, weapon_shield, roll_attack, roll_damage,
                         roll_critical, power_combat_defensive, power_duel,
-                        power_baluarte, power_torre_armada, power_provocacao.
+                        power_baluarte, power_provocacao.
   Lua may update `text`, `textColor`, `colors`, `interactable`, `isOn`, and `active`
   through self.UI.setAttribute. Buttons and inputs report their unique id.
 -->
@@ -85,18 +85,18 @@
                     selectionColor="#376987AA" outline="#52575C" outlineSize="1 1" />
 </Defaults>
 
-<!-- A camada visual é uma raiz independente e 12,5% maior que o canvas dos
-     controles. Isso cobre todo o tile físico legado sem alterar hitboxes. -->
+<!-- A moldura usa o canvas completo; o painel opaco recua 50 px nas laterais
+     e 30 px no topo/rodapé para preservar uma borda decorativa fina. -->
 <Image id="panelBoardArt" active="false" image="__PANEL_UI_IMAGE_URL_XML__"
        width="1800" height="810" rectAlignment="MiddleCenter"
-       position="0 0 -50" rotation="0 0 180" scale="0.25 0.25 1"
+       position="0 0 -30" rotation="0 0 180" scale="0.25 0.25 1"
        preserveAspect="false" raycastTarget="false" />
 
-<Panel id="corvanConsole" width="1600" height="720" rectAlignment="MiddleCenter"
-       position="0 0 -50" rotation="0 0 180" scale="0.25 0.25 1"
+<Panel id="corvanConsole" width="1700" height="750" rectAlignment="MiddleCenter"
+       position="0 0 -30" rotation="0 0 180" scale="0.25 0.25 1"
        color="#07090CD8" outline="#8C6A2D" outlineSize="3 3" raycastTarget="true">
 
-    <!-- Main HUD uses a 1600 x 720 logical canvas (2.22:1). -->
+    <!-- Main HUD uses the inset content canvas inside the full board art. -->
     <VerticalLayout id="mainLayout" anchorMin="0 0" anchorMax="1 1"
                     offsetMin="14 10" offsetMax="-14 -10"
                     spacing="8" childForceExpandWidth="true" childForceExpandHeight="false">
@@ -111,7 +111,7 @@
                         <Text text="CORVAN DURAS" fontSize="39" resizeTextMaxSize="42"
                               alignment="MiddleLeft" color="#E8E2D5" preferredHeight="43"
                               shadow="#000000CC" shadowDistance="2 -2" />
-                        <Text text="VANGUARDA  //  CAVALEIRO 5" class="gold" fontSize="19"
+                        <Text text="VANGUARDA  //  CAVALEIRO 6" class="gold" fontSize="19"
                               alignment="MiddleLeft" preferredHeight="22" />
                         <Text text="Humano  •  Soldado  •  Valkaria" class="muted"
                               alignment="MiddleLeft" preferredHeight="17" />
@@ -123,9 +123,9 @@
                                     spacing="3" childForceExpandWidth="true" childForceExpandHeight="false">
                         <HorizontalLayout preferredHeight="34" spacing="3" childForceExpandWidth="false">
                             <Text text="PV" class="caption red" preferredWidth="42" />
-                            <Text id="pvCurrent" text="55" class="red" fontSize="28" preferredWidth="50" />
+                            <Text id="pvCurrent" text="69" class="red" fontSize="28" preferredWidth="50" />
                             <Text text="/" class="muted" preferredWidth="16" />
-                            <Text id="pvMax" text="55" fontSize="24" preferredWidth="46" />
+                            <Text id="pvMax" text="69" fontSize="24" preferredWidth="46" />
                         </HorizontalLayout>
                         <HorizontalLayout preferredHeight="34" spacing="4" childForceExpandWidth="false">
                             <Button id="pv_subtract" class="miniButton" text="−" onClick="dispatch"
@@ -143,9 +143,9 @@
                                     spacing="3" childForceExpandWidth="true" childForceExpandHeight="false">
                         <HorizontalLayout preferredHeight="34" spacing="3" childForceExpandWidth="false">
                             <Text text="PM" class="caption blue" preferredWidth="45" />
-                            <Text id="pmCurrent" text="15" class="blue" fontSize="28" preferredWidth="48" />
+                            <Text id="pmCurrent" text="18" class="blue" fontSize="28" preferredWidth="48" />
                             <Text text="/" class="muted" preferredWidth="16" />
-                            <Text id="pmMax" text="15" fontSize="24" preferredWidth="44" />
+                            <Text id="pmMax" text="18" fontSize="24" preferredWidth="44" />
                         </HorizontalLayout>
                         <HorizontalLayout preferredHeight="34" spacing="4" childForceExpandWidth="false">
                             <Button id="pm_subtract" class="miniButton" text="−" onClick="dispatch"
@@ -162,7 +162,7 @@
                     <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="8 8" offsetMax="-8 -8"
                                     spacing="1" childForceExpandHeight="true">
                         <Text text="DEFESA" class="caption gold" preferredHeight="25" alignment="MiddleCenter" />
-                        <Text id="defenseValue" text="20" fontSize="35" resizeTextMaxSize="38" />
+                        <Text id="defenseValue" text="22" fontSize="35" resizeTextMaxSize="38" />
                     </VerticalLayout>
                 </Panel>
 
@@ -197,9 +197,9 @@
                                 <Button id="weapon_sword" class="weaponButton" onClick="dispatch"
                                         colors="#302712|#493A18|#1D180D|#090B0D88"
                                         outline="#BE9139" outlineSize="2 2"
-                                        text="ESPADA LONGA  •  ATIVA&#10;ATAQUE +9   •   DANO 1d8+5&#10;CRÍTICO 19–20/x2   •   CORTE" />
+                                        text="ESPADA LONGA  •  ATIVA&#10;ATAQUE +11   •   DANO 1d8+5&#10;CRÍTICO 18–20/x2   •   CORTE" />
                                 <Button id="weapon_shield" class="weaponButton" onClick="dispatch"
-                                        text="ESCUDO PESADO&#10;ATAQUE +9   •   DANO 1d6+5&#10;CRÍTICO 20/x2   •   IMPACTO" />
+                                        text="ESCUDO PESADO&#10;ATAQUE +10   •   DANO 1d6+5&#10;CRÍTICO 20/x2   •   IMPACTO" />
                             </HorizontalLayout>
                         </VerticalLayout>
                     </Panel>
@@ -212,7 +212,7 @@
                                 <Panel class="card">
                                     <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="4 2" offsetMax="-4 -2">
                                         <Text text="ATAQUE" class="caption" preferredHeight="16" alignment="MiddleCenter" />
-                                        <Text id="attackValue" text="+9" fontSize="24" />
+                                        <Text id="attackValue" text="+11" fontSize="24" />
                                     </VerticalLayout>
                                 </Panel>
                                 <Panel class="card">
@@ -224,13 +224,13 @@
                                 <Panel class="card">
                                     <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="4 2" offsetMax="-4 -2">
                                         <Text text="CRÍTICO" class="caption" preferredHeight="16" alignment="MiddleCenter" />
-                                        <Text id="criticalValue" text="19–20/x2" class="gold" fontSize="22" />
+                                        <Text id="criticalValue" text="18–20/x2" class="gold" fontSize="22" />
                                     </VerticalLayout>
                                 </Panel>
                                 <Panel class="card">
                                     <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="4 2" offsetMax="-4 -2">
                                         <Text text="DEFESA" class="caption" preferredHeight="16" alignment="MiddleCenter" />
-                                        <Text id="calculatedDefenseValue" text="20" fontSize="24" />
+                                        <Text id="calculatedDefenseValue" text="22" fontSize="24" />
                                     </VerticalLayout>
                                 </Panel>
                             </HorizontalLayout>
@@ -264,24 +264,30 @@
                                 constraint="FixedColumnCount" constraintCount="2"
                                 childAlignment="UpperCenter" startCorner="UpperLeft" startAxis="Horizontal">
                         <Button id="power_combat_defensive" class="powerButton" onClick="dispatch"
-                                text="COMBATE DEFENSIVO  •  0 PM&#10;−2 no próximo ataque&#10;+5 DEF até fim do turno" />
+                                text="COMBATE DEFENSIVO  •  0 PM&#10;−2 no próximo ataque&#10;+5 DEF até o próximo turno" />
                         <Button id="power_duel" class="powerButton" onClick="dispatch"
                                 colors="#201615|#39201D|#130D0C|#090B0D88" outline="#76332B"
                                 text="DUELO  •  2 PM&#10;+2 ataque e dano&#10;dura até o fim da cena" />
                         <Button id="power_baluarte" class="powerButton" onClick="dispatch"
                                 colors="#111C24|#1C3444|#0A1116|#090B0D88" outline="#315F7A"
-                                text="BALUARTE  •  1/2 PM&#10;+2 ou +4 DEF e resistências&#10;até fim do turno" />
-                        <Button id="power_torre_armada" class="powerButton" onClick="dispatch"
-                                colors="#211B10|#3C2F14|#151006|#090B0D88" outline="#765B22"
-                                text="TORRE ARMADA  •  1 PM&#10;+5 no próximo dano&#10;consome ao rolar dano" />
+                                text="BALUARTE  •  1/2 PM&#10;+2 ou +4 DEF e resistências&#10;até o próximo turno" />
+                        <Panel id="passive_duelist_shielded" class="goldCard">
+                            <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="10 7" offsetMax="-10 -7"
+                                            spacing="2" childForceExpandWidth="true" childForceExpandHeight="true">
+                                <Text text="DUELISTA ESCUDADO" class="gold" fontSize="18" preferredHeight="28" />
+                                <Text text="Duelo ativo: RD +2" class="muted" fontSize="14" />
+                                <Text text="ARMAS DA AMBIÇÃO" class="gold" fontSize="17" preferredHeight="28" />
+                                <Text text="espada +1 ataque • ameaça +1" class="muted" fontSize="14" />
+                            </VerticalLayout>
+                        </Panel>
                         <Button id="power_provocacao" class="powerButton" onClick="dispatch"
                                 colors="#201312|#3A201C|#140B0A|#090B0D88" outline="#753129"
-                                text="PROVOCAÇÃO  •  2 PM&#10;Vontade CD 13&#10;até fim do turno" />
+                                text="PROVOCAÇÃO  •  2 PM&#10;Vontade CD 16&#10;postura até fim da cena" />
                         <Panel class="goldCard">
                             <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="10 7" offsetMax="-10 -7"
                                             spacing="2" childForceExpandWidth="true" childForceExpandHeight="true">
-                                <Text text="SOLIDEZ" class="gold" fontSize="18" preferredHeight="28" />
-                                <Text text="bônus já refletidos nas resistências" class="muted" fontSize="14" />
+                                <Text text="SOLIDEZ + ENCOURAÇADO" class="gold" fontSize="18" preferredHeight="28" />
+                                <Text text="escudo refletido em DEF e resistências" class="muted" fontSize="14" />
                                 <Text text="BASTIÃO + PLACAS DA IRA" class="gold" fontSize="17" preferredHeight="28" />
                                 <Text text="RD 5 + 3 = 8  •  PASSIVOS" class="muted" fontSize="14" />
                             </VerticalLayout>
@@ -300,12 +306,12 @@
                                       spacing="6" childForceExpandWidth="true" childForceExpandHeight="true">
                         <Text text="ATALHOS&#10;RÁPIDOS" class="caption gold" preferredWidth="104" alignment="MiddleLeft" />
                         <Button id="skill_iniciativa" class="skillButton" text="INICIATIVA  +3" onClick="dispatch" />
-                        <Button id="skill_luta" class="skillButton" text="LUTA  +9" onClick="dispatch" />
-                        <Button id="skill_intimidacao" class="skillButton" text="INTIMIDAÇÃO  +7" onClick="dispatch" />
-                        <Button id="skill_percepcao" class="skillButton" text="PERCEPÇÃO  +3" onClick="dispatch" />
-                        <Button id="skill_fortitude" class="skillButton" text="FORTITUDE  +9" onClick="dispatch" />
+                        <Button id="skill_luta" class="skillButton" text="LUTA  +10" onClick="dispatch" />
+                        <Button id="skill_intimidacao" class="skillButton" text="INTIMIDAÇÃO  +6" onClick="dispatch" />
+                        <Button id="skill_percepcao" class="skillButton" text="PERCEPÇÃO  +6" onClick="dispatch" />
+                        <Button id="skill_fortitude" class="skillButton" text="FORTITUDE  +11" onClick="dispatch" />
                         <Button id="skill_reflexos" class="skillButton" text="REFLEXOS  +5" onClick="dispatch" />
-                        <Button id="skill_vontade" class="skillButton" text="VONTADE  +5" onClick="dispatch" />
+                        <Button id="skill_vontade" class="skillButton" text="VONTADE  +6" onClick="dispatch" />
                     </HorizontalLayout>
                 </Panel>
 
@@ -313,7 +319,7 @@
                                   childForceExpandWidth="true" childForceExpandHeight="true">
                     <Button id="end_turn" class="baseButton" onClick="dispatch"
                             colors="#142631|#1E3B4C|#0D1820|#090B0D88" outline="#315C72"
-                            text="FIM DO TURNO&#10;limpa efeitos temporários" />
+                            text="INÍCIO DO TURNO&#10;limpa efeitos temporários" />
                     <Button id="end_scene" class="baseButton" onClick="dispatch"
                             text="FIM DA CENA&#10;encerra Duelo e efeitos" />
                     <Button id="undo" class="baseButton" onClick="dispatch"
@@ -327,7 +333,7 @@
                                             childForceExpandWidth="true" childForceExpandHeight="false">
                                 <HorizontalLayout preferredHeight="22" childForceExpandWidth="false">
                                     <Text text="RUNTIME" class="caption gold" preferredWidth="82" />
-                                    <Text id="versionLabel" text="v0.1.7 • offline pronto" class="muted"
+                                    <Text id="versionLabel" text="v0.1.8 • offline pronto" class="muted"
                                           alignment="MiddleRight" flexibleWidth="1" />
                                 </HorizontalLayout>
                                 <Text id="refreshStatus" text="ATUALIZAÇÃO  •  pronta"

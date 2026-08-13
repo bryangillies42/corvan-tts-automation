@@ -51,32 +51,32 @@ end
 
 local DEFAULT_CHARACTER = {
     schemaVersion = 1,
-    version = "0.1.7",
+    version = "0.1.8",
     name = "Corvan Duras",
     shortName = "Corvan",
-    resources = {hp = {max = 55}, mp = {max = 15}},
-    defense = 20,
+    resources = {hp = {max = 69}, mp = {max = 18}},
+    defense = 22,
     damageReduction = 8,
     weapons = {
         sword = {
-            name = "Espada Longa", chatName = "Espada", attack = 9,
+            name = "Espada Longa", chatName = "Espada", attack = 11,
             damage = {count = 1, sides = 8, bonus = 5},
-            critical = {min = 19, multiplier = 2}
+            critical = {min = 18, multiplier = 2}
         },
         shield = {
-            name = "Escudo Pesado", chatName = "Escudo", attack = 9,
+            name = "Escudo Pesado", chatName = "Escudo", attack = 10, defenseModifier = 2,
             damage = {count = 1, sides = 6, bonus = 5},
             critical = {min = 20, multiplier = 2}
         }
     },
     skills = {
         initiative = {name = "Iniciativa", modifier = 3},
-        fight = {name = "Luta", modifier = 9},
-        intimidation = {name = "Intimidação", modifier = 7},
-        perception = {name = "Percepção", modifier = 3},
-        fortitude = {name = "Fortitude", modifier = 9, resistance = true},
+        fight = {name = "Luta", modifier = 10},
+        intimidation = {name = "Intimidação", modifier = 6},
+        perception = {name = "Percepção", modifier = 6},
+        fortitude = {name = "Fortitude", modifier = 11, resistance = true},
         reflex = {name = "Reflexos", modifier = 5, resistance = true},
-        will = {name = "Vontade", modifier = 5, resistance = true}
+        will = {name = "Vontade", modifier = 6, resistance = true}
     },
     powers = {
         combatDefensive = {cost = 0, attackModifier = -2, defenseModifier = 5},
@@ -86,8 +86,9 @@ local DEFAULT_CHARACTER = {
             defenseModifier = 2, resistanceModifier = 2,
             upgradedDefenseModifier = 4, upgradedResistanceModifier = 4
         },
-        armedTower = {cost = 1, damageModifier = 5},
-        provocation = {cost = 2, willDifficulty = 13}
+        provocation = {cost = 2, willDifficulty = 16},
+        solidity = {resistanceModifier = 2},
+        duelistShielded = {damageReduction = 2}
     },
     diceOffset = {x = 0, y = 3.2, z = 0}
 }
@@ -140,6 +141,9 @@ end
 function CorvanRules.calculateDefense(character, currentState)
     local result = finiteNumber(character.defense, 0)
     local effects = currentState.effects or {}
+    if effects.shieldGuardSuppressed then
+        result = result - finiteNumber(character.weapons.shield.defenseModifier, 0)
+    end
     if effects.combatDefensiveDefense then
         result = result + finiteNumber(character.powers.combatDefensive.defenseModifier, 0)
     end
@@ -153,8 +157,19 @@ function CorvanRules.calculateSkillModifier(character, currentState, skillKey)
     if not skill then return 0 end
     local result = finiteNumber(skill.modifier, 0)
     if skill.resistance then
+        if currentState.effects and currentState.effects.shieldGuardSuppressed then
+            result = result - finiteNumber(character.powers.solidity.resistanceModifier, 0)
+        end
         result = result + baluarteModifier(character, currentState,
             "upgradedResistanceModifier", "resistanceModifier")
+    end
+    return result
+end
+
+function CorvanRules.calculateDamageReduction(character, currentState)
+    local result = finiteNumber(character.damageReduction, 0)
+    if currentState.effects and currentState.effects.duel then
+        result = result + finiteNumber(character.powers.duelistShielded.damageReduction, 0)
     end
     return result
 end
@@ -172,9 +187,6 @@ function CorvanRules.calculateDamageSpec(character, currentState, weaponKey, cri
     if effects.duel then
         bonus = bonus + finiteNumber(character.powers.duel.damageModifier, 0)
     end
-    if effects.armedTower then
-        bonus = bonus + finiteNumber(character.powers.armedTower.damageModifier, 0)
-    end
     return {count = count, sides = finiteNumber(weapon.damage.sides, 6), bonus = bonus}
 end
 
@@ -190,7 +202,7 @@ local function defaultEffects()
         combatDefensiveDefense = false,
         duel = false,
         baluarte = false,
-        armedTower = false,
+        shieldGuardSuppressed = false,
         provocation = false
     }
 end
@@ -199,8 +211,8 @@ local function defaultState()
     return {
         schemaVersion = STATE_SCHEMA_VERSION,
         runtimeVersion = CHARACTER.version,
-        hp = finiteNumber(CHARACTER.resources.hp.max, 55),
-        mp = finiteNumber(CHARACTER.resources.mp.max, 15),
+        hp = finiteNumber(CHARACTER.resources.hp.max, 69),
+        mp = finiteNumber(CHARACTER.resources.mp.max, 18),
         activeWeapon = "sword",
         effects = defaultEffects(),
         pendingThreat = nil,
@@ -234,14 +246,21 @@ local function normalizeSnapshot(source)
             end
         end
     end
-    -- Ao subir do nível 4 para o 5, personagens que estavam com o recurso
-    -- cheio também recebem o novo máximo. Valores gastos/ferimentos são
-    -- preservados para não curar ou restaurar PM silenciosamente.
-    if (CHARACTER.version == "0.1.6" or CHARACTER.version == "0.1.7")
+    -- Nas mudanças de nível, somente recursos que estavam cheios recebem o
+    -- novo máximo. Valores gastos ou ferimentos são preservados para não
+    -- curar nem restaurar PM silenciosamente. A ordem permite atualizar
+    -- diretamente da v0.1.5 (nível 4) para a v0.1.8 (nível 6).
+    if (CHARACTER.version == "0.1.6" or CHARACTER.version == "0.1.7"
+            or CHARACTER.version == "0.1.8")
         and source.runtimeVersion ~= "0.1.6"
-        and source.runtimeVersion ~= "0.1.7" then
+        and source.runtimeVersion ~= "0.1.7"
+        and source.runtimeVersion ~= "0.1.8" then
         if finiteNumber(source.hp or source.pv, 0) == 47 then normalized.hp = 55 end
         if finiteNumber(source.mp or source.pm, 0) == 12 then normalized.mp = 15 end
+    end
+    if CHARACTER.version == "0.1.8" and source.runtimeVersion ~= "0.1.8" then
+        if normalized.hp == 55 then normalized.hp = 69 end
+        if normalized.mp == 15 then normalized.mp = 18 end
     end
     if type(source.pendingThreat) == "table" and CHARACTER.weapons[source.pendingThreat.weaponKey] then
         normalized.pendingThreat = {
@@ -400,10 +419,12 @@ local function effectsLabel()
     elseif state.effects.combatDefensiveDefense then
         table.insert(labels, "Combate Defensivo: +5 DEF")
     end
-    if state.effects.duel then table.insert(labels, "Duelo") end
+    if state.effects.duel then table.insert(labels, "Duelo: +2 ataque/dano, +2 RD") end
     local baluarte = finiteNumber(state.effects.baluarte, state.effects.baluarte == true and 2 or 0)
     if baluarte > 0 then table.insert(labels, "Baluarte +" .. tostring(baluarte)) end
-    if state.effects.armedTower then table.insert(labels, "Torre Armada") end
+    if state.effects.shieldGuardSuppressed then
+        table.insert(labels, "Escudo: −2 DEF e resistências")
+    end
     if state.effects.provocation then table.insert(labels, "Provocação") end
     if #labels == 0 then return "Nenhum efeito ativo" end
     return table.concat(labels, " • ")
@@ -469,7 +490,7 @@ local function renderNow()
     safeSetAttribute("criticalValue", "text", criticalFormula(weapon))
     safeSetAttribute("defenseValue", "text", CorvanRules.calculateDefense(CHARACTER, state))
     safeSetAttribute("calculatedDefenseValue", "text", CorvanRules.calculateDefense(CHARACTER, state))
-    safeSetAttribute("rdValue", "text", CHARACTER.damageReduction)
+    safeSetAttribute("rdValue", "text", CorvanRules.calculateDamageReduction(CHARACTER, state))
     safeSetAttribute("lastResult", "text", state.lastResult)
     safeSetAttribute("activeEffects", "text", effectsLabel())
     safeSetAttribute("activePowersLabel", "text", effectsLabel())
@@ -492,11 +513,11 @@ local function renderNow()
     safeSetAttribute("clear_dice", "interactable",
         not rollInProgress and #(state.ownedDiceGuids or {}) > 0 and "true" or "false")
     local baluarte = finiteNumber(state.effects.baluarte, state.effects.baluarte == true and 2 or 0)
-    local baluarteText = "BALUARTE  •  1/2 PM\n+2 ou +4 DEF e resistências\naté fim do turno"
+    local baluarteText = "BALUARTE  •  1/2 PM\n+2 ou +4 DEF e resistências\naté o próximo turno"
     if baluarte == 2 then
-        baluarteText = "BALUARTE +2  •  ATIVO\nclique novamente: +4 (+1 PM)\naté fim do turno"
+        baluarteText = "BALUARTE +2  •  ATIVO\nclique novamente: +4 (+1 PM)\naté o próximo turno"
     elseif baluarte >= 4 then
-        baluarteText = "BALUARTE +4  •  ATIVO\nDEF e resistências\naté fim do turno"
+        baluarteText = "BALUARTE +4  •  ATIVO\nDEF e resistências\naté o próximo turno"
     end
     safeSetAttribute("power_baluarte", "text", baluarteText)
     safeSetAttribute("weapon_sword", "colors", state.activeWeapon == "sword" and "#75591D|#98752B|#4F3B13|#22222288" or "#22282E|#303A43|#151A1F|#22222288")
@@ -505,7 +526,6 @@ local function renderNow()
         power_combat_defensive = state.effects.combatDefensiveArmed or state.effects.combatDefensiveDefense,
         power_duel = state.effects.duel,
         power_baluarte = state.effects.baluarte,
-        power_torre_armada = state.effects.armedTower,
         power_provocacao = state.effects.provocation
     }
     for id, active in pairs(powerColors) do
@@ -1116,12 +1136,16 @@ local function rollAttack(playerColor)
     if not canRoll(playerColor) then return false end
     local modifier = CorvanRules.calculateAttackModifier(CHARACTER, state, state.activeWeapon)
     local rollback = nil
-    if state.effects.combatDefensiveArmed then
+    local consumesCombatDefensive = state.effects.combatDefensiveArmed
+    local suppressesShieldGuard = state.activeWeapon == "shield"
+        and not state.effects.shieldGuardSuppressed
+    if consumesCombatDefensive or suppressesShieldGuard then
         -- Rollback técnico preserva o undo anterior; o novo snapshot só passa a
         -- valer se a rolagem realmente conseguir começar.
         rollback = normalizeState(state)
         pushUndo()
-        state.effects.combatDefensiveArmed = false
+        if consumesCombatDefensive then state.effects.combatDefensiveArmed = false end
+        if suppressesShieldGuard then state.effects.shieldGuardSuppressed = true end
     end
     return startPhysicalRoll({kind = "attack", count = 1, sides = 20, modifier = modifier,
         weaponKey = state.activeWeapon, playerColor = playerColor, rollback = rollback})
@@ -1135,14 +1159,8 @@ local function rollDamage(playerColor, critical)
     if not canRoll(playerColor) then return false end
     local weaponKey = critical and state.pendingThreat.weaponKey or state.activeWeapon
     local spec = CorvanRules.calculateDamageSpec(CHARACTER, state, weaponKey, critical)
-    local rollback = nil
-    if state.effects.armedTower then
-        rollback = normalizeState(state)
-        pushUndo()
-        state.effects.armedTower = false
-    end
     return startPhysicalRoll({kind = "damage", count = spec.count, sides = spec.sides, bonus = spec.bonus,
-        critical = critical, weaponKey = weaponKey, playerColor = playerColor, rollback = rollback})
+        critical = critical, weaponKey = weaponKey, playerColor = playerColor})
 end
 
 local function rollSkill(playerColor, skillKey)
@@ -1273,14 +1291,13 @@ end
 
 local function endTurn()
     local changed = state.effects.combatDefensiveArmed or state.effects.combatDefensiveDefense or
-        state.effects.baluarte or state.effects.armedTower or state.effects.provocation or state.pendingThreat ~= nil
+        state.effects.baluarte or state.effects.shieldGuardSuppressed or state.pendingThreat ~= nil
     if not changed then return true end
     pushUndo()
     state.effects.combatDefensiveArmed = false
     state.effects.combatDefensiveDefense = false
     state.effects.baluarte = false
-    state.effects.armedTower = false
-    state.effects.provocation = false
+    state.effects.shieldGuardSuppressed = false
     state.pendingThreat = nil
     cacheAndRender()
     return true
@@ -1289,7 +1306,7 @@ end
 local function endScene()
     local changed = state.effects.duel or state.effects.combatDefensiveArmed or
         state.effects.combatDefensiveDefense or state.effects.baluarte or
-        state.effects.armedTower or state.effects.provocation or state.pendingThreat ~= nil
+        state.effects.shieldGuardSuppressed or state.effects.provocation or state.pendingThreat ~= nil
     if not changed then return true end
     pushUndo()
     state.effects = defaultEffects()
@@ -1324,7 +1341,7 @@ local ID_ALIASES = {
     skill_intimidation = "skill_intimidacao", skill_perception = "skill_percepcao",
     skill_reflex = "skill_reflexos", skill_will = "skill_vontade",
     settings_toggle = "toggle_settings", settings_test_die = "calibrate_roll",
-    power_armed_tower = "power_torre_armada", power_provocation = "power_provocacao"
+    power_provocation = "power_provocacao"
 }
 
 local SKILL_IDS = {
@@ -1349,7 +1366,6 @@ function handleUiEvent(payload)
     if id == "power_combat_defensive" then return activateCombatDefensive(playerColor) end
     if id == "power_duel" then return activatePower(playerColor, "duel", "duel") end
     if id == "power_baluarte" then return activateBaluarte(playerColor) end
-    if id == "power_torre_armada" then return activatePower(playerColor, "armedTower", "armedTower") end
     if id == "power_provocacao" then
         local cd = CHARACTER.powers.provocation.willDifficulty
         return activatePower(playerColor, "provocation", "provocation",

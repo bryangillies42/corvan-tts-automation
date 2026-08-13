@@ -46,6 +46,8 @@ O bootstrap embutido é estável. Ao acionar **Refresh**, ele consulta o manifes
 
 A partir da v0.1.7, painéis legados recebem também a moldura nova como uma camada visual da UI. Isso permite atualizar um painel v0.1.6 com o próprio **Refresh**, sem substituir o JSON e sem alterar sua textura física original. Importações novas já usam a moldura como textura física e mantêm essa camada redundante desativada. Se a imagem remota da camada não puder ser carregada, a textura antiga continua visível como fallback.
 
+Na v0.1.8, a ficha passa ao nível 6 com PV 69, PM 18, Defesa 22, Espada +11 (ameaça 18–20), Escudo +10 e perícias atualizadas. **Duelista Escudado** eleva a RD de 8 para 10 durante Duelo. Atacar com o escudo suspende temporariamente seus +2 de Defesa e os +2 de Solidez nas resistências até o próximo turno; por isso o antigo botão de fim de turno aparece como **Início do Turno**, deixando claro quando esses efeitos são renovados. Provocação permanece ativa até o fim da cena, e Torre Armada foi removida por não constar na ficha atual. Durante o Refresh, PV/PM que estavam no máximo anterior avançam para o novo máximo; ferimentos e PM já gastos preservam seus valores atuais.
+
 Uma tag `v*` que corresponda à versão de `package.json` executa testes, gera os artefatos com o SHA do commit, anexa tudo a um draft e só então publica a GitHub Release. A imutabilidade de releases deve estar habilitada nas configurações do repositório; uma correção exige uma nova versão SemVer.
 
 ## Limitações do TTS

@@ -98,46 +98,53 @@ test("literal Lua escolhe delimitador sem colidir com o conteúdo", () => {
 
 test("a ficha possui o schema e os valores canônicos do Corvan", async () => {
   const character = JSON.parse(await readFile(join(ROOT, "src", "character.json"), "utf8"));
-  validateCharacter(character, "0.1.7");
+  validateCharacter(character, "0.1.8");
 
   assert.equal(character.schemaVersion, 1);
   assert.equal(character.name, "Corvan Duras");
   assert.deepEqual(
     { hp: character.resources.hp.max, mp: character.resources.mp.max },
-    { hp: 55, mp: 15 },
+    { hp: 69, mp: 18 },
   );
-  assert.equal(character.defense, 20);
+  assert.equal(character.defense, 22);
   assert.equal(character.damageReduction, 8);
   assert.deepEqual(character.weapons.sword, {
     name: "Espada Longa",
     chatName: "Espada",
-    attack: 9,
+    attack: 11,
     damage: { count: 1, sides: 8, bonus: 5 },
-    critical: { min: 19, multiplier: 2 },
+    critical: { min: 18, multiplier: 2 },
     type: "Corte",
-    range: "Curto",
+    range: "Corpo a corpo",
   });
   assert.deepEqual(character.weapons.shield, {
     name: "Escudo Pesado",
     chatName: "Escudo",
-    attack: 9,
+    attack: 10,
+    defenseModifier: 2,
     damage: { count: 1, sides: 6, bonus: 5 },
     critical: { min: 20, multiplier: 2 },
     type: "Impacto",
-    range: "Curto",
+    range: "Corpo a corpo",
   });
   assert.deepEqual(
     Object.fromEntries(Object.entries(character.skills).map(([id, skill]) => [id, skill.modifier])),
-    { initiative: 3, fight: 9, intimidation: 7, perception: 3, fortitude: 9, reflex: 5, will: 5 },
+    { initiative: 3, fight: 10, intimidation: 6, perception: 6, fortitude: 11, reflex: 5, will: 6 },
   );
   assert.deepEqual(
     Object.fromEntries(Object.entries(character.powers).map(([id, power]) => [id, power.cost ?? 0])),
-    { combatDefensive: 0, duel: 2, baluarte: 1, armedTower: 1, provocation: 2, solidity: 0, platesOfWrath: 0, bastion: 0 },
+    {
+      combatDefensive: 0, duel: 2, baluarte: 1, provocation: 2,
+      solidity: 0, duelistShielded: 0, ambitionWeapons: 0, armored: 0,
+      platesOfWrath: 0, bastion: 0,
+    },
   );
   assert.equal(
     character.powers.bastion.damageReduction + character.powers.platesOfWrath.damageReduction,
     character.damageReduction,
   );
+  assert.equal(character.powers.duelistShielded.damageReduction, 2);
+  assert.equal(character.powers.solidity.resistanceModifier, 2);
   assert.deepEqual(
     {
       base: character.powers.baluarte.defenseModifier,
@@ -152,7 +159,7 @@ test("validadores rejeitam character e UI estruturalmente inválidos", async () 
   const character = JSON.parse(await readFile(join(ROOT, "src", "character.json"), "utf8"));
   const invalidCharacter = structuredClone(character);
   invalidCharacter.weapons.sword.damage.sides = 1;
-  assert.throws(() => validateCharacter(invalidCharacter, "0.1.7"), /damage\.sides/);
+  assert.throws(() => validateCharacter(invalidCharacter, "0.1.8"), /damage\.sides/);
 
   const prereleaseCharacter = structuredClone(character);
   prereleaseCharacter.version = "0.1.0-rc.1";
@@ -163,11 +170,22 @@ test("validadores rejeitam character e UI estruturalmente inválidos", async () 
 
   const ui = await readFile(join(ROOT, "src", "ui.xml"), "utf8");
   validateUi(ui);
-  assert.match(ui, /<Panel id="corvanConsole"[^>]*position="[^"]+"[^>]*rotation="[^"]+"[^>]*scale="[^"]+"/s);
+  assert.match(ui, /<Image id="panelBoardArt"[^>]*position="0 0 -30"[^>]*rotation="0 0 180"[^>]*scale="0\.25 0\.25 1"/s);
+  assert.match(ui, /<Panel id="corvanConsole"[^>]*position="0 0 -30"[^>]*rotation="0 0 180"[^>]*scale="0\.25 0\.25 1"/s);
+  assert.match(ui, /<Image id="panelBoardArt"[^>]*width="1800" height="810"/s);
+  assert.match(ui, /<Panel id="corvanConsole"[^>]*width="1700" height="750"/s);
   assert.ok(ui.indexOf('id="panelBoardArt"') < ui.indexOf('id="mainLayout"'));
   assert.doesNotMatch(ui, /\btooltip(?:Position|FontSize|TextColor|BackgroundColor|BorderColor)?\s*=/i);
   assert.ok(ui.indexOf("<Defaults>") < ui.indexOf('<Panel id="corvanConsole"'));
   assert.throws(() => validateUi(ui.replace(/<\/Panel>\s*$/, "")), /não foi fechada/);
+  assert.throws(
+    () => validateUi(ui.replace('position="0 0 -30"', 'position="0 0 -29"')),
+    /mesma transformação 3D/,
+  );
+  assert.throws(
+    () => validateUi(ui.replace('<Panel id="corvanConsole" width="1700"', '<Panel id="corvanConsole" width="1800"')),
+    /preservar o inset/,
+  );
 });
 
 test("manifesto e Saved Object possuem o contrato publicável", async (t) => {
@@ -180,12 +198,12 @@ test("manifesto e Saved Object possuem o contrato publicável", async (t) => {
   const saved = JSON.parse(await readFile(join(outDir, "Corvan_Duras_Console.json"), "utf8"));
 
   assert.equal(manifest.schemaVersion, 1);
-  assert.equal(manifest.version, "0.1.7");
+  assert.equal(manifest.version, "0.1.8");
   assert.equal(manifest.minBootstrapVersion, "1.0.2");
   assert.equal(manifest.commitSha, FIXED_SHA);
   assert.equal(
     manifest.runtime.url,
-    "https://github.com/bryangillies42/corvan-tts-automation/releases/download/v0.1.7/corvan-runtime.lua",
+    "https://github.com/bryangillies42/corvan-tts-automation/releases/download/v0.1.8/corvan-runtime.lua",
   );
   assert.equal(manifest.runtime.size, Buffer.byteLength(runtime, "utf8"));
   assert.equal(manifest.runtime.sha256, createHash("sha256").update(runtime, "utf8").digest("hex"));
@@ -220,7 +238,10 @@ test("manifesto e Saved Object possuem o contrato publicável", async (t) => {
     Stretch: true,
   });
   assert.match(object.XmlUI, /<Defaults>[\s\S]*<Panel id="corvanConsole"/);
-  assert.match(object.XmlUI, /position="0 0 -50"/);
+  assert.doesNotMatch(object.XmlUI, /position="0 0 -50"/);
+  assert.equal((object.XmlUI.match(/position="0 0 -30"/g) ?? []).length, 2);
+  assert.match(object.XmlUI, /<Image id="panelBoardArt"[^>]*width="1800" height="810"/s);
+  assert.match(object.XmlUI, /<Panel id="corvanConsole"[^>]*width="1700" height="750"/s);
   assert.match(object.XmlUI, /rotation="0 0 180"/);
   assert.match(object.XmlUI, /scale="0\.25 0\.25 1"/);
   assert.match(object.XmlUI, new RegExp(`id="panelBoardArt"[^>]*image="${expectedUiPanelUrl.replaceAll('.', '\\.')}"`, 's'));
@@ -266,16 +287,16 @@ test("manifesto aceita somente uma versão anterior estável e realmente menor",
     rootDir: project,
     outDir: join(project, "dist-previous"),
     commitSha: FIXED_SHA,
-    previousVersion: "0.1.6",
+    previousVersion: "0.1.7",
   });
-  assert.equal(valid.manifest.previousVersion, "0.1.6");
+  assert.equal(valid.manifest.previousVersion, "0.1.7");
 
   await assert.rejects(
     buildProject({
       rootDir: project,
       outDir: join(project, "dist-invalid-previous"),
       commitSha: FIXED_SHA,
-      previousVersion: "0.1.7",
+      previousVersion: "0.1.8",
     }),
     /deve ser anterior/,
   );

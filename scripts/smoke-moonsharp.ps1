@@ -48,20 +48,23 @@ $null = $compiler.LoadString($bootstrap)
 
 $rulesHarness = @'
 local character = {
-    defense = 20,
+    defense = 22,
+    damageReduction = 8,
     weapons = {
         sword = {
-            attack = 8,
-            damage = {count = 1, sides = 8, bonus = 4},
-            critical = {min = 19, multiplier = 2}
-        }
+            attack = 11,
+            damage = {count = 1, sides = 8, bonus = 5},
+            critical = {min = 18, multiplier = 2}
+        },
+        shield = {defenseModifier = 2}
     },
-    skills = {fortitude = {modifier = 9, resistance = true}},
+    skills = {fortitude = {modifier = 11, resistance = true}},
     powers = {
         duel = {attackModifier = 2, damageModifier = 2},
         combatDefensive = {attackModifier = -2, defenseModifier = 5},
         baluarte = {defenseModifier = 2, resistanceModifier = 2},
-        armedTower = {damageModifier = 5}
+        solidity = {resistanceModifier = 2},
+        duelistShielded = {damageReduction = 2}
     }
 }
 local state = {
@@ -70,7 +73,7 @@ local state = {
         combatDefensiveArmed = true,
         combatDefensiveDefense = true,
         baluarte = true,
-        armedTower = true
+        shieldGuardSuppressed = true
     }
 }
 assert(CorvanRules.formatRollResult('Iniciativa', 10, 1, 20, {7}, 3) ==
@@ -85,13 +88,14 @@ local damage = CorvanRules.calculateDamageSpec(character, state, 'sword', true)
 return CorvanRules.calculateAttackModifier(character, state, 'sword'),
     CorvanRules.calculateDefense(character, state),
     CorvanRules.calculateSkillModifier(character, state, 'fortitude'),
+    CorvanRules.calculateDamageReduction(character, state),
     damage.count, damage.sides, damage.bonus,
-    CorvanRules.isThreat(character, 'sword', 19)
+    CorvanRules.isThreat(character, 'sword', 18)
 '@
 
 $runner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $actual = $runner.DoString($runtime + "`n" + $rulesHarness).ToString()
-$expected = '8, 27, 11, 2, 8, 11, true'
+$expected = '11, 27, 11, 10, 2, 8, 7, true'
 if ($actual -ne $expected) {
     throw "Smoke de regras retornou '$actual'; esperado '$expected'."
 }
@@ -301,39 +305,55 @@ legacyState.mp = 12
 legacyState.diceOffset = {x = 0, y = 2.5, z = -5}
 assert(importState(legacyState))
 local migratedOffset = exportState().diceOffset
-assert(exportState().hp == 55 and exportState().mp == 15,
-    'level 5 full-resource migration failed')
+assert(exportState().hp == 69 and exportState().mp == 18,
+    'direct level 4 to 6 full-resource migration failed')
 assert(migratedOffset.x == 0 and migratedOffset.y == 3.2 and migratedOffset.z == 0,
     'legacy offset migration failed: ' .. tostring(migratedOffset.x) .. ','
         .. tostring(migratedOffset.y) .. ',' .. tostring(migratedOffset.z))
+local level5State = exportState()
+level5State.runtimeVersion = '0.1.7'
+level5State.hp = 55
+level5State.mp = 15
+assert(importState(level5State))
+assert(exportState().hp == 69 and exportState().mp == 18,
+    'level 5 to 6 full-resource migration failed')
+local woundedLevel5State = exportState()
+woundedLevel5State.runtimeVersion = '0.1.7'
+woundedLevel5State.hp = 54
+woundedLevel5State.mp = 14
+assert(importState(woundedLevel5State))
+assert(exportState().hp == 54 and exportState().mp == 14,
+    'spent level 5 resources were restored during migration')
+level5State.runtimeVersion = '0.1.7'
+assert(importState(level5State))
 assert(handleUiEvent({id = 'power_duel', playerColor = 'White'}))
 local afterDuel = exportState()
-assert(afterDuel.mp == 13 and afterDuel.effects.duel)
+assert(afterDuel.mp == 16 and afterDuel.effects.duel)
 assert(not handleUiEvent({id = 'power_duel', playerColor = 'White'}))
-assert(exportState().mp == 13)
+assert(exportState().mp == 16)
 assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
-assert(exportState().effects.baluarte == 2 and exportState().mp == 12)
+assert(exportState().effects.baluarte == 2 and exportState().mp == 15)
 assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
-assert(exportState().effects.baluarte == 4 and exportState().mp == 11)
-assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 24)
-assert(CorvanRules.calculateSkillModifier(CHARACTER, exportState(), 'fortitude') == 13)
+assert(exportState().effects.baluarte == 4 and exportState().mp == 14)
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 26)
+assert(CorvanRules.calculateSkillModifier(CHARACTER, exportState(), 'fortitude') == 15)
 assert(not handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
-assert(exportState().mp == 11)
+assert(exportState().mp == 14)
 assert(handleUiEvent({id = 'end_turn', playerColor = 'White'}))
 local afterTurn = exportState()
 assert(afterTurn.effects.duel and not afterTurn.effects.baluarte)
 assert(handleUiEvent({id = 'end_scene', playerColor = 'White'}))
-assert(not exportState().effects.duel and exportState().mp == 11)
+assert(not exportState().effects.duel and exportState().mp == 14)
 
 assert(handleUiEvent({id = 'pv_adjust', value = '10', playerColor = 'White'}))
 assert(handleUiEvent({id = 'pv_subtract', playerColor = 'White'}))
-assert(exportState().hp == 45 and attributes.pv_adjust == '')
+assert(exportState().hp == 59 and attributes.pv_adjust == '')
 assert(handleUiEvent({id = 'pv_adjust', value = '5', playerColor = 'White'}))
 assert(handleUiEvent({id = 'pv_add', playerColor = 'White'}))
-assert(exportState().hp == 50 and attributes.pv_adjust == '')
+assert(exportState().hp == 64 and attributes.pv_adjust == '')
 assert(handleUiEvent({id = 'pv_adjust', value = 'texto', playerColor = 'White'}))
 assert(not handleUiEvent({id = 'pv_subtract', playerColor = 'White'}))
-assert(exportState().hp == 50 and attributes.pv_adjust == 'texto')
+assert(exportState().hp == 64 and attributes.pv_adjust == 'texto')
 assert(handleUiEvent({id = 'pv_adjust', value = '0', playerColor = 'White'}))
 assert(not handleUiEvent({id = 'pv_add', playerColor = 'White'}))
 assert(attributes.pv_adjust == '0')
@@ -345,38 +365,37 @@ assert(not handleUiEvent({id = 'pv_add', playerColor = 'White'}))
 assert(attributes.pv_adjust == '10.5')
 assert(handleUiEvent({id = 'pv_adjust', value = '-5', playerColor = 'White'}))
 assert(handleUiEvent({id = 'pv_add', playerColor = 'White'}))
-assert(exportState().hp == 55 and attributes.pv_adjust == '')
+assert(exportState().hp == 69 and attributes.pv_adjust == '')
 local undoAtMaximum = state.undo
 assert(handleUiEvent({id = 'pv_adjust', value = '999', playerColor = 'White'}))
 assert(handleUiEvent({id = 'pv_add', playerColor = 'White'}))
-assert(exportState().hp == 55 and attributes.pv_adjust == '' and state.undo == undoAtMaximum)
+assert(exportState().hp == 69 and attributes.pv_adjust == '' and state.undo == undoAtMaximum)
 assert(handleUiEvent({id = 'pm_adjust', value = '-5', playerColor = 'White'}))
 assert(handleUiEvent({id = 'pm_subtract', playerColor = 'White'}))
-assert(exportState().mp == 6 and attributes.pm_adjust == '')
+assert(exportState().mp == 9 and attributes.pm_adjust == '')
 assert(handleUiEvent({id = 'pm_adjust', value = '999', playerColor = 'White'}))
 assert(handleUiEvent({id = 'pm_add', playerColor = 'White'}))
-assert(exportState().mp == 15)
-assert(handleUiEvent({id = 'power_torre_armada', playerColor = 'White'}))
+assert(exportState().mp == 18)
 dieValues = {6}
 assert(handleUiEvent({id = 'roll_damage', playerColor = 'White'}))
-local afterTower = exportState()
-assert(not afterTower.effects.armedTower and afterTower.lastResult == 'Dano - 16 (d8[6] + 10)')
-assert(publicChat[1] == 'Corvan: Dano - 16 (d8［6］ + 10)')
+local afterDamage = exportState()
+assert(afterDamage.lastResult == 'Dano - 11 (d8[6] + 5)')
+assert(publicChat[1] == 'Corvan: Dano - 11 (d8［6］ + 5)')
 
 assert(handleUiEvent({id = 'power_combat_defensive', playerColor = 'White'}))
-assert(CorvanRules.calculateAttackModifier(CHARACTER, exportState(), 'sword') == 7)
-assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 25)
-assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
+assert(CorvanRules.calculateAttackModifier(CHARACTER, exportState(), 'sword') == 9)
 assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 27)
 assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
 assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 29)
-dieValues = {19}
+assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 31)
+dieValues = {18}
 assert(handleUiEvent({id = 'roll_attack', playerColor = 'White'}))
 local afterAttack = exportState()
 assert(afterAttack.effects.combatDefensiveDefense and not afterAttack.effects.combatDefensiveArmed)
-assert(afterAttack.pendingThreat and afterAttack.pendingThreat.natural == 19)
-assert(CorvanRules.calculateDefense(CHARACTER, afterAttack) == 29)
-assert(afterAttack.lastResult == 'Espada - 26 (d20[19] + 7) • ameaça')
+assert(afterAttack.pendingThreat and afterAttack.pendingThreat.natural == 18)
+assert(CorvanRules.calculateDefense(CHARACTER, afterAttack) == 31)
+assert(afterAttack.lastResult == 'Espada - 27 (d20[18] + 9) • ameaça')
 assert(#afterAttack.ownedDiceGuids == 1 and afterAttack.ownedDiceOwnerGuid == 'panel1')
 local attackDieGuid = afterAttack.ownedDiceGuids[1]
 assert(diceByGuid[attackDieGuid].getGMNotes() == 'owned-die|panel1')
@@ -387,7 +406,7 @@ assert(handleUiEvent({id = 'clear_dice', playerColor = 'White'}))
 local afterAttackClear = exportState()
 assert(#afterAttackClear.ownedDiceGuids == 0 and diceByGuid[attackDieGuid] == nil)
 assert(afterAttackClear.lastResult == afterAttack.lastResult)
-assert(afterAttackClear.pendingThreat and afterAttackClear.pendingThreat.natural == 19)
+assert(afterAttackClear.pendingThreat and afterAttackClear.pendingThreat.natural == 18)
 assert(afterAttackClear.mp == afterAttack.mp
     and afterAttackClear.effects.combatDefensiveDefense == afterAttack.effects.combatDefensiveDefense)
 assert(state.undo == undoBeforeClear)
@@ -406,18 +425,21 @@ assert(handleUiEvent({id = 'clear_dice', playerColor = 'White'}))
 assert(diceByGuid[criticalDieOne] == nil and diceByGuid[criticalDieTwo] == nil)
 assert(#exportState().ownedDiceGuids == 0 and exportState().lastResult == afterCritical.lastResult)
 assert(handleUiEvent({id = 'end_turn', playerColor = 'White'}))
-assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 20)
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 22)
 
 local rollbackState = normalizeState(exportState())
 rollbackState.effects.combatDefensiveArmed = true
 rollbackState.effects.combatDefensiveDefense = true
+rollbackState.effects.shieldGuardSuppressed = false
 state.effects.combatDefensiveArmed = false
 state.effects.combatDefensiveDefense = false
+state.effects.shieldGuardSuppressed = true
 currentRoll = {token = 998, playerColor = 'White', rollback = rollbackState}
 rollInProgress = true
 finishRollFailure(998, 'falha simulada.')
-assert(exportState().effects.combatDefensiveArmed and exportState().effects.combatDefensiveDefense)
-assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 25)
+assert(exportState().effects.combatDefensiveArmed and exportState().effects.combatDefensiveDefense
+    and not exportState().effects.shieldGuardSuppressed)
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 27)
 assert(handleUiEvent({id = 'end_turn', playerColor = 'White'}))
 
 local privateBeforeBusyActions = #privateChat
@@ -436,13 +458,13 @@ assert(publicChat[#publicChat] == 'Corvan: Iniciativa - 10 (d20［7］ + 3)')
 
 dieValues = {11}
 assert(handleUiEvent({id = 'skill_luta', playerColor = 'White'}))
-assert(exportState().lastResult == 'Luta - 20 (d20[11] + 9)')
-assert(publicChat[#publicChat] == 'Corvan: Luta - 20 (d20［11］ + 9)')
+assert(exportState().lastResult == 'Luta - 21 (d20[11] + 10)')
+assert(publicChat[#publicChat] == 'Corvan: Luta - 21 (d20［11］ + 10)')
 
 dieValues = {9}
 assert(handleUiEvent({id = 'skill_percepcao', playerColor = 'White'}))
-assert(exportState().lastResult == 'Percepção - 12 (d20[9] + 3)')
-assert(publicChat[#publicChat] == 'Corvan: Percepção - 12 (d20［9］ + 3)')
+assert(exportState().lastResult == 'Percepção - 15 (d20[9] + 6)')
+assert(publicChat[#publicChat] == 'Corvan: Percepção - 15 (d20［9］ + 6)')
 assert(#publicChat == 6 and #spectatorChat == 6 and globalChatCalls == 0)
 local latestSpawn = spawnPositions[#spawnPositions]
 assert(latestSpawn.x == 35 and math.abs(latestSpawn.y - 7.2) < 0.001 and latestSpawn.z == 42,
@@ -453,6 +475,21 @@ assert(launchCalls == 1 and torqueCalls == 1 and frameCalls == 7
     'unexpected launch counts: ' .. tostring(launchCalls) .. ','
         .. tostring(torqueCalls) .. ',' .. tostring(frameCalls) .. ','
         .. tostring(velocityFallbackCalls) .. ',' .. tostring(angularFallbackCalls))
+
+assert(handleUiEvent({id = 'weapon_shield', playerColor = 'White'}))
+dieValues = {12}
+assert(handleUiEvent({id = 'roll_attack', playerColor = 'White'}))
+local afterShieldAttack = exportState()
+assert(afterShieldAttack.lastResult == 'Escudo - 22 (d20[12] + 10)')
+assert(afterShieldAttack.effects.shieldGuardSuppressed)
+assert(CorvanRules.calculateDefense(CHARACTER, afterShieldAttack) == 20)
+assert(CorvanRules.calculateSkillModifier(CHARACTER, afterShieldAttack, 'fortitude') == 9)
+assert(CorvanRules.calculateSkillModifier(CHARACTER, afterShieldAttack, 'reflex') == 3)
+assert(CorvanRules.calculateSkillModifier(CHARACTER, afterShieldAttack, 'will') == 4)
+assert(CorvanRules.calculateDamageReduction(CHARACTER, afterShieldAttack) == 8)
+assert(handleUiEvent({id = 'end_turn', playerColor = 'White'}))
+assert(not exportState().effects.shieldGuardSuppressed)
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 22)
 
 local chatBeforeFailure = #publicChat
 currentRoll = {token = 999, playerColor = 'White'}
@@ -468,7 +505,6 @@ local undoBeforeToggle = state.undo
 assert(handleUiEvent({id = 'automatic_resource_spending', value = 'False', playerColor = 'White'}))
 assert(not exportState().automaticResourceSpending and state.undo == undoBeforeToggle)
 assert(handleUiEvent({id = 'power_duel', playerColor = 'White'}))
-assert(handleUiEvent({id = 'power_torre_armada', playerColor = 'White'}))
 assert(handleUiEvent({id = 'power_provocacao', playerColor = 'White'}))
 assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
 assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
@@ -477,6 +513,9 @@ assert(handleUiEvent({id = 'undo', playerColor = 'White'}))
 assert(not exportState().automaticResourceSpending and exportState().effects.baluarte == 2)
 local persistedAutomation = exportState()
 assert(importState(persistedAutomation) and not exportState().automaticResourceSpending)
+assert(handleUiEvent({id = 'end_turn', playerColor = 'White'}))
+assert(exportState().effects.duel and exportState().effects.provocation
+    and not exportState().effects.baluarte)
 
 local legacyGuid = 'legacy-reset-die'
 diceByGuid[legacyGuid] = {
@@ -488,7 +527,7 @@ state.ownedDiceOwnerGuid = 'panel1'
 state.mp = 3
 assert(handleUiEvent({id = 'reset_state', playerColor = 'White'}))
 assert(diceByGuid[legacyGuid] == nil and #exportState().ownedDiceGuids == 0)
-assert(exportState().mp == 15 and exportState().undo ~= nil
+assert(exportState().mp == 18 and exportState().undo ~= nil
     and not exportState().automaticResourceSpending)
 assert(handleUiEvent({id = 'undo', playerColor = 'White'}))
 assert(exportState().mp == 3 and #exportState().ownedDiceGuids == 0
@@ -539,13 +578,21 @@ assert(handleUiEvent({id = 'clear_dice', playerColor = 'White'}))
 assert(#exportState().ownedDiceGuids == 0)
 assert(#privateChat >= 5)
 
-return afterDuel.mp, afterTurn.mp, afterTower.lastResult, afterAttack.pendingThreat.natural,
+return afterDuel.mp, afterTurn.mp, afterDamage.lastResult, afterAttack.pendingThreat.natural,
     afterCritical.lastResult, #publicChat, globalChatCalls, #privateChat
 '@
 
 $runtimeFlowRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
-$runtimeFlowResult = $runtimeFlowRunner.DoString($runtime + "`n" + $runtimeFlowHarness).ToString()
-$expectedRuntimeFlow = '13, 11, "Dano - 16 (d8[6] + 10)", 19, "Crítico - 14 (2d8[6,3] + 5)", 7, 0, 11'
+try {
+    $runtimeFlowResult = $runtimeFlowRunner.DoString($runtime + "`n" + $runtimeFlowHarness).ToString()
+} catch {
+    $moonSharpError = $_.Exception.InnerException
+    if ($moonSharpError -and $moonSharpError.DecoratedMessage) {
+        throw $moonSharpError.DecoratedMessage
+    }
+    throw
+}
+$expectedRuntimeFlow = '16, 14, "Dano - 11 (d8[6] + 5)", 18, "Crítico - 14 (2d8[6,3] + 5)", 8, 0, 11'
 if ($runtimeFlowResult -ne $expectedRuntimeFlow) {
     throw "Smoke do fluxo de combate retornou '$runtimeFlowResult'; esperado '$expectedRuntimeFlow'."
 }
@@ -716,15 +763,15 @@ spawnObject = function(params)
                 xml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
             })
             if not accepted then error('bootstrap rejected valid UI') end
-            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.1.7'})
+            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.1.8'})
             setRuntimeUiAttribute({id = 'missing', attribute = 'text', value = 'must stay queued'})
             return helper
         end,
         call = function(name, _)
             if name == 'healthCheck' then
-                return {ok = true, version = '0.1.7', parentGuid = 'panel1'}
+                return {ok = true, version = '0.1.8', parentGuid = 'panel1'}
             elseif name == 'exportState' then
-                return {schemaVersion = 1, runtimeVersion = '0.1.7'}
+                return {schemaVersion = 1, runtimeVersion = '0.1.8'}
             end
             return true
         end
@@ -762,7 +809,7 @@ return xmlSetCalls, attributeCalls, invalidAttributeCalls, info.helperGuid, info
 
 $onLoadRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $onLoadResult = $onLoadRunner.DoString($bootstrap + "`n" + $onLoadHarness).ToString()
-$expectedOnLoad = '2, 5, 0, "helper1", "0.1.7"'
+$expectedOnLoad = '2, 5, 0, "helper1", "0.1.8"'
 if ($onLoadResult -ne $expectedOnLoad) {
     throw "Smoke de onLoad retornou '$onLoadResult'; esperado '$expectedOnLoad'."
 }
@@ -771,7 +818,7 @@ $copyPersistenceHarness = @'
 local timeQueue = {}
 local helper = nil
 local helperState = nil
-local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.7', mp = 15, effects = {duel = false}}
+local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.8', mp = 18, effects = {duel = false}}
 local persistedRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.2', mp = 10, effects = {duel = true}}
 
 JSON = {
@@ -820,7 +867,7 @@ spawnObject = function(params)
                 cacheRuntimeState({state = helperState or defaultRuntimeState})
                 return true
             elseif name == 'healthCheck' then
-                return {ok = true, version = '0.1.7', parentGuid = 'panel-copy'}
+                return {ok = true, version = '0.1.8', parentGuid = 'panel-copy'}
             elseif name == 'importState' then
                 helperState = payload
                 return true
@@ -899,7 +946,7 @@ if ($webRequestResult -ne $expectedWebRequest) {
 $transactionHarness = @'
 local oldXml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
 local candidateXml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/><Text id="activeWeaponLabel"/></Panel>'
-local candidateSource = '-- CORVAN_RUNTIME candidate v0.1.7'
+local candidateSource = '-- CORVAN_RUNTIME candidate v0.1.8'
 local oldSource = SEED_RUNTIME
 local timers = {}
 local currentGuid = 'helper1'
@@ -950,7 +997,7 @@ helper = {
     reload = function()
         if loadedSource == candidateSource then
             currentGuid = 'candidate-guid'
-            activeVersion = CANDIDATE_HEALTH_OK and '0.1.7' or 'broken'
+            activeVersion = CANDIDATE_HEALTH_OK and '0.1.8' or 'broken'
             applyRuntimeUi({xml = candidateXml})
         else
             currentGuid = 'rollback-guid'
@@ -987,7 +1034,7 @@ update.playerColor = 'White'
 update.phase = 'install'
 
 installCandidate(9, {
-    manifest = {version = '0.1.7', commitSha = '0123456789abcdef0123456789abcdef01234567'},
+    manifest = {version = '0.1.8', commitSha = '0123456789abcdef0123456789abcdef01234567'},
     source = candidateSource,
     etag = 'etag-2'
 })
@@ -1017,7 +1064,7 @@ function Invoke-TransactionSmoke([bool]$healthy) {
 }
 
 $updateSuccess = Invoke-TransactionSmoke $true
-$expectedUpdateSuccess = '"0.1.7", true, false, false, "candidate-guid", 23, true, false'
+$expectedUpdateSuccess = '"0.1.8", true, false, false, "candidate-guid", 23, true, false'
 if ($updateSuccess -ne $expectedUpdateSuccess) {
     throw "Smoke de update retornou '$updateSuccess'; esperado '$expectedUpdateSuccess'."
 }
