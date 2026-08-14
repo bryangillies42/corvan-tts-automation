@@ -15,7 +15,7 @@ local LEGACY_DICE_OFFSET = {x = 0, y = 2.5, z = -5}
 local function chatColor()
     -- Use the positional Color table required by the TTS message API. Named
     -- RGBA fields can emit a dev-api event without rendering in the Game tab.
-    return {0.905, 0.898, 0.172}
+    return {0.92, 0.94, 0.97}
 end
 
 local function errorColor()
@@ -51,7 +51,7 @@ end
 
 local DEFAULT_CHARACTER = {
     schemaVersion = 1,
-    version = "0.1.8",
+    version = "0.1.9",
     name = "Corvan Duras",
     shortName = "Corvan",
     resources = {hp = {max = 69}, mp = {max = 18}},
@@ -249,16 +249,19 @@ local function normalizeSnapshot(source)
     -- Nas mudanças de nível, somente recursos que estavam cheios recebem o
     -- novo máximo. Valores gastos ou ferimentos são preservados para não
     -- curar nem restaurar PM silenciosamente. A ordem permite atualizar
-    -- diretamente da v0.1.5 (nível 4) para a v0.1.8 (nível 6).
+    -- diretamente da v0.1.5 (nível 4) para versões posteriores ao nível 6.
     if (CHARACTER.version == "0.1.6" or CHARACTER.version == "0.1.7"
-            or CHARACTER.version == "0.1.8")
+            or CHARACTER.version == "0.1.8" or CHARACTER.version == "0.1.9")
         and source.runtimeVersion ~= "0.1.6"
         and source.runtimeVersion ~= "0.1.7"
-        and source.runtimeVersion ~= "0.1.8" then
+        and source.runtimeVersion ~= "0.1.8"
+        and source.runtimeVersion ~= "0.1.9" then
         if finiteNumber(source.hp or source.pv, 0) == 47 then normalized.hp = 55 end
         if finiteNumber(source.mp or source.pm, 0) == 12 then normalized.mp = 15 end
     end
-    if CHARACTER.version == "0.1.8" and source.runtimeVersion ~= "0.1.8" then
+    if (CHARACTER.version == "0.1.8" or CHARACTER.version == "0.1.9")
+        and source.runtimeVersion ~= "0.1.8"
+        and source.runtimeVersion ~= "0.1.9" then
         if normalized.hp == 55 then normalized.hp = 69 end
         if normalized.mp == 15 then normalized.mp = 18 end
     end
@@ -390,11 +393,39 @@ local function formatModifier(value)
     return ""
 end
 
+-- O chat do TTS usa colchetes ASCII para BBCode. Conteúdo variável precisa
+-- usar colchetes fullwidth para nunca ser interpretado como uma tag de cor.
+local function chatSafeText(value)
+    return tostring(value):gsub("%[", "［"):gsub("%]", "］")
+end
+
+local function chatSegment(hex, value, bold)
+    local text = chatSafeText(value)
+    if bold then text = "[b]" .. text .. "[/b]" end
+    return "[" .. hex .. "]" .. text .. "[-]"
+end
+
 function CorvanRules.formatRollResult(label, total, count, sides, values, modifier, suffix)
     local result = tostring(label) .. " - " .. tostring(total) .. " ("
         .. formatDice(count, sides, values) .. formatModifier(modifier) .. ")"
     if type(suffix) == "string" and suffix ~= "" then
         result = result .. " • " .. suffix
+    end
+    return result
+end
+
+function CorvanRules.formatChatRollResult(shortName, label, total, count, sides, values, modifier, suffix)
+    local formula = formatDice(count, sides, values) .. formatModifier(modifier)
+    local neutral = "E8EDF2"
+    local result = chatSegment("FF6464", shortName, true)
+        .. " " .. chatSegment(neutral, "•", false) .. " "
+        .. chatSegment("63E6A5", label, true)
+        .. "  " .. chatSegment(neutral, "│ RESULTADO:", true) .. " "
+        .. chatSegment("62B8FF", total, true)
+        .. "  " .. chatSegment(neutral, "│ CÁLCULO:", true) .. " "
+        .. chatSegment("FFD166", formula, true)
+    if type(suffix) == "string" and suffix ~= "" then
+        result = result .. "  " .. chatSegment("FF9F43", "⚠ " .. suffix, true)
     end
     return result
 end
@@ -430,25 +461,12 @@ local function effectsLabel()
     return table.concat(labels, " • ")
 end
 
-local function comparablePanelImageUrl(value)
-    if type(value) ~= "string" then return nil end
-    local normalized = value:gsub("\\", "/")
-    if normalized:match("^file:/") then
-        normalized = normalized:gsub("^file:/+", "")
-        normalized = normalized:gsub("%%(%x%x)", function(hex)
-            return string.char(tonumber(hex, 16))
-        end)
-        return normalized:lower()
-    end
-    if normalized:match("^%a:/") then return normalized:lower() end
-    return normalized
-end
-
 local function panelBoardOverlayNeeded()
-    if not parent then return true end
-    local ok, custom = pcall(function() return parent.getCustomObject() end)
-    if not ok or type(custom) ~= "table" or type(custom.image) ~= "string" then return true end
-    return comparablePanelImageUrl(custom.image) ~= comparablePanelImageUrl(PANEL_IMAGE_URL)
+    -- A moldura da UI é a referência de alinhamento do painel. Ela também deve
+    -- cobrir objetos novos: o TTS mantém um cache por URL e pode reutilizar uma
+    -- versão física antiga mesmo quando CustomImage aponta para o asset atual.
+    -- A textura do Custom_Tile permanece abaixo como fallback offline.
+    return true
 end
 
 local function panelBoardOverlayActive()
@@ -589,7 +607,7 @@ end
 -- abrem uma tag e podem tornar o restante desta e das próximas mensagens
 -- invisível. Os colchetes fullwidth preservam a leitura sem acionar o parser.
 local function chatSafeMessage(message)
-    return tostring(message):gsub("%[", "［"):gsub("%]", "］")
+    return chatSafeText(message)
 end
 
 local function playerProperty(player, property)
@@ -675,8 +693,8 @@ local function printToPlayerColor(color, message)
     return false, "none"
 end
 
-local function publicMessage(message, preferredColor)
-    message = chatSafeMessage(message)
+local function publicMessage(message, preferredColor, richText)
+    message = richText == true and tostring(message) or chatSafeMessage(message)
     -- A rota primária passa pelo bootstrap do painel visível. O TTS pode
     -- aceitar silenciosamente chamadas de chat feitas pelo helper invisível
     -- sem inseri-las no cliente, enquanto o mesmo envio pelo painel funciona.
@@ -726,6 +744,12 @@ local function publicMessage(message, preferredColor)
     recordChatAudit(message, "none", false)
     chatDiagnostic("nenhuma API pública de chat aceitou a mensagem.")
     return false
+end
+
+local function publicRollResult(label, total, count, sides, values, modifier, suffix, playerColor)
+    return publicMessage(CorvanRules.formatChatRollResult(
+        CHARACTER.shortName, label, total, count, sides, values, modifier, suffix),
+        playerColor, true)
 end
 
 local function privateError(playerColor, message)
@@ -886,12 +910,15 @@ local function completeRoll(token)
         state.lastResult = CorvanRules.formatRollResult(
             CHARACTER.weapons[roll.weaponKey].chatName, total,
             roll.count, roll.sides, values, roll.modifier, threat and "ameaça" or nil)
-        publicMessage(CHARACTER.shortName .. ": " .. state.lastResult, roll.playerColor)
+        publicRollResult(CHARACTER.weapons[roll.weaponKey].chatName, total,
+            roll.count, roll.sides, values, roll.modifier,
+            threat and "AMEAÇA!" or nil, roll.playerColor)
     elseif roll.kind == "skill" then
         local total = values[1] + roll.modifier
         state.lastResult = CorvanRules.formatRollResult(
             roll.label, total, roll.count, roll.sides, values, roll.modifier)
-        publicMessage(CHARACTER.shortName .. ": " .. state.lastResult, roll.playerColor)
+        publicRollResult(roll.label, total, roll.count, roll.sides,
+            values, roll.modifier, nil, roll.playerColor)
     elseif roll.kind == "damage" then
         local total = roll.bonus
         for _, value in ipairs(values) do total = total + value end
@@ -899,11 +926,13 @@ local function completeRoll(token)
         state.pendingThreat = nil
         state.lastResult = CorvanRules.formatRollResult(
             label, total, roll.count, roll.sides, values, roll.bonus)
-        publicMessage(CHARACTER.shortName .. ": " .. state.lastResult, roll.playerColor)
+        publicRollResult(label, total, roll.count, roll.sides,
+            values, roll.bonus, nil, roll.playerColor)
     elseif roll.kind == "calibration" then
         state.lastResult = CorvanRules.formatRollResult(
             "Calibração", values[1], roll.count, roll.sides, values, 0)
-        publicMessage(CHARACTER.shortName .. ": " .. state.lastResult, roll.playerColor)
+        publicRollResult("Calibração", values[1], roll.count, roll.sides,
+            values, 0, nil, roll.playerColor)
     end
     cacheAndRender()
 end

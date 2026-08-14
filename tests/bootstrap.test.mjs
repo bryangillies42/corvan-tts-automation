@@ -11,7 +11,7 @@ test('keeps one build-time placeholder for the seed UI and runtime', () => {
   assert.equal((source.match(/__SEED_UI_LITERAL__/g) ?? []).length, 1);
   assert.equal((source.match(/__SEED_RUNTIME_LITERAL__/g) ?? []).length, 1);
   assert.match(source, /local BOOTSTRAP_VERSION = "1\.0\.2"/);
-  assert.match(source, /local SEED_RUNTIME_VERSION = "0\.1\.8"/);
+  assert.match(source, /local SEED_RUNTIME_VERSION = "0\.1\.9"/);
   assert.match(source, /local SEED_UI = __SEED_UI_LITERAL__/);
   assert.match(source, /local SEED_RUNTIME = __SEED_RUNTIME_LITERAL__/);
   assert.match(source, /uiXml = SEED_UI/);
@@ -199,7 +199,7 @@ test('blocks refresh during duplicate requests and physical rolls', () => {
   assert.match(source, /function relayRuntimeChat\(payload\)/);
   assert.match(source, /pcall\(printToAll, payload\.message, tint\)/);
   assert.doesNotMatch(source, /runtimeChatRecipientColors/);
-  assert.match(source, /local tint = \{0\.905, 0\.898, 0\.172\}/);
+  assert.match(source, /local tint = \{0\.92, 0\.94, 0\.97\}/);
   assert.doesNotMatch(source, /payload\.tint/);
   assert.match(source, /function relayRuntimePrivate\(payload\)/);
   assert.doesNotMatch(source, /\bbroadcastTo(?:All|Color)\s*\(/);
