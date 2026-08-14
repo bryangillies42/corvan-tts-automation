@@ -51,44 +51,53 @@ end
 
 local DEFAULT_CHARACTER = {
     schemaVersion = 1,
-    version = "0.1.9",
+    version = "0.2.0",
     name = "Corvan Duras",
     shortName = "Corvan",
-    resources = {hp = {max = 69}, mp = {max = 18}},
-    defense = 22,
+    resources = {hp = {max = 78}, mp = {max = 21}},
+    defense = 24,
     damageReduction = 8,
     weapons = {
         sword = {
-            name = "Espada Longa", chatName = "Espada", attack = 11,
+            name = "Espada Longa", chatName = "Espada", attack = 13,
             damage = {count = 1, sides = 8, bonus = 5},
             critical = {min = 18, multiplier = 2}
         },
         shield = {
-            name = "Escudo Pesado", chatName = "Escudo", attack = 10, defenseModifier = 2,
+            name = "Escudo Pesado", chatName = "Escudo", attack = 12, defenseModifier = 4,
             damage = {count = 1, sides = 6, bonus = 5},
             critical = {min = 20, multiplier = 2}
         }
     },
     skills = {
         initiative = {name = "Iniciativa", modifier = 3},
-        fight = {name = "Luta", modifier = 10},
+        fight = {name = "Luta", modifier = 12},
         intimidation = {name = "Intimidação", modifier = 6},
-        perception = {name = "Percepção", modifier = 6},
-        fortitude = {name = "Fortitude", modifier = 11, resistance = true},
-        reflex = {name = "Reflexos", modifier = 5, resistance = true},
-        will = {name = "Vontade", modifier = 6, resistance = true}
+        perception = {name = "Percepção", modifier = 8},
+        fortitude = {name = "Fortitude", modifier = 15, resistance = true},
+        reflex = {name = "Reflexos", modifier = 7, resistance = true},
+        will = {name = "Vontade", modifier = 8, resistance = true},
+        riding = {name = "Cavalgar", modifier = 7},
+        diplomacy = {name = "Diplomacia", modifier = 10},
+        warfare = {name = "Guerra", modifier = 8},
+        aim = {name = "Pontaria", modifier = 7}
     },
     powers = {
         combatDefensive = {cost = 0, attackModifier = -2, defenseModifier = 5},
-        duel = {cost = 2, attackModifier = 2, damageModifier = 2},
+        duel = {
+            cost = 2, upgradeCost = 1,
+            attackModifier = 2, damageModifier = 2,
+            upgradedAttackModifier = 3, upgradedDamageModifier = 3
+        },
         baluarte = {
-            cost = 1, upgradeCost = 1,
+            cost = 1, upgradeCost = 1, sharedCost = 2,
             defenseModifier = 2, resistanceModifier = 2,
             upgradedDefenseModifier = 4, upgradedResistanceModifier = 4
         },
         provocation = {cost = 2, willDifficulty = 16},
-        solidity = {resistanceModifier = 2},
-        duelistShielded = {damageReduction = 2}
+        solidity = {resistanceModifier = 4},
+        duelistShielded = {damageReduction = 2, upgradedDamageReduction = 3},
+        weaponAndShieldStyle = {shieldDefenseModifier = 4}
     },
     diceOffset = {x = 0, y = 3.2, z = 0}
 }
@@ -113,14 +122,25 @@ local parentGuid = nil
 CorvanRules = {}
 CorvanRules.clamp = clamp
 
+local function duelModifier(character, currentState, upgradedField, baseField, powerKey)
+    local active = currentState.effects and currentState.effects.duel
+    local power = character.powers[powerKey or "duel"] or {}
+    if active == true then return finiteNumber(power[baseField], 0) end
+    local value = finiteNumber(active, 0)
+    local upgraded = finiteNumber(power[upgradedField], 3)
+    local base = finiteNumber(power[baseField], 2)
+    if value >= upgraded then return upgraded end
+    if value >= base then return base end
+    return 0
+end
+
 function CorvanRules.calculateAttackModifier(character, currentState, weaponKey)
     local weapon = character.weapons[weaponKey]
     if not weapon then return 0 end
     local result = finiteNumber(weapon.attack, 0)
     local effects = currentState.effects or {}
-    if effects.duel then
-        result = result + finiteNumber(character.powers.duel.attackModifier, 0)
-    end
+    result = result + duelModifier(character, currentState,
+        "upgradedAttackModifier", "attackModifier")
     if effects.combatDefensiveArmed then
         result = result + finiteNumber(character.powers.combatDefensive.attackModifier, 0)
     end
@@ -168,9 +188,8 @@ end
 
 function CorvanRules.calculateDamageReduction(character, currentState)
     local result = finiteNumber(character.damageReduction, 0)
-    if currentState.effects and currentState.effects.duel then
-        result = result + finiteNumber(character.powers.duelistShielded.damageReduction, 0)
-    end
+    result = result + duelModifier(character, currentState,
+        "upgradedDamageReduction", "damageReduction", "duelistShielded")
     return result
 end
 
@@ -184,9 +203,8 @@ function CorvanRules.calculateDamageSpec(character, currentState, weaponKey, cri
     end
     local bonus = finiteNumber(weapon.damage.bonus, 0)
     local effects = currentState.effects or {}
-    if effects.duel then
-        bonus = bonus + finiteNumber(character.powers.duel.damageModifier, 0)
-    end
+    bonus = bonus + duelModifier(character, currentState,
+        "upgradedDamageModifier", "damageModifier")
     return {count = count, sides = finiteNumber(weapon.damage.sides, 6), bonus = bonus}
 end
 
@@ -202,6 +220,7 @@ local function defaultEffects()
         combatDefensiveDefense = false,
         duel = false,
         baluarte = false,
+        baluarteShared = false,
         shieldGuardSuppressed = false,
         provocation = false
     }
@@ -211,8 +230,8 @@ local function defaultState()
     return {
         schemaVersion = STATE_SCHEMA_VERSION,
         runtimeVersion = CHARACTER.version,
-        hp = finiteNumber(CHARACTER.resources.hp.max, 69),
-        mp = finiteNumber(CHARACTER.resources.mp.max, 18),
+        hp = finiteNumber(CHARACTER.resources.hp.max, 78),
+        mp = finiteNumber(CHARACTER.resources.mp.max, 21),
         activeWeapon = "sword",
         effects = defaultEffects(),
         pendingThreat = nil,
@@ -234,7 +253,14 @@ local function normalizeSnapshot(source)
     if CHARACTER.weapons[source.activeWeapon] then normalized.activeWeapon = source.activeWeapon end
     if type(source.effects) == "table" then
         for key in pairs(normalized.effects) do
-            if key == "baluarte" then
+            if key == "duel" then
+                local saved = source.effects.duel
+                local base = finiteNumber(CHARACTER.powers.duel.attackModifier, 2)
+                local upgraded = finiteNumber(CHARACTER.powers.duel.upgradedAttackModifier, 3)
+                if saved == true then normalized.effects.duel = base
+                elseif finiteNumber(saved, 0) >= upgraded then normalized.effects.duel = upgraded
+                elseif finiteNumber(saved, 0) >= base then normalized.effects.duel = base end
+            elseif key == "baluarte" then
                 local saved = source.effects.baluarte
                 local base = finiteNumber(CHARACTER.powers.baluarte.defenseModifier, 2)
                 local upgraded = finiteNumber(CHARACTER.powers.baluarte.upgradedDefenseModifier, 4)
@@ -249,21 +275,29 @@ local function normalizeSnapshot(source)
     -- Nas mudanças de nível, somente recursos que estavam cheios recebem o
     -- novo máximo. Valores gastos ou ferimentos são preservados para não
     -- curar nem restaurar PM silenciosamente. A ordem permite atualizar
-    -- diretamente da v0.1.5 (nível 4) para versões posteriores ao nível 6.
+    -- diretamente da v0.1.5 (nível 4) até o nível 7.
     if (CHARACTER.version == "0.1.6" or CHARACTER.version == "0.1.7"
-            or CHARACTER.version == "0.1.8" or CHARACTER.version == "0.1.9")
+            or CHARACTER.version == "0.1.8" or CHARACTER.version == "0.1.9"
+            or CHARACTER.version == "0.2.0")
         and source.runtimeVersion ~= "0.1.6"
         and source.runtimeVersion ~= "0.1.7"
         and source.runtimeVersion ~= "0.1.8"
-        and source.runtimeVersion ~= "0.1.9" then
+        and source.runtimeVersion ~= "0.1.9"
+        and source.runtimeVersion ~= "0.2.0" then
         if finiteNumber(source.hp or source.pv, 0) == 47 then normalized.hp = 55 end
         if finiteNumber(source.mp or source.pm, 0) == 12 then normalized.mp = 15 end
     end
-    if (CHARACTER.version == "0.1.8" or CHARACTER.version == "0.1.9")
+    if (CHARACTER.version == "0.1.8" or CHARACTER.version == "0.1.9"
+            or CHARACTER.version == "0.2.0")
         and source.runtimeVersion ~= "0.1.8"
-        and source.runtimeVersion ~= "0.1.9" then
+        and source.runtimeVersion ~= "0.1.9"
+        and source.runtimeVersion ~= "0.2.0" then
         if normalized.hp == 55 then normalized.hp = 69 end
         if normalized.mp == 15 then normalized.mp = 18 end
+    end
+    if CHARACTER.version == "0.2.0" and source.runtimeVersion ~= "0.2.0" then
+        if normalized.hp == 69 then normalized.hp = 78 end
+        if normalized.mp == 18 then normalized.mp = 21 end
     end
     if type(source.pendingThreat) == "table" and CHARACTER.weapons[source.pendingThreat.weaponKey] then
         normalized.pendingThreat = {
@@ -450,11 +484,17 @@ local function effectsLabel()
     elseif state.effects.combatDefensiveDefense then
         table.insert(labels, "Combate Defensivo: +5 DEF")
     end
-    if state.effects.duel then table.insert(labels, "Duelo: +2 ataque/dano, +2 RD") end
+    local duel = duelModifier(CHARACTER, state, "upgradedAttackModifier", "attackModifier")
+    if duel > 0 then
+        table.insert(labels, "Duelo: +" .. tostring(duel) .. " ataque/dano e RD")
+    end
     local baluarte = finiteNumber(state.effects.baluarte, state.effects.baluarte == true and 2 or 0)
-    if baluarte > 0 then table.insert(labels, "Baluarte +" .. tostring(baluarte)) end
+    if baluarte > 0 then
+        local shared = state.effects.baluarteShared and " (aliados)" or ""
+        table.insert(labels, "Baluarte +" .. tostring(baluarte) .. shared)
+    end
     if state.effects.shieldGuardSuppressed then
-        table.insert(labels, "Escudo: −2 DEF e resistências")
+        table.insert(labels, "Escudo: −4 DEF e resistências")
     end
     if state.effects.provocation then table.insert(labels, "Provocação") end
     if #labels == 0 then return "Nenhum efeito ativo" end
@@ -538,12 +578,29 @@ local function renderNow()
         baluarteText = "BALUARTE +4  •  ATIVO\nDEF e resistências\naté o próximo turno"
     end
     safeSetAttribute("power_baluarte", "text", baluarteText)
+    local sharedText = "ALIADOS  •  +2 PM\ncompartilha o Baluarte\ncom adjacentes"
+    if state.effects.baluarteShared then
+        sharedText = "ALIADOS  •  ATIVO\nBaluarte +" .. tostring(baluarte) .. " compartilhado\naté o próximo turno"
+    elseif baluarte <= 0 then
+        sharedText = "ALIADOS  •  +2 PM\native Baluarte primeiro\npara compartilhar"
+    end
+    safeSetAttribute("power_baluarte_allies", "text", sharedText)
+    safeSetAttribute("power_baluarte_allies", "interactable", baluarte > 0 and "true" or "false")
+    local duel = duelModifier(CHARACTER, state, "upgradedAttackModifier", "attackModifier")
+    local duelText = "DUELO  •  2/3 PM\n+2 ou +3 ataque, dano e RD\naté o fim da cena"
+    if duel == 2 then
+        duelText = "DUELO +2  •  ATIVO\nclique novamente: +3 (+1 PM)\naté o fim da cena"
+    elseif duel >= 3 then
+        duelText = "DUELO +3  •  ATIVO\nataque, dano e RD\naté o fim da cena"
+    end
+    safeSetAttribute("power_duel", "text", duelText)
     safeSetAttribute("weapon_sword", "colors", state.activeWeapon == "sword" and "#75591D|#98752B|#4F3B13|#22222288" or "#22282E|#303A43|#151A1F|#22222288")
     safeSetAttribute("weapon_shield", "colors", state.activeWeapon == "shield" and "#75591D|#98752B|#4F3B13|#22222288" or "#22282E|#303A43|#151A1F|#22222288")
     local powerColors = {
         power_combat_defensive = state.effects.combatDefensiveArmed or state.effects.combatDefensiveDefense,
         power_duel = state.effects.duel,
         power_baluarte = state.effects.baluarte,
+        power_baluarte_allies = state.effects.baluarteShared,
         power_provocacao = state.effects.provocation
     }
     for id, active in pairs(powerColors) do
@@ -1264,6 +1321,54 @@ local function activateBaluarte(playerColor)
     return true
 end
 
+local function activateBaluarteAllies(playerColor)
+    local power = CHARACTER.powers.baluarte
+    local base = finiteNumber(power.defenseModifier, 2)
+    local current = finiteNumber(state.effects.baluarte, state.effects.baluarte == true and base or 0)
+    if current <= 0 then
+        privateError(playerColor, "ative Baluarte antes de compartilhar com os aliados.")
+        return false
+    end
+    if state.effects.baluarteShared then
+        privateError(playerColor, "Baluarte já está compartilhado com os aliados adjacentes.")
+        return false
+    end
+    local cost = finiteNumber(power.sharedCost, 2)
+    if not canSpendPowerResource(playerColor, power, cost) then return false end
+    pushUndo()
+    spendPowerResource(power, cost)
+    state.effects.baluarteShared = true
+    cacheAndRender()
+    publicMessage(CHARACTER.shortName .. ": Baluarte +" .. tostring(current)
+        .. " compartilhado com aliados adjacentes até o próximo turno.", playerColor)
+    return true
+end
+
+local function activateDuel(playerColor)
+    local power = CHARACTER.powers.duel
+    local base = finiteNumber(power.attackModifier, 2)
+    local upgraded = finiteNumber(power.upgradedAttackModifier, 3)
+    local current = duelModifier(CHARACTER, state, "upgradedAttackModifier", "attackModifier")
+    local cost
+    local target
+    if current <= 0 then
+        cost = finiteNumber(power.cost, 2)
+        target = base
+    elseif current < upgraded then
+        cost = finiteNumber(power.upgradeCost, 1)
+        target = upgraded
+    else
+        privateError(playerColor, "Duelo +3 já está ativo.")
+        return false
+    end
+    if not canSpendPowerResource(playerColor, power, cost) then return false end
+    pushUndo()
+    spendPowerResource(power, cost)
+    state.effects.duel = target
+    cacheAndRender()
+    return true
+end
+
 local function activateCombatDefensive(playerColor)
     if state.effects.combatDefensiveArmed or state.effects.combatDefensiveDefense then
         privateError(playerColor, "Combate Defensivo já está ativo.")
@@ -1320,12 +1425,14 @@ end
 
 local function endTurn()
     local changed = state.effects.combatDefensiveArmed or state.effects.combatDefensiveDefense or
-        state.effects.baluarte or state.effects.shieldGuardSuppressed or state.pendingThreat ~= nil
+        state.effects.baluarte or state.effects.baluarteShared or
+        state.effects.shieldGuardSuppressed or state.pendingThreat ~= nil
     if not changed then return true end
     pushUndo()
     state.effects.combatDefensiveArmed = false
     state.effects.combatDefensiveDefense = false
     state.effects.baluarte = false
+    state.effects.baluarteShared = false
     state.effects.shieldGuardSuppressed = false
     state.pendingThreat = nil
     cacheAndRender()
@@ -1334,7 +1441,7 @@ end
 
 local function endScene()
     local changed = state.effects.duel or state.effects.combatDefensiveArmed or
-        state.effects.combatDefensiveDefense or state.effects.baluarte or
+        state.effects.combatDefensiveDefense or state.effects.baluarte or state.effects.baluarteShared or
         state.effects.shieldGuardSuppressed or state.effects.provocation or state.pendingThreat ~= nil
     if not changed then return true end
     pushUndo()
@@ -1376,7 +1483,8 @@ local ID_ALIASES = {
 local SKILL_IDS = {
     skill_iniciativa = "initiative", skill_luta = "fight", skill_intimidacao = "intimidation",
     skill_percepcao = "perception", skill_fortitude = "fortitude",
-    skill_reflexos = "reflex", skill_vontade = "will"
+    skill_reflexos = "reflex", skill_vontade = "will", skill_cavalgar = "riding",
+    skill_diplomacia = "diplomacy", skill_guerra = "warfare", skill_pontaria = "aim"
 }
 
 function handleUiEvent(payload)
@@ -1393,8 +1501,9 @@ function handleUiEvent(payload)
     if id == "roll_critical" then return rollDamage(playerColor, true) end
     if SKILL_IDS[id] then return rollSkill(playerColor, SKILL_IDS[id]) end
     if id == "power_combat_defensive" then return activateCombatDefensive(playerColor) end
-    if id == "power_duel" then return activatePower(playerColor, "duel", "duel") end
+    if id == "power_duel" then return activateDuel(playerColor) end
     if id == "power_baluarte" then return activateBaluarte(playerColor) end
+    if id == "power_baluarte_allies" then return activateBaluarteAllies(playerColor) end
     if id == "power_provocacao" then
         local cd = CHARACTER.powers.provocation.willDifficulty
         return activatePower(playerColor, "provocation", "provocation",

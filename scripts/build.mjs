@@ -153,7 +153,10 @@ export function validateCharacter(character, expectedVersion) {
   }
 
   assert(isObject(character.skills), "character.skills deve ser um objeto.");
-  for (const id of ["initiative", "fight", "intimidation", "perception", "fortitude", "reflex", "will"]) {
+  for (const id of [
+    "initiative", "fight", "intimidation", "perception", "fortitude", "reflex", "will",
+    "riding", "diplomacy", "warfare", "aim",
+  ]) {
     const skill = character.skills[id];
     assert(isObject(skill), `character.skills.${id} deve ser um objeto.`);
     assertString(skill.name, `character.skills.${id}.name`);
@@ -164,7 +167,7 @@ export function validateCharacter(character, expectedVersion) {
   assert(isObject(character.powers), "character.powers deve ser um objeto.");
   for (const id of [
     "combatDefensive", "duel", "baluarte", "provocation", "solidity",
-    "duelistShielded", "ambitionWeapons", "armored", "platesOfWrath", "bastion",
+    "duelistShielded", "weaponAndShieldStyle", "ambitionWeapons", "armored", "platesOfWrath", "bastion",
   ]) {
     const power = character.powers[id];
     assert(isObject(power), `character.powers.${id} deve ser um objeto.`);
@@ -186,6 +189,11 @@ export function validateCharacter(character, expectedVersion) {
       "damageReduction",
       "upgradedDefenseModifier",
       "upgradedResistanceModifier",
+      "upgradedAttackModifier",
+      "upgradedDamageModifier",
+      "upgradedDamageReduction",
+      "sharedCost",
+      "shieldDefenseModifier",
     ]) {
       if (power[field] !== undefined) assertNumber(power[field], `character.powers.${id}.${field}`);
     }
@@ -327,7 +335,9 @@ export function validateUi(input) {
     "pmCurrent", "pmMax", "pm_adjust", "pm_subtract", "pm_add",
     "automatic_resource_spending", "panelBoardArt", "defenseValue", "rdValue",
     "weapon_sword", "weapon_shield", "roll_attack", "roll_damage", "roll_critical",
-    "power_combat_defensive", "power_duel", "power_baluarte", "passive_duelist_shielded", "power_provocacao",
+    "power_combat_defensive", "power_duel", "power_baluarte", "power_baluarte_allies",
+    "passive_duelist_shielded", "power_provocacao",
+    "skill_cavalgar", "skill_diplomacia", "skill_guerra", "skill_pontaria",
     "skill_iniciativa", "skill_luta", "skill_intimidacao", "skill_percepcao",
     "skill_fortitude", "skill_reflexos", "skill_vontade",
     "end_turn", "end_scene", "undo", "clear_dice", "toggle_settings", "settingsPanel",

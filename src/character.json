@@ -1,25 +1,25 @@
 {
   "schemaVersion": 1,
-  "version": "0.1.9",
+  "version": "0.2.0",
   "name": "Corvan Duras",
   "shortName": "Corvan",
   "resources": {
     "hp": {
       "label": "PV",
-      "max": 69
+      "max": 78
     },
     "mp": {
       "label": "PM",
-      "max": 18
+      "max": 21
     }
   },
-  "defense": 22,
+  "defense": 24,
   "damageReduction": 8,
   "weapons": {
     "sword": {
       "name": "Espada Longa",
       "chatName": "Espada",
-      "attack": 11,
+      "attack": 13,
       "damage": {
         "count": 1,
         "sides": 8,
@@ -35,8 +35,8 @@
     "shield": {
       "name": "Escudo Pesado",
       "chatName": "Escudo",
-      "attack": 10,
-      "defenseModifier": 2,
+      "attack": 12,
+      "defenseModifier": 4,
       "damage": {
         "count": 1,
         "sides": 6,
@@ -58,7 +58,7 @@
     },
     "fight": {
       "name": "Luta",
-      "modifier": 10,
+      "modifier": 12,
       "resistance": false
     },
     "intimidation": {
@@ -68,23 +68,43 @@
     },
     "perception": {
       "name": "Percepção",
-      "modifier": 6,
+      "modifier": 8,
       "resistance": false
     },
     "fortitude": {
       "name": "Fortitude",
-      "modifier": 11,
+      "modifier": 15,
       "resistance": true
     },
     "reflex": {
       "name": "Reflexos",
-      "modifier": 5,
+      "modifier": 7,
       "resistance": true
     },
     "will": {
       "name": "Vontade",
-      "modifier": 6,
+      "modifier": 8,
       "resistance": true
+    },
+    "riding": {
+      "name": "Cavalgar",
+      "modifier": 7,
+      "resistance": false
+    },
+    "diplomacy": {
+      "name": "Diplomacia",
+      "modifier": 10,
+      "resistance": false
+    },
+    "warfare": {
+      "name": "Guerra",
+      "modifier": 8,
+      "resistance": false
+    },
+    "aim": {
+      "name": "Pontaria",
+      "modifier": 7,
+      "resistance": false
     }
   },
   "powers": {
@@ -98,14 +118,18 @@
     "duel": {
       "name": "Duelo",
       "cost": 2,
+      "upgradeCost": 1,
       "attackModifier": 2,
       "damageModifier": 2,
+      "upgradedAttackModifier": 3,
+      "upgradedDamageModifier": 3,
       "duration": "scene"
     },
     "baluarte": {
       "name": "Baluarte",
       "cost": 1,
       "upgradeCost": 1,
+      "sharedCost": 2,
       "defenseModifier": 2,
       "resistanceModifier": 2,
       "upgradedDefenseModifier": 4,
@@ -121,12 +145,18 @@
     "solidity": {
       "name": "Solidez",
       "passive": true,
-      "resistanceModifier": 2
+      "resistanceModifier": 4
     },
     "duelistShielded": {
       "name": "Duelista Escudado",
       "passive": true,
-      "damageReduction": 2
+      "damageReduction": 2,
+      "upgradedDamageReduction": 3
+    },
+    "weaponAndShieldStyle": {
+      "name": "Estilo de Arma e Escudo",
+      "passive": true,
+      "shieldDefenseModifier": 4
     },
     "ambitionWeapons": {
       "name": "Armas da Ambição",

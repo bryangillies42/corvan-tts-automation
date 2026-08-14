@@ -50,6 +50,8 @@ Na v0.1.8, a ficha passa ao nível 6 com PV 69, PM 18, Defesa 22, Espada +11 (am
 
 Na v0.1.9, as rolagens no chat ganham uma hierarquia visual de alto contraste: Corvan em vermelho, ação em verde, resultado em azul e cálculo em amarelo. Os rótulos explícitos **RESULTADO** e **CÁLCULO** substituem o hífen ambíguo, facilitando a leitura rápida mesmo durante uma cena movimentada.
 
+Na v0.2.0, Corvan chega ao nível 7 com PV 78, PM 21, Defesa 24, Espada +13, Escudo +12 e os novos valores das perícias. **Estilo de Arma e Escudo** eleva o bônus do escudo para +4, refletido por **Solidez** nas resistências. **Duelo** permite escolher +2 por 2 PM ou +3 por 3 PM, incluindo a RD de Duelista Escudado; **Baluarte** mantém +2/+4 e pode compartilhar o bônus com aliados adjacentes por mais 2 PM. Cavalgar, Diplomacia, Guerra e Pontaria também entram nos atalhos do painel. Saves da v0.1.9 só avançam de 69/18 para 78/21 quando estavam com os recursos cheios, preservando ferimentos e PM gastos.
+
 Uma tag `v*` que corresponda à versão de `package.json` executa testes, gera os artefatos com o SHA do commit, anexa tudo a um draft e só então publica a GitHub Release. A imutabilidade de releases deve estar habilitada nas configurações do repositório; uma correção exige uma nova versão SemVer.
 
 ## Limitações do TTS

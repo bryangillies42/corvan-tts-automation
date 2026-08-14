@@ -16,6 +16,7 @@ function initialState() {
       combatDefensiveDefense: false,
       duel: false,
       baluarte: false,
+      baluarteShared: false,
       shieldGuardSuppressed: false,
       provocation: false,
     },
@@ -28,7 +29,7 @@ function initialState() {
 // produzir sem exigir que uma instalação de Tabletop Simulator exista no CI.
 function attackModifier(state, weaponKey = state.activeWeapon) {
   return character.weapons[weaponKey].attack
-    + (state.effects.duel ? character.powers.duel.attackModifier : 0)
+    + (Number(state.effects.duel) || 0)
     + (state.effects.combatDefensiveArmed ? character.powers.combatDefensive.attackModifier : 0);
 }
 
@@ -48,7 +49,7 @@ function skillModifier(state, skillKey) {
 
 function damageReduction(state) {
   return character.damageReduction
-    + (state.effects.duel ? character.powers.duelistShielded.damageReduction : 0);
+    + (Number(state.effects.duel) || 0);
 }
 
 function damageSpec(state, weaponKey, critical) {
@@ -57,7 +58,7 @@ function damageSpec(state, weaponKey, critical) {
     count: weapon.damage.count * (critical ? weapon.critical.multiplier : 1),
     sides: weapon.damage.sides,
     bonus: weapon.damage.bonus
-      + (state.effects.duel ? character.powers.duel.damageModifier : 0),
+      + (Number(state.effects.duel) || 0),
   };
 }
 
@@ -67,6 +68,18 @@ function activate(state, effect, configKey) {
   if (state.automaticResourceSpending && state.mp < cost) return false;
   if (state.automaticResourceSpending) state.mp -= cost;
   state.effects[effect] = true;
+  return true;
+}
+
+function activateDuel(state) {
+  const current = Number(state.effects.duel) || 0;
+  const upgraded = character.powers.duel.upgradedAttackModifier;
+  if (current >= upgraded) return false;
+  const upgrading = current > 0;
+  const cost = upgrading ? character.powers.duel.upgradeCost : character.powers.duel.cost;
+  if (state.automaticResourceSpending && state.mp < cost) return false;
+  if (state.automaticResourceSpending) state.mp -= cost;
+  state.effects.duel = upgrading ? upgraded : character.powers.duel.attackModifier;
   return true;
 }
 
@@ -83,49 +96,66 @@ function activateBaluarte(state) {
   return true;
 }
 
+function activateBaluarteAllies(state) {
+  if (!state.effects.baluarte || state.effects.baluarteShared) return false;
+  const cost = character.powers.baluarte.sharedCost;
+  if (state.automaticResourceSpending && state.mp < cost) return false;
+  if (state.automaticResourceSpending) state.mp -= cost;
+  state.effects.baluarteShared = true;
+  return true;
+}
+
 test('fórmulas de ataque, defesa e crítico seguem os números da ficha', () => {
   const state = initialState();
-  assert.equal(attackModifier(state), 11);
-  state.effects.duel = true;
   assert.equal(attackModifier(state), 13);
+  state.effects.duel = 3;
+  assert.equal(attackModifier(state), 16);
   state.effects.combatDefensiveArmed = true;
   state.effects.combatDefensiveDefense = true;
-  assert.equal(attackModifier(state), 11);
-  assert.equal(defense(state), 27, 'Combate Defensivo concede +5 DEF imediatamente');
+  assert.equal(attackModifier(state), 14);
+  assert.equal(defense(state), 29, 'Combate Defensivo concede +5 DEF imediatamente');
   state.effects.combatDefensiveArmed = false;
-  assert.equal(defense(state), 27, 'o ataque consome somente a penalidade armada');
+  assert.equal(defense(state), 29, 'o ataque consome somente a penalidade armada');
   state.effects.baluarte = 4;
-  assert.equal(defense(state), 31);
+  assert.equal(defense(state), 33);
 
-  assert.deepEqual(damageSpec(state, 'sword', false), { count: 1, sides: 8, bonus: 7 });
-  assert.deepEqual(damageSpec(state, 'sword', true), { count: 2, sides: 8, bonus: 7 });
-  assert.deepEqual(damageSpec(state, 'shield', true), { count: 2, sides: 6, bonus: 7 });
-  assert.equal(damageReduction(state), 10);
+  assert.deepEqual(damageSpec(state, 'sword', false), { count: 1, sides: 8, bonus: 8 });
+  assert.deepEqual(damageSpec(state, 'sword', true), { count: 2, sides: 8, bonus: 8 });
+  assert.deepEqual(damageSpec(state, 'shield', true), { count: 2, sides: 6, bonus: 8 });
+  assert.equal(damageReduction(state), 11);
   assert.equal(character.weapons.sword.critical.min, 18);
 
   const guardState = initialState();
   guardState.effects.shieldGuardSuppressed = true;
   assert.equal(defense(guardState), 20);
-  assert.equal(skillModifier(guardState, 'fortitude'), 9);
+  assert.equal(skillModifier(guardState, 'fortitude'), 11);
   assert.equal(skillModifier(guardState, 'reflex'), 3);
   assert.equal(skillModifier(guardState, 'will'), 4);
   guardState.effects.baluarte = 2;
   assert.equal(defense(guardState), 22);
-  assert.equal(skillModifier(guardState, 'fortitude'), 11);
+  assert.equal(skillModifier(guardState, 'fortitude'), 13);
 });
 
 test('custos, repetição, insuficiência e limites de recursos são determinísticos', () => {
   const state = initialState();
-  assert.equal(activate(state, 'duel', 'duel'), true);
-  assert.equal(state.mp, 16);
-  assert.equal(activate(state, 'duel', 'duel'), false);
-  assert.equal(state.mp, 16, 'repetir um poder não gasta PM novamente');
+  assert.equal(activateDuel(state), true);
+  assert.equal(state.effects.duel, 2);
+  assert.equal(state.mp, 19);
+  assert.equal(activateDuel(state), true);
+  assert.equal(state.effects.duel, 3);
+  assert.equal(state.mp, 18);
+  assert.equal(activateDuel(state), false);
+  assert.equal(state.mp, 18, 'Duelo +3 não acumula além do limite');
   assert.equal(activateBaluarte(state), true);
   assert.equal(state.effects.baluarte, 2);
-  assert.equal(state.mp, 15);
+  assert.equal(state.mp, 17);
   assert.equal(activateBaluarte(state), true);
   assert.equal(state.effects.baluarte, 4);
+  assert.equal(state.mp, 16);
+  assert.equal(activateBaluarteAllies(state), true);
+  assert.equal(state.effects.baluarteShared, true);
   assert.equal(state.mp, 14);
+  assert.equal(activateBaluarteAllies(state), false, 'compartilhamento não cobra PM duas vezes');
   assert.equal(activateBaluarte(state), false, 'Baluarte +4 não acumula além do limite');
   assert.equal(state.mp, 14);
   state.mp = 0;
@@ -134,20 +164,23 @@ test('custos, repetição, insuficiência e limites de recursos são determinís
 
   const clamp = (value, max) => Math.min(max, Math.max(0, Math.floor(value)));
   assert.equal(clamp(-99, character.resources.hp.max), 0);
-  assert.equal(clamp(999, character.resources.hp.max), 69);
-  assert.equal(clamp(999, character.resources.mp.max), 18);
+  assert.equal(clamp(999, character.resources.hp.max), 78);
+  assert.equal(clamp(999, character.resources.mp.max), 21);
 });
 
 test('automação desligada não valida nem desconta custos, inclusive no Baluarte', () => {
   const state = initialState();
   state.automaticResourceSpending = false;
   state.mp = 0;
-  assert.equal(activate(state, 'duel', 'duel'), true);
+  assert.equal(activateDuel(state), true);
+  assert.equal(activateDuel(state), true);
   assert.equal(activate(state, 'provocation', 'provocation'), true);
   assert.equal(activateBaluarte(state), true);
   assert.equal(activateBaluarte(state), true);
+  assert.equal(activateBaluarteAllies(state), true);
   assert.equal(state.mp, 0);
   assert.equal(state.effects.baluarte, 4);
+  assert.equal(state.effects.baluarteShared, true);
 });
 
 test('UI e runtime usam ajustes livres de PV/PM e removem os setters absolutos', () => {
@@ -187,12 +220,14 @@ test('Duelista Escudado, guarda do escudo e remoção da Torre Armada fazem part
   assert.match(runtime, /state\.activeWeapon == "shield"[\s\S]*state\.effects\.shieldGuardSuppressed = true/);
   assert.match(runtime, /state\.effects\.shieldGuardSuppressed = false/);
   assert.match(ui, /id="passive_duelist_shielded"/);
+  assert.match(ui, /ESTILO \+ SOLIDEZ \+ ENCOURAÇADO/);
+  assert.match(runtime, /upgradedDamageReduction/);
   assert.doesNotMatch(ui, /power_torre_armada|TORRE ARMADA/);
   assert.doesNotMatch(runtime, /armedTower|power_torre_armada|Torre Armada/);
 });
 
 test('migração de nível aumenta apenas recursos cheios, inclusive no salto direto da v0.1.5', () => {
-  assert.match(runtime, /CHARACTER\.version == "0\.1\.9"/);
+  assert.match(runtime, /CHARACTER\.version == "0\.2\.0"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.1\.6"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.1\.7"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.1\.8"/);
@@ -201,6 +236,8 @@ test('migração de nível aumenta apenas recursos cheios, inclusive no salto di
   assert.match(runtime, /source\.mp or source\.pm, 0\) == 12[\s\S]*normalized\.mp = 15/);
   assert.match(runtime, /normalized\.hp == 55[\s\S]*normalized\.hp = 69/);
   assert.match(runtime, /normalized\.mp == 15[\s\S]*normalized\.mp = 18/);
+  assert.match(runtime, /normalized\.hp == 69[\s\S]*normalized\.hp = 78/);
+  assert.match(runtime, /normalized\.mp == 18[\s\S]*normalized\.mp = 21/);
 });
 
 test('início do turno preserva Duelo e Provocação; fim da cena remove todos os efeitos', () => {
@@ -208,7 +245,10 @@ test('início do turno preserva Duelo e Provocação; fim da cena remove todos o
   Object.keys(state.effects).forEach((key) => { state.effects[key] = true; });
   state.pendingThreat = { weaponKey: 'sword', natural: 19 };
 
-  for (const key of ['combatDefensiveArmed', 'combatDefensiveDefense', 'baluarte', 'shieldGuardSuppressed']) {
+  for (const key of [
+    'combatDefensiveArmed', 'combatDefensiveDefense', 'baluarte',
+    'baluarteShared', 'shieldGuardSuppressed',
+  ]) {
     state.effects[key] = false;
   }
   state.pendingThreat = null;
@@ -223,10 +263,10 @@ test('snapshot de undo restaura a última mutação sem representar reroll', () 
   let state = initialState();
   const snapshot = structuredClone(state);
   state.mp -= 2;
-  state.effects.duel = true;
+  state.effects.duel = 3;
   const diceResultOutsideState = 17;
   state = structuredClone(snapshot);
-  assert.equal(state.mp, 18);
+  assert.equal(state.mp, 21);
   assert.equal(state.effects.duel, false);
   assert.equal(diceResultOutsideState, 17, 'undo não apaga ou rerrola um dado físico');
 });
@@ -248,6 +288,23 @@ test('todo ID atualizado pelo runtime existe no XML', () => {
   const renderedIds = [...runtime.matchAll(/safeSetAttribute\("([^"]+)"/g)].map((match) => match[1]);
   assert.ok(renderedIds.length > 0);
   for (const id of renderedIds) assert.ok(uiIds.has(id), `ID dinâmico ausente no XML: ${id}`);
+});
+
+test('atalhos e poderes da ficha nível 7 possuem contrato completo entre dados, UI e runtime', () => {
+  const expectedSkills = {
+    iniciativa: 'initiative', luta: 'fight', intimidacao: 'intimidation',
+    percepcao: 'perception', fortitude: 'fortitude', reflexos: 'reflex',
+    vontade: 'will', cavalgar: 'riding', diplomacia: 'diplomacy',
+    guerra: 'warfare', pontaria: 'aim',
+  };
+  for (const [uiName, key] of Object.entries(expectedSkills)) {
+    assert.match(ui, new RegExp(`id="skill_${uiName}"`));
+    assert.match(runtime, new RegExp(`skill_${uiName}\\s*=\\s*"${key}"`));
+    assert.ok(character.skills[key]);
+  }
+  assert.match(ui, /id="power_baluarte_allies"/);
+  assert.match(runtime, /activateBaluarteAllies/);
+  assert.match(runtime, /activateDuel/);
 });
 
 test('moldura da UI cobre painéis novos e legados sem recarregar ou alterar o objeto físico', () => {
