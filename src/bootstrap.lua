@@ -5,7 +5,7 @@
 local BOOTSTRAP_VERSION = "1.0.2"
 local STATE_SCHEMA_VERSION = 1
 local MANIFEST_SCHEMA_VERSION = 1
-local SEED_RUNTIME_VERSION = "0.1.8"
+local SEED_RUNTIME_VERSION = "0.1.9"
 local SEED_UI = __SEED_UI_LITERAL__
 local SEED_RUNTIME = __SEED_RUNTIME_LITERAL__
 
@@ -426,7 +426,7 @@ function relayRuntimeChat(payload)
     if type(payload) ~= "table" or type(payload.message) ~= "string" or payload.message == "" then
         return false
     end
-    local tint = {0.905, 0.898, 0.172}
+    local tint = {0.92, 0.94, 0.97}
     if type(printToAll) == "function" then
         return pcall(printToAll, payload.message, tint)
     end

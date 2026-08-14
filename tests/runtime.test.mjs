@@ -192,10 +192,11 @@ test('Duelista Escudado, guarda do escudo e remoção da Torre Armada fazem part
 });
 
 test('migração de nível aumenta apenas recursos cheios, inclusive no salto direto da v0.1.5', () => {
-  assert.match(runtime, /CHARACTER\.version == "0\.1\.8"/);
+  assert.match(runtime, /CHARACTER\.version == "0\.1\.9"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.1\.6"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.1\.7"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.1\.8"/);
+  assert.match(runtime, /source\.runtimeVersion ~= "0\.1\.9"/);
   assert.match(runtime, /source\.hp or source\.pv, 0\) == 47[\s\S]*normalized\.hp = 55/);
   assert.match(runtime, /source\.mp or source\.pm, 0\) == 12[\s\S]*normalized\.mp = 15/);
   assert.match(runtime, /normalized\.hp == 55[\s\S]*normalized\.hp = 69/);
@@ -249,18 +250,16 @@ test('todo ID atualizado pelo runtime existe no XML', () => {
   for (const id of renderedIds) assert.ok(uiIds.has(id), `ID dinâmico ausente no XML: ${id}`);
 });
 
-test('moldura da UI cobre painéis legados sem recarregar ou alterar o objeto físico', () => {
+test('moldura da UI cobre painéis novos e legados sem recarregar ou alterar o objeto físico', () => {
   assert.match(ui, /<Panel id="corvanConsole"[^>]*width="1700" height="750"/s);
   assert.match(ui, /<Image id="panelBoardArt"[^>]*active="false"[^>]*width="1800" height="810"[^>]*raycastTarget="false"/s);
   assert.ok(ui.indexOf('id="panelBoardArt"') < ui.indexOf('id="corvanConsole"'));
   assert.ok(ui.indexOf('id="panelBoardArt"') < ui.indexOf('id="mainLayout"'));
   assert.match(runtime, /local PANEL_IMAGE_URL = __PANEL_IMAGE_URL_LITERAL__/);
   assert.match(runtime, /local PANEL_UI_IMAGE_URL = __PANEL_UI_IMAGE_URL_LITERAL__/);
-  assert.match(runtime, /local function comparablePanelImageUrl\(value\)[\s\S]*normalized:gsub\("%%\(%x%x\)"/);
-  assert.match(runtime, /local function panelBoardOverlayNeeded\(\)[\s\S]*parent\.getCustomObject\(\)[\s\S]*comparablePanelImageUrl\(custom\.image\) ~= comparablePanelImageUrl\(PANEL_IMAGE_URL\)/);
+  assert.match(runtime, /local function panelBoardOverlayNeeded\(\)[\s\S]*return true/);
   assert.match(runtime, /local function preparePanelBoardArt\(\)[\s\S]*WebRequest\.get\(PANEL_UI_IMAGE_URL[\s\S]*response_code[\s\S]*panelBoardArtReady = true/);
   assert.match(runtime, /local overlayValue = "false"/);
-  assert.match(runtime, /if not ok or type\(custom\) ~= "table" or type\(custom\.image\) ~= "string" then return true end/);
   assert.match(runtime, /safeSetAttribute\("panelBoardArt", "active", panelBoardOverlayActive\(\) and "true" or "false"\)/);
   assert.match(runtime, /id="panelBoardArt" active="\[\^"\]\*"/);
   assert.doesNotMatch(runtime, /parent\.setCustomObject\s*\(/);
@@ -318,15 +317,21 @@ test('offset padrão nasce sobre o painel e o offset legado é migrado sem schem
 
 test('chat usa entrega resiliente, formato centralizado e nunca notificações centrais', () => {
   assert.match(runtime, /function CorvanRules\.formatRollResult\(/);
+  assert.match(runtime, /function CorvanRules\.formatChatRollResult\(/);
   assert.match(runtime, /local function chatSafeMessage\(message\)/);
   assert.ok(runtime.includes('gsub("%[", "［"):gsub("%]", "］")'));
+  for (const color of ['FF6464', '63E6A5', '62B8FF', 'FFD166']) {
+    assert.ok(runtime.includes(color));
+  }
+  assert.match(runtime, /"│ RESULTADO:"/);
+  assert.match(runtime, /"│ CÁLCULO:"/);
   assert.match(runtime, /Player\[functionName\]/);
   assert.match(runtime, /printToColor\(message, color, chatColor\(\)\)[\s\S]*Player\[color\]\.print\(message, chatColor\(\)\)/);
   assert.match(runtime, /add\(preferredColor\)[\s\S]*getSeatedPlayers\(\)[\s\S]*connectedPlayers\(\)/);
   assert.match(runtime, /local colors, managerAvailable = recipientColors\(preferredColor\)[\s\S]*if type\(printToAll\) == "function"[\s\S]*if type\(print\) == "function"/);
   assert.match(runtime, /if Player == nil then return \{\}, false end/);
   assert.doesNotMatch(runtime, /type\(Player\) ~= "table"/);
-  assert.match(runtime, /return \{0\.905, 0\.898, 0\.172\}/);
+  assert.match(runtime, /return \{0\.92, 0\.94, 0\.97\}/);
   assert.doesNotMatch(runtime, /Color\.fromString/);
   assert.doesNotMatch(runtime, /tint = chatColor\(\)/);
   assert.doesNotMatch(runtime, /local CHAT_COLOR\s*=/);
@@ -335,7 +340,8 @@ test('chat usa entrega resiliente, formato centralizado e nunca notificações c
   assert.match(runtime, /safeParentCall\("relayRuntimeChat", \{/);
   assert.match(runtime, /recordChatAudit\(message, "parent-relay", true\)/);
   assert.match(runtime, /chatDiagnostic\(/);
-  assert.match(runtime, /CHARACTER\.shortName \.\. ": " \.\. state\.lastResult/);
+  assert.match(runtime, /local function publicRollResult\(/);
+  assert.match(runtime, /playerColor, true\)/);
   assert.doesNotMatch(runtime, /\+ -/);
   assert.doesNotMatch(runtime, /broadcastTo(?:All|Color)\s*\(/);
 });
