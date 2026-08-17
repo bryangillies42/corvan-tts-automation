@@ -882,15 +882,15 @@ spawnObject = function(params)
                 xml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
             })
             if not accepted then error('bootstrap rejected valid UI') end
-            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.2.0'})
+            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.2.1'})
             setRuntimeUiAttribute({id = 'missing', attribute = 'text', value = 'must stay queued'})
             return helper
         end,
         call = function(name, _)
             if name == 'healthCheck' then
-                return {ok = true, version = '0.2.0', parentGuid = 'panel1'}
+                return {ok = true, version = '0.2.1', parentGuid = 'panel1'}
             elseif name == 'exportState' then
-                return {schemaVersion = 1, runtimeVersion = '0.2.0'}
+                return {schemaVersion = 1, runtimeVersion = '0.2.1'}
             end
             return true
         end
@@ -928,7 +928,7 @@ return xmlSetCalls, attributeCalls, invalidAttributeCalls, info.helperGuid, info
 
 $onLoadRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $onLoadResult = $onLoadRunner.DoString($bootstrap + "`n" + $onLoadHarness).ToString()
-$expectedOnLoad = '2, 5, 0, "helper1", "0.2.0"'
+$expectedOnLoad = '2, 5, 0, "helper1", "0.2.1"'
 if ($onLoadResult -ne $expectedOnLoad) {
     throw "Smoke de onLoad retornou '$onLoadResult'; esperado '$expectedOnLoad'."
 }
@@ -937,7 +937,7 @@ $copyPersistenceHarness = @'
 local timeQueue = {}
 local helper = nil
 local helperState = nil
-local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.2.0', mp = 21, effects = {duel = false}}
+local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.2.1', mp = 21, effects = {duel = false}}
 local persistedRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.2', mp = 10, effects = {duel = true}}
 
 JSON = {
@@ -986,7 +986,7 @@ spawnObject = function(params)
                 cacheRuntimeState({state = helperState or defaultRuntimeState})
                 return true
             elseif name == 'healthCheck' then
-                return {ok = true, version = '0.2.0', parentGuid = 'panel-copy'}
+                return {ok = true, version = '0.2.1', parentGuid = 'panel-copy'}
             elseif name == 'importState' then
                 helperState = payload
                 return true
@@ -1065,7 +1065,7 @@ if ($webRequestResult -ne $expectedWebRequest) {
 $transactionHarness = @'
 local oldXml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
 local candidateXml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/><Text id="activeWeaponLabel"/></Panel>'
-local candidateSource = '-- CORVAN_RUNTIME candidate v0.2.0'
+local candidateSource = '-- CORVAN_RUNTIME candidate v0.2.1'
 local oldSource = SEED_RUNTIME
 local timers = {}
 local currentGuid = 'helper1'
@@ -1116,7 +1116,7 @@ helper = {
     reload = function()
         if loadedSource == candidateSource then
             currentGuid = 'candidate-guid'
-            activeVersion = CANDIDATE_HEALTH_OK and '0.2.0' or 'broken'
+            activeVersion = CANDIDATE_HEALTH_OK and '0.2.1' or 'broken'
             applyRuntimeUi({xml = candidateXml})
         else
             currentGuid = 'rollback-guid'
@@ -1153,7 +1153,7 @@ update.playerColor = 'White'
 update.phase = 'install'
 
 installCandidate(9, {
-    manifest = {version = '0.2.0', commitSha = '0123456789abcdef0123456789abcdef01234567'},
+    manifest = {version = '0.2.1', commitSha = '0123456789abcdef0123456789abcdef01234567'},
     source = candidateSource,
     etag = 'etag-2'
 })
@@ -1183,7 +1183,7 @@ function Invoke-TransactionSmoke([bool]$healthy) {
 }
 
 $updateSuccess = Invoke-TransactionSmoke $true
-$expectedUpdateSuccess = '"0.2.0", true, false, false, "candidate-guid", 23, true, false'
+$expectedUpdateSuccess = '"0.2.1", true, false, false, "candidate-guid", 23, true, false'
 if ($updateSuccess -ne $expectedUpdateSuccess) {
     throw "Smoke de update retornou '$updateSuccess'; esperado '$expectedUpdateSuccess'."
 }

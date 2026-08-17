@@ -53,7 +53,7 @@ end
 
 local DEFAULT_CHARACTER = {
     schemaVersion = 1,
-    version = "0.2.0",
+    version = "0.2.1",
     name = "Corvan Duras",
     shortName = "Corvan",
     resources = {hp = {max = 78}, mp = {max = 21}},
@@ -286,24 +286,28 @@ local function normalizeSnapshot(source)
     -- diretamente da v0.1.5 (nível 4) até o nível 7.
     if (CHARACTER.version == "0.1.6" or CHARACTER.version == "0.1.7"
             or CHARACTER.version == "0.1.8" or CHARACTER.version == "0.1.9"
-            or CHARACTER.version == "0.2.0")
+            or CHARACTER.version == "0.2.0" or CHARACTER.version == "0.2.1")
         and source.runtimeVersion ~= "0.1.6"
         and source.runtimeVersion ~= "0.1.7"
         and source.runtimeVersion ~= "0.1.8"
         and source.runtimeVersion ~= "0.1.9"
-        and source.runtimeVersion ~= "0.2.0" then
+        and source.runtimeVersion ~= "0.2.0"
+        and source.runtimeVersion ~= "0.2.1" then
         if finiteNumber(source.hp or source.pv, 0) == 47 then normalized.hp = 55 end
         if finiteNumber(source.mp or source.pm, 0) == 12 then normalized.mp = 15 end
     end
     if (CHARACTER.version == "0.1.8" or CHARACTER.version == "0.1.9"
-            or CHARACTER.version == "0.2.0")
+            or CHARACTER.version == "0.2.0" or CHARACTER.version == "0.2.1")
         and source.runtimeVersion ~= "0.1.8"
         and source.runtimeVersion ~= "0.1.9"
-        and source.runtimeVersion ~= "0.2.0" then
+        and source.runtimeVersion ~= "0.2.0"
+        and source.runtimeVersion ~= "0.2.1" then
         if normalized.hp == 55 then normalized.hp = 69 end
         if normalized.mp == 15 then normalized.mp = 18 end
     end
-    if CHARACTER.version == "0.2.0" and source.runtimeVersion ~= "0.2.0" then
+    if (CHARACTER.version == "0.2.0" or CHARACTER.version == "0.2.1")
+        and source.runtimeVersion ~= "0.2.0"
+        and source.runtimeVersion ~= "0.2.1" then
         if normalized.hp == 69 then normalized.hp = 78 end
         if normalized.mp == 18 then normalized.mp = 21 end
     end

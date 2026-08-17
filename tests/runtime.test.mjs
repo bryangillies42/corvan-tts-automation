@@ -228,10 +228,13 @@ test('Duelista Escudado, guarda do escudo e remoção da Torre Armada fazem part
 
 test('migração de nível aumenta apenas recursos cheios, inclusive no salto direto da v0.1.5', () => {
   assert.match(runtime, /CHARACTER\.version == "0\.2\.0"/);
+  assert.match(runtime, /CHARACTER\.version == "0\.2\.1"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.1\.6"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.1\.7"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.1\.8"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.1\.9"/);
+  assert.match(runtime, /source\.runtimeVersion ~= "0\.2\.0"/);
+  assert.match(runtime, /source\.runtimeVersion ~= "0\.2\.1"/);
   assert.match(runtime, /source\.hp or source\.pv, 0\) == 47[\s\S]*normalized\.hp = 55/);
   assert.match(runtime, /source\.mp or source\.pm, 0\) == 12[\s\S]*normalized\.mp = 15/);
   assert.match(runtime, /normalized\.hp == 55[\s\S]*normalized\.hp = 69/);
