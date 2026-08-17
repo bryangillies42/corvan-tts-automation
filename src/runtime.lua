@@ -433,10 +433,46 @@ local function chatSafeText(value)
     return tostring(value):gsub("%[", "［"):gsub("%]", "］")
 end
 
-local function chatSegment(hex, value, bold)
-    local text = chatSafeText(value)
-    if bold then text = "[b]" .. text .. "[/b]" end
-    return "[" .. hex .. "]" .. text .. "[-]"
+local function formatChatDice(count, sides, values)
+    local prefix = count == 1 and "" or tostring(count)
+    local strings = {}
+    for _, value in ipairs(values) do table.insert(strings, tostring(value)) end
+    return prefix .. "d" .. tostring(sides) .. "(" .. table.concat(strings, ",") .. ")"
+end
+
+local function chatColorSegment(hex, value)
+    return "[" .. hex .. "]" .. chatSafeText(value) .. "[-]"
+end
+
+-- Apenas as duas cores abaixo podem atravessar o relay. Qualquer outro
+-- colchete continua sendo convertido antes de chegar ao parser do TTS.
+local function chatSafeRichText(value)
+    local text = tostring(value)
+    local position = 1
+    local colorOpen = false
+    while position <= #text do
+        local openAt = string.find(text, "[", position, true)
+        local strayCloseAt = string.find(text, "]", position, true)
+        if strayCloseAt and (not openAt or strayCloseAt < openAt) then
+            return chatSafeText(text)
+        end
+        if not openAt then break end
+        local closeAt = string.find(text, "]", openAt + 1, true)
+        if not closeAt then return chatSafeText(text) end
+        local tag = string.sub(text, openAt, closeAt)
+        if tag == "[FF6464]" or tag == "[62B8FF]" then
+            if colorOpen then return chatSafeText(text) end
+            colorOpen = true
+        elseif tag == "[-]" then
+            if not colorOpen then return chatSafeText(text) end
+            colorOpen = false
+        else
+            return chatSafeText(text)
+        end
+        position = closeAt + 1
+    end
+    if colorOpen then return chatSafeText(text) end
+    return text
 end
 
 function CorvanRules.formatRollResult(label, total, count, sides, values, modifier, suffix)
@@ -449,17 +485,16 @@ function CorvanRules.formatRollResult(label, total, count, sides, values, modifi
 end
 
 function CorvanRules.formatChatRollResult(shortName, label, total, count, sides, values, modifier, suffix)
-    local formula = formatDice(count, sides, values) .. formatModifier(modifier)
-    local neutral = "E8EDF2"
-    local result = chatSegment("FF6464", shortName, true)
-        .. " " .. chatSegment(neutral, "•", false) .. " "
-        .. chatSegment("63E6A5", label, true)
-        .. "  " .. chatSegment(neutral, "│ RESULTADO:", true) .. " "
-        .. chatSegment("62B8FF", total, true)
-        .. "  " .. chatSegment(neutral, "│ CÁLCULO:", true) .. " "
-        .. chatSegment("FFD166", formula, true)
+    local formula = formatChatDice(count, sides, values) .. formatModifier(modifier)
+    -- Duas tags curtas preservam a hierarquia visual sem recriar as sete cores
+    -- e os blocos de negrito que tornavam o renderer do chat frágil.
+    local result = chatColorSegment("FF6464", shortName) .. " • " .. chatSafeText(label)
+        .. "  │ RESULTADO: " .. chatColorSegment("62B8FF", total)
+        .. "  │ CÁLCULO: " .. chatSafeText(formula)
     if type(suffix) == "string" and suffix ~= "" then
-        result = result .. "  " .. chatSegment("FF9F43", "⚠ " .. suffix, true)
+        local renderedSuffix = suffix == "CRÍTICO"
+            and chatColorSegment("FF6464", suffix) or chatSafeText(suffix)
+        result = result .. "  │ " .. renderedSuffix
     end
     return result
 end
@@ -663,7 +698,8 @@ end
 -- O chat do TTS interpreta [HEX] como BBCode de cor. Resultados como d20[18]
 -- abrem uma tag e podem tornar o restante desta e das próximas mensagens
 -- invisível. Os colchetes fullwidth preservam a leitura sem acionar o parser.
-local function chatSafeMessage(message)
+local function chatSafeMessage(message, richText)
+    if richText == true then return chatSafeRichText(message) end
     return chatSafeText(message)
 end
 
@@ -735,29 +771,32 @@ local function recipientColors(preferredColor)
     return colors, managerAvailable
 end
 
-local function printToPlayerColor(color, message)
+local function printToPlayerColor(color, message, tint)
     -- No TTS real, tanto printToAll quanto Player.print podem retornar sem erro
     -- e ainda assim não inserir a linha depois de várias rolagens. A função
     -- global direcionada é a rota que efetivamente chega ao chat do cliente.
     if type(printToColor) == "function" and type(color) == "string" and color ~= "" then
-        local ok = pcall(function() printToColor(message, color, chatColor()) end)
+        local ok = pcall(function() printToColor(message, color, tint) end)
         if ok then return true, "printToColor:" .. color end
     end
     if Player ~= nil and type(color) == "string" and color ~= "" then
-        local ok = pcall(function() Player[color].print(message, chatColor()) end)
+        local ok = pcall(function() Player[color].print(message, tint) end)
         if ok then return true, "player-print:" .. color end
     end
     return false, "none"
 end
 
-local function publicMessage(message, preferredColor, richText)
-    message = richText == true and tostring(message) or chatSafeMessage(message)
+local function publicMessage(message, preferredColor, messageTint, richText)
+    message = chatSafeMessage(message, richText)
+    local tint = type(messageTint) == "table" and messageTint or chatColor()
     -- A rota primária passa pelo bootstrap do painel visível. O TTS pode
     -- aceitar silenciosamente chamadas de chat feitas pelo helper invisível
     -- sem inseri-las no cliente, enquanto o mesmo envio pelo painel funciona.
     local relayOk, relayAccepted = safeParentCall("relayRuntimeChat", {
         message = message,
-        playerColor = preferredColor
+        playerColor = preferredColor,
+        tint = tint,
+        richText = richText == true
     })
     if relayOk and relayAccepted == true then
         recordChatAudit(message, "parent-relay", true)
@@ -769,7 +808,7 @@ local function publicMessage(message, preferredColor, richText)
         local delivered = 0
         local routes = {}
         for _, color in ipairs(colors) do
-            local ok, route = printToPlayerColor(color, message)
+            local ok, route = printToPlayerColor(color, message, tint)
             table.insert(routes, route)
             if ok then delivered = delivered + 1 end
         end
@@ -784,7 +823,7 @@ local function publicMessage(message, preferredColor, richText)
     -- Compatibility fallback for builds/harnesses where Player manager cannot
     -- enumerate clients. This remains chat-only.
     if type(printToAll) == "function" then
-        local ok, failure = pcall(function() printToAll(message, chatColor()) end)
+        local ok, failure = pcall(function() printToAll(message, tint) end)
         recordChatAudit(message, ok and "printToAll" or ("printToAll-error:" .. tostring(failure)), ok)
         if ok then return true end
         chatDiagnostic("printToAll rejeitou a mensagem: " .. tostring(failure))
@@ -806,7 +845,7 @@ end
 local function publicRollResult(label, total, count, sides, values, modifier, suffix, playerColor)
     return publicMessage(CorvanRules.formatChatRollResult(
         CHARACTER.shortName, label, total, count, sides, values, modifier, suffix),
-        playerColor, true)
+        playerColor, nil, true)
 end
 
 local function privateError(playerColor, message)
@@ -966,10 +1005,10 @@ local function completeRoll(token)
         state.pendingThreat = threat and {weaponKey = roll.weaponKey, natural = natural} or nil
         state.lastResult = CorvanRules.formatRollResult(
             CHARACTER.weapons[roll.weaponKey].chatName, total,
-            roll.count, roll.sides, values, roll.modifier, threat and "ameaça" or nil)
+            roll.count, roll.sides, values, roll.modifier, threat and "crítico" or nil)
         publicRollResult(CHARACTER.weapons[roll.weaponKey].chatName, total,
             roll.count, roll.sides, values, roll.modifier,
-            threat and "AMEAÇA!" or nil, roll.playerColor)
+            threat and "CRÍTICO" or nil, roll.playerColor)
     elseif roll.kind == "skill" then
         local total = values[1] + roll.modifier
         state.lastResult = CorvanRules.formatRollResult(

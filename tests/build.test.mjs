@@ -30,6 +30,7 @@ async function temporaryProject(t) {
   const directory = await mkdtemp(join(tmpdir(), "corvan-build-test-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   await cp(join(ROOT, "src"), join(directory, "src"), { recursive: true });
+  await cp(join(ROOT, "assets"), join(directory, "assets"), { recursive: true });
   await cp(join(ROOT, "package.json"), join(directory, "package.json"));
   return directory;
 }
@@ -194,7 +195,7 @@ test("validadores rejeitam character e UI estruturalmente inválidos", async () 
   validateUi(ui);
   assert.match(ui, /<Image id="panelBoardArt"[^>]*position="0 0 -30"[^>]*rotation="0 0 180"[^>]*scale="0\.25 0\.25 1"/s);
   assert.match(ui, /<Panel id="corvanConsole"[^>]*position="0 0 -30"[^>]*rotation="0 0 180"[^>]*scale="0\.25 0\.25 1"/s);
-  assert.match(ui, /<Image id="panelBoardArt"[^>]*width="1800" height="810"/s);
+  assert.match(ui, /<Image id="panelBoardArt"[^>]*width="1870" height="841"/s);
   assert.match(ui, /<Panel id="corvanConsole"[^>]*width="1700" height="750"/s);
   assert.ok(ui.indexOf('id="panelBoardArt"') < ui.indexOf('id="mainLayout"'));
   assert.doesNotMatch(ui, /\btooltip(?:Position|FontSize|TextColor|BackgroundColor|BorderColor)?\s*=/i);
@@ -237,10 +238,16 @@ test("manifesto e Saved Object possuem o contrato publicável", async (t) => {
   assert.match(runtime, /CORVAN_RUNTIME/);
   assert.match(runtime, /<Panel id="corvanConsole"/);
   assert.match(runtime, /Corvan Duras/);
-  const expectedPanelUrl = `https://raw.githubusercontent.com/bryangillies42/corvan-tts-automation/${FIXED_SHA}/assets/panel-board.png`;
-  const expectedUiPanelUrl = `https://raw.githubusercontent.com/bryangillies42/corvan-tts-automation/${FIXED_SHA}/assets/panel-board-ui.jpg`;
-  assert.match(runtime, new RegExp(expectedPanelUrl.replaceAll('.', '\\.')));
-  assert.match(runtime, new RegExp(expectedUiPanelUrl.replaceAll('.', '\\.')));
+  const panelHash = createHash("sha256")
+    .update(await readFile(join(ROOT, "assets", "panel-board.png")))
+    .digest("hex");
+  const uiPanelHash = createHash("sha256")
+    .update(await readFile(join(ROOT, "assets", "panel-board-ui.jpg")))
+    .digest("hex");
+  const expectedPanelUrl = `https://raw.githubusercontent.com/bryangillies42/corvan-tts-automation/${FIXED_SHA}/assets/panel-board.png?sha256=${panelHash}`;
+  const expectedUiPanelUrl = `https://raw.githubusercontent.com/bryangillies42/corvan-tts-automation/${FIXED_SHA}/assets/panel-board-ui.jpg?sha256=${uiPanelHash}`;
+  assert.ok(runtime.includes(expectedPanelUrl));
+  assert.ok(runtime.includes(expectedUiPanelUrl));
 
   assert.equal(saved.SaveName, "Corvan Duras Console");
   assert.equal(saved.ObjectStates.length, 1);
@@ -262,19 +269,58 @@ test("manifesto e Saved Object possuem o contrato publicável", async (t) => {
   assert.match(object.XmlUI, /<Defaults>[\s\S]*<Panel id="corvanConsole"/);
   assert.doesNotMatch(object.XmlUI, /position="0 0 -50"/);
   assert.equal((object.XmlUI.match(/position="0 0 -30"/g) ?? []).length, 2);
-  assert.match(object.XmlUI, /<Image id="panelBoardArt"[^>]*width="1800" height="810"/s);
+  assert.match(object.XmlUI, /<Image id="panelBoardArt"[^>]*width="1870" height="841"/s);
   assert.match(object.XmlUI, /<Panel id="corvanConsole"[^>]*width="1700" height="750"/s);
   assert.match(object.XmlUI, /rotation="0 0 180"/);
   assert.match(object.XmlUI, /scale="0\.25 0\.25 1"/);
-  assert.match(object.XmlUI, new RegExp(`id="panelBoardArt"[^>]*image="${expectedUiPanelUrl.replaceAll('.', '\\.')}"`, 's'));
+  assert.ok(object.XmlUI.includes(`image="${expectedUiPanelUrl}"`));
   assert.ok(object.XmlUI.indexOf('id="panelBoardArt"') < object.XmlUI.indexOf('id="mainLayout"'));
   assert.match(object.LuaScript, /CORVAN_RUNTIME/);
   assert.match(object.LuaScript, /<Panel id="corvanConsole"/);
   for (const placeholder of PLACEHOLDERS) assert.equal(object.LuaScript.includes(placeholder), false);
 });
 
+test("assets visuais usam fingerprint para invalidar o cache do TTS", async (t) => {
+  const project = await temporaryProject(t);
+  const first = await buildProject({
+    rootDir: project,
+    outDir: join(project, "dist-cache-a"),
+  });
+
+  const panelPath = join(project, "assets", "panel-board.png");
+  const originalPanel = await readFile(panelPath);
+  await writeFile(panelPath, Buffer.concat([originalPanel, Buffer.from("cache-regression")]));
+
+  const second = await buildProject({
+    rootDir: project,
+    outDir: join(project, "dist-cache-b"),
+  });
+
+  assert.match(first.panelImageUrl, /panel-board\.png\?sha256=[0-9a-f]{64}$/);
+  assert.match(first.panelUiImageUrl, /panel-board-ui\.jpg\?sha256=[0-9a-f]{64}$/);
+  assert.notEqual(second.panelImageUrl, first.panelImageUrl);
+  assert.equal(second.panelUiImageUrl, first.panelUiImageUrl);
+  assert.equal(first.savedObject.ObjectStates[0].CustomImage.ImageURL, first.panelImageUrl);
+  assert.ok(first.savedObject.ObjectStates[0].XmlUI.includes(first.panelUiImageUrl));
+});
+
+test("a camada visual cobre as dimensões nativas da prancha física", async () => {
+  const physical = await readFile(join(ROOT, "assets", "panel-board.png"));
+  assert.equal(physical.subarray(1, 4).toString("ascii"), "PNG");
+  const physicalWidth = physical.readUInt32BE(16);
+  const physicalHeight = physical.readUInt32BE(20);
+  const ui = await readFile(join(ROOT, "src", "ui.xml"), "utf8");
+  const overlay = ui.match(/<Image id="panelBoardArt"[^>]*width="(\d+)" height="(\d+)"/s);
+
+  assert.ok(overlay);
+  assert.equal(Number(overlay[1]), physicalWidth);
+  assert.equal(Number(overlay[2]), physicalHeight);
+  assert.deepEqual({ width: physicalWidth, height: physicalHeight }, { width: 1870, height: 841 });
+});
+
 test("URLs locais de textura, camada e fixture legado permanecem independentes", async (t) => {
   const project = await temporaryProject(t);
+  await rm(join(project, "assets"), { recursive: true, force: true });
   const physicalUrl = "C:\\Teste\\painel atual.png";
   const uiUrl = 'https://example.test/painel.jpg?x=1&label="Corvan"';
   const legacyUrl = "https://example.test/painel-antigo.png";

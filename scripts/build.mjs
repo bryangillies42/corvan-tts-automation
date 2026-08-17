@@ -83,6 +83,10 @@ function sha256(value) {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
+function fingerprintedAssetUrl(baseUrl, contents) {
+  return `${baseUrl}?sha256=${sha256(contents)}`;
+}
+
 /**
  * Produz uma long string Lua que não conflita com o conteúdo. Lua remove a
  * primeira quebra logo após `[[`; por isso ela é preservada explicitamente.
@@ -324,11 +328,11 @@ export function validateUi(input) {
     "A moldura e os controles da UI devem compartilhar a mesma transformação 3D.",
   );
   assert(
-    panelBoardGeometry.dimensions[0] === "1800"
-      && panelBoardGeometry.dimensions[1] === "810"
+    panelBoardGeometry.dimensions[0] === "1870"
+      && panelBoardGeometry.dimensions[1] === "841"
       && consoleGeometry.dimensions[0] === "1700"
       && consoleGeometry.dimensions[1] === "750",
-    "A moldura deve usar 1800x810 e o painel deve preservar o inset 1700x750.",
+    "A moldura deve cobrir o canvas físico 1870x841 e o painel deve preservar o inset 1700x750.",
   );
   for (const requiredId of [
     "pvCurrent", "pvMax", "pv_adjust", "pv_subtract", "pv_add",
@@ -483,20 +487,40 @@ export async function buildProject({
   const sourceDir = join(absoluteRoot, "src");
   const validatedCommitSha = validateCommitSha(commitSha);
   const assetRef = validatedCommitSha === DEFAULT_COMMIT_SHA ? "main" : validatedCommitSha;
-  const panelImageUrl = assetUrl || `${RAW_ASSET_BASE_URL}/${assetRef}/assets/panel-board.png`;
-  const panelUiImageUrl = uiAssetUrl || `${RAW_ASSET_BASE_URL}/${assetRef}/assets/panel-board-ui.jpg`;
+
+  const [
+    runtimeTemplate,
+    bootstrapTemplate,
+    uiSource,
+    characterSource,
+    panelImageContents,
+    panelUiImageContents,
+  ] = await Promise.all([
+    readSource(join(sourceDir, "runtime.lua"), "src/runtime.lua"),
+    readSource(join(sourceDir, "bootstrap.lua"), "src/bootstrap.lua"),
+    readSource(join(sourceDir, "ui.xml"), "src/ui.xml"),
+    readSource(join(sourceDir, "character.json"), "src/character.json"),
+    assetUrl ? null : readFile(join(absoluteRoot, "assets", "panel-board.png")),
+    uiAssetUrl ? null : readFile(join(absoluteRoot, "assets", "panel-board-ui.jpg")),
+  ]);
+
+  // O TTS mantém um cache agressivo por URL e pode exibir uma moldura antiga
+  // mesmo depois de o arquivo em `main` mudar. O fingerprint preserva builds
+  // determinísticos e força uma nova entrada de cache somente quando a imagem
+  // realmente muda.
+  const panelImageUrl = assetUrl || fingerprintedAssetUrl(
+    `${RAW_ASSET_BASE_URL}/${assetRef}/assets/panel-board.png`,
+    panelImageContents,
+  );
+  const panelUiImageUrl = uiAssetUrl || fingerprintedAssetUrl(
+    `${RAW_ASSET_BASE_URL}/${assetRef}/assets/panel-board-ui.jpg`,
+    panelUiImageContents,
+  );
   const savedObjectImageUrl = savedObjectAssetUrl || panelImageUrl;
   assertString(panelImageUrl, "assetUrl");
   assertString(panelUiImageUrl, "uiAssetUrl");
   assertString(savedObjectImageUrl, "savedObjectAssetUrl");
   assertString(savedObjectName, "savedObjectName");
-
-  const [runtimeTemplate, bootstrapTemplate, uiSource, characterSource] = await Promise.all([
-    readSource(join(sourceDir, "runtime.lua"), "src/runtime.lua"),
-    readSource(join(sourceDir, "bootstrap.lua"), "src/bootstrap.lua"),
-    readSource(join(sourceDir, "ui.xml"), "src/ui.xml"),
-    readSource(join(sourceDir, "character.json"), "src/character.json"),
-  ]);
 
   let character;
   try {

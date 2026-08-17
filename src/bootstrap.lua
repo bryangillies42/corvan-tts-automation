@@ -418,6 +418,39 @@ local function tell(playerColor, message, tint)
     pcall(printToColor, "Corvan • " .. message, color, tint or {0.80, 0.68, 0.38})
 end
 
+local function chatSafeText(value)
+    return tostring(value):gsub("%[", "［"):gsub("%]", "］")
+end
+
+local function chatSafeRichText(value)
+    local text = tostring(value)
+    local position = 1
+    local colorOpen = false
+    while position <= #text do
+        local openAt = string.find(text, "[", position, true)
+        local strayCloseAt = string.find(text, "]", position, true)
+        if strayCloseAt and (not openAt or strayCloseAt < openAt) then
+            return chatSafeText(text)
+        end
+        if not openAt then break end
+        local closeAt = string.find(text, "]", openAt + 1, true)
+        if not closeAt then return chatSafeText(text) end
+        local tag = string.sub(text, openAt, closeAt)
+        if tag == "[FF6464]" or tag == "[62B8FF]" then
+            if colorOpen then return chatSafeText(text) end
+            colorOpen = true
+        elseif tag == "[-]" then
+            if not colorOpen then return chatSafeText(text) end
+            colorOpen = false
+        else
+            return chatSafeText(text)
+        end
+        position = closeAt + 1
+    end
+    if colorOpen then return chatSafeText(text) end
+    return text
+end
+
 -- O helper invisível delega o chat ao objeto visível. Em algumas sessões do
 -- TTS, as APIs de chat aceitam chamadas feitas pelo helper sem exibir a linha;
 -- uma única chamada global feita pelo bootstrap evita confirmações individuais
@@ -426,9 +459,11 @@ function relayRuntimeChat(payload)
     if type(payload) ~= "table" or type(payload.message) ~= "string" or payload.message == "" then
         return false
     end
-    local tint = {0.92, 0.94, 0.97}
+    local message = payload.richText == true
+        and chatSafeRichText(payload.message) or chatSafeText(payload.message)
+    local tint = type(payload.tint) == "table" and payload.tint or {0.92, 0.94, 0.97}
     if type(printToAll) == "function" then
-        return pcall(printToAll, payload.message, tint)
+        return pcall(printToAll, message, tint)
     end
     return false
 end

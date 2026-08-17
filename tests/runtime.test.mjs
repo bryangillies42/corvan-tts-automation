@@ -309,7 +309,7 @@ test('atalhos e poderes da ficha nível 7 possuem contrato completo entre dados,
 
 test('moldura da UI cobre painéis novos e legados sem recarregar ou alterar o objeto físico', () => {
   assert.match(ui, /<Panel id="corvanConsole"[^>]*width="1700" height="750"/s);
-  assert.match(ui, /<Image id="panelBoardArt"[^>]*active="false"[^>]*width="1800" height="810"[^>]*raycastTarget="false"/s);
+  assert.match(ui, /<Image id="panelBoardArt"[^>]*active="false"[^>]*width="1870" height="841"[^>]*raycastTarget="false"/s);
   assert.ok(ui.indexOf('id="panelBoardArt"') < ui.indexOf('id="corvanConsole"'));
   assert.ok(ui.indexOf('id="panelBoardArt"') < ui.indexOf('id="mainLayout"'));
   assert.match(runtime, /local PANEL_IMAGE_URL = __PANEL_IMAGE_URL_LITERAL__/);
@@ -375,15 +375,24 @@ test('offset padrão nasce sobre o painel e o offset legado é migrado sem schem
 test('chat usa entrega resiliente, formato centralizado e nunca notificações centrais', () => {
   assert.match(runtime, /function CorvanRules\.formatRollResult\(/);
   assert.match(runtime, /function CorvanRules\.formatChatRollResult\(/);
-  assert.match(runtime, /local function chatSafeMessage\(message\)/);
+  assert.match(runtime, /local function chatSafeMessage\(message, richText\)/);
   assert.ok(runtime.includes('gsub("%[", "［"):gsub("%]", "］")'));
-  for (const color of ['FF6464', '63E6A5', '62B8FF', 'FFD166']) {
-    assert.ok(runtime.includes(color));
-  }
-  assert.match(runtime, /"│ RESULTADO:"/);
-  assert.match(runtime, /"│ CÁLCULO:"/);
+  assert.doesNotMatch(runtime, /local function chatSegment\(/);
+  assert.match(runtime, /local function chatColorSegment\(hex, value\)/);
+  assert.match(runtime, /local function chatSafeRichText\(value\)/);
+  assert.match(runtime, /if colorOpen then return chatSafeText\(text\) end/);
+  assert.match(runtime, /tag == "\[FF6464\]" or tag == "\[62B8FF\]"/);
+  assert.ok(runtime.includes('[FF6464]'));
+  assert.ok(runtime.includes('[62B8FF]'));
+  assert.doesNotMatch(runtime, /\[E8EDF2\]|\[63E6A5\]|\[FFD166\]|\[b\]|\[\/b\]/);
+  assert.match(runtime, /formatChatDice\(count, sides, values\)/);
+  assert.match(runtime, /│ RESULTADO:/);
+  assert.match(runtime, /│ CÁLCULO:/);
+  assert.match(runtime, /suffix == "CRÍTICO"[\s\S]*chatColorSegment\("FF6464", suffix\)/);
+  assert.match(runtime, /threat and "CRÍTICO" or nil/);
+  assert.doesNotMatch(runtime, /AMEAÇA!/);
   assert.match(runtime, /Player\[functionName\]/);
-  assert.match(runtime, /printToColor\(message, color, chatColor\(\)\)[\s\S]*Player\[color\]\.print\(message, chatColor\(\)\)/);
+  assert.match(runtime, /printToColor\(message, color, tint\)[\s\S]*Player\[color\]\.print\(message, tint\)/);
   assert.match(runtime, /add\(preferredColor\)[\s\S]*getSeatedPlayers\(\)[\s\S]*connectedPlayers\(\)/);
   assert.match(runtime, /local colors, managerAvailable = recipientColors\(preferredColor\)[\s\S]*if type\(printToAll\) == "function"[\s\S]*if type\(print\) == "function"/);
   assert.match(runtime, /if Player == nil then return \{\}, false end/);
@@ -398,7 +407,10 @@ test('chat usa entrega resiliente, formato centralizado e nunca notificações c
   assert.match(runtime, /recordChatAudit\(message, "parent-relay", true\)/);
   assert.match(runtime, /chatDiagnostic\(/);
   assert.match(runtime, /local function publicRollResult\(/);
-  assert.match(runtime, /playerColor, true\)/);
+  assert.match(runtime, /message = chatSafeMessage\(message, richText\)/);
+  assert.match(runtime, /richText = richText == true/);
+  assert.match(runtime, /playerColor, nil, true\)/);
+  assert.match(runtime, /tint = tint/);
   assert.doesNotMatch(runtime, /\+ -/);
   assert.doesNotMatch(runtime, /broadcastTo(?:All|Color)\s*\(/);
 });

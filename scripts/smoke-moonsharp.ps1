@@ -88,9 +88,24 @@ assert(CorvanRules.formatRollResult('Escudo', 21, 1, 20, {13}, 8) ==
 assert(CorvanRules.formatRollResult('Crítico', 13, 2, 8, {6, 3}, 4) ==
     'Crítico - 13 (2d8[6,3] + 4)')
 assert(CorvanRules.formatChatRollResult('Corvan', 'Iniciativa', 10, 1, 20, {7}, 3) ==
-    '[FF6464][b]Corvan[/b][-] [E8EDF2]•[-] [63E6A5][b]Iniciativa[/b][-]  '
-    .. '[E8EDF2][b]│ RESULTADO:[/b][-] [62B8FF][b]10[/b][-]  '
-    .. '[E8EDF2][b]│ CÁLCULO:[/b][-] [FFD166][b]d20［7］ + 3[/b][-]')
+    '[FF6464]Corvan[-] • Iniciativa  │ RESULTADO: [62B8FF]10[-]  │ CÁLCULO: d20(7) + 3')
+for _ = 1, 100 do
+    for face = 1, 20 do
+        local message = CorvanRules.formatChatRollResult(
+            'Corvan', 'Espada', face + 13, 1, 20, {face}, 13,
+            face >= 18 and 'CRÍTICO' or nil)
+        local withoutAllowedTags = message
+            :gsub('%[FF6464%]', ''):gsub('%[62B8FF%]', ''):gsub('%[%-%]', '')
+        assert(not string.find(withoutAllowedTags, '[', 1, true)
+            and not string.find(withoutAllowedTags, ']', 1, true))
+        assert(string.find(message, 'd20(' .. tostring(face) .. ')', 1, true))
+        local _, redTags = string.gsub(message, '%[FF6464%]', '')
+        local _, blueTags = string.gsub(message, '%[62B8FF%]', '')
+        local _, closingTags = string.gsub(message, '%[%-%]', '')
+        assert(redTags == (face >= 18 and 2 or 1))
+        assert(blueTags == 1 and closingTags == redTags + blueTags)
+    end
+end
 local damage = CorvanRules.calculateDamageSpec(character, state, 'sword', true)
 return CorvanRules.calculateAttackModifier(character, state, 'sword'),
     CorvanRules.calculateDefense(character, state),
@@ -111,6 +126,8 @@ $runtimeFlowHarness = @'
 local attributes = {}
 local publicChat = {}
 local spectatorChat = {}
+local publicChatTints = {}
+local publicChatRichText = {}
 local privateChat = {}
 local diceByGuid = {}
 local dieValues = {}
@@ -131,9 +148,9 @@ local panelArtRequestFails = false
 local panelArtRequests = 0
 
 local function expectedPublicRoll(label, total, formula)
-    return '[FF6464][b]Corvan[/b][-] [E8EDF2]•[-] [63E6A5][b]' .. label
-        .. '[/b][-]  [E8EDF2][b]│ RESULTADO:[/b][-] [62B8FF][b]' .. tostring(total)
-        .. '[/b][-]  [E8EDF2][b]│ CÁLCULO:[/b][-] [FFD166][b]' .. formula .. '[/b][-]'
+    return '[FF6464]Corvan[-] • ' .. label .. '  │ RESULTADO: [62B8FF]'
+        .. tostring(total) .. '[-]'
+        .. '  │ CÁLCULO: ' .. formula
 end
 
 WebRequest = {
@@ -199,6 +216,8 @@ parentObject = {
         elseif name == 'relayRuntimeChat' then
             table.insert(publicChat, payload.message)
             table.insert(spectatorChat, payload.message)
+            table.insert(publicChatTints, payload.tint)
+            table.insert(publicChatRichText, payload.richText)
         elseif name == 'relayRuntimePrivate' then
             table.insert(privateChat, payload.message)
         end
@@ -220,7 +239,7 @@ printToAll = function(message, _)
     table.insert(publicChat, message)
 end
 printToColor = function(message, color, _)
-    if string.sub(message, 1, 8) == '[FF6464' then
+    if string.sub(message, 1, 10) == 'Corvan •' then
         if color == 'White' then
             table.insert(publicChat, message)
         elseif color == 'Grey' then
@@ -413,7 +432,8 @@ dieValues = {6}
 assert(handleUiEvent({id = 'roll_damage', playerColor = 'White'}))
 local afterDamage = exportState()
 assert(afterDamage.lastResult == 'Dano - 11 (d8[6] + 5)')
-assert(publicChat[#publicChat] == expectedPublicRoll('Dano', 11, 'd8［6］ + 5'))
+assert(publicChat[#publicChat] == expectedPublicRoll('Dano', 11, 'd8(6) + 5'))
+assert(publicChatRichText[#publicChatRichText] == true)
 
 assert(handleUiEvent({id = 'power_combat_defensive', playerColor = 'White'}))
 assert(CorvanRules.calculateAttackModifier(CHARACTER, exportState(), 'sword') == 11)
@@ -428,7 +448,12 @@ local afterAttack = exportState()
 assert(afterAttack.effects.combatDefensiveDefense and not afterAttack.effects.combatDefensiveArmed)
 assert(afterAttack.pendingThreat and afterAttack.pendingThreat.natural == 18)
 assert(CorvanRules.calculateDefense(CHARACTER, afterAttack) == 33)
-assert(afterAttack.lastResult == 'Espada - 29 (d20[18] + 11) • ameaça')
+assert(afterAttack.lastResult == 'Espada - 29 (d20[18] + 11) • crítico')
+assert(publicChat[#publicChat] == expectedPublicRoll('Espada', 29, 'd20(18) + 11')
+    .. '  │ [FF6464]CRÍTICO[-]')
+assert(publicChatTints[#publicChatTints][1] == 0.92
+    and publicChatTints[#publicChatTints][2] == 0.94
+    and publicChatTints[#publicChatTints][3] == 0.97)
 assert(#afterAttack.ownedDiceGuids == 1 and afterAttack.ownedDiceOwnerGuid == 'panel1')
 local attackDieGuid = afterAttack.ownedDiceGuids[1]
 assert(diceByGuid[attackDieGuid].getGMNotes() == 'owned-die|panel1')
@@ -450,7 +475,7 @@ dieValues = {6, 3}
 assert(handleUiEvent({id = 'roll_critical', playerColor = 'White'}))
 local afterCritical = exportState()
 assert(afterCritical.pendingThreat == nil and afterCritical.lastResult == 'Crítico - 14 (2d8[6,3] + 5)')
-assert(publicChat[#publicChat] == expectedPublicRoll('Crítico', 14, '2d8［6,3］ + 5'))
+assert(publicChat[#publicChat] == expectedPublicRoll('Crítico', 14, '2d8(6,3) + 5'))
 assert(#afterCritical.ownedDiceGuids == 2)
 local criticalDieOne = afterCritical.ownedDiceGuids[1]
 local criticalDieTwo = afterCritical.ownedDiceGuids[2]
@@ -487,17 +512,17 @@ panelPosition = {x = 35, y = 4, z = 42}
 assert(handleUiEvent({id = 'skill_iniciativa', playerColor = 'White'}))
 local afterInitiative = exportState()
 assert(afterInitiative.lastResult == 'Iniciativa - 10 (d20[7] + 3)')
-assert(publicChat[#publicChat] == expectedPublicRoll('Iniciativa', 10, 'd20［7］ + 3'))
+assert(publicChat[#publicChat] == expectedPublicRoll('Iniciativa', 10, 'd20(7) + 3'))
 
 dieValues = {11}
 assert(handleUiEvent({id = 'skill_luta', playerColor = 'White'}))
 assert(exportState().lastResult == 'Luta - 23 (d20[11] + 12)')
-assert(publicChat[#publicChat] == expectedPublicRoll('Luta', 23, 'd20［11］ + 12'))
+assert(publicChat[#publicChat] == expectedPublicRoll('Luta', 23, 'd20(11) + 12'))
 
 dieValues = {9}
 assert(handleUiEvent({id = 'skill_percepcao', playerColor = 'White'}))
 assert(exportState().lastResult == 'Percepção - 17 (d20[9] + 8)')
-assert(publicChat[#publicChat] == expectedPublicRoll('Percepção', 17, 'd20［9］ + 8'))
+assert(publicChat[#publicChat] == expectedPublicRoll('Percepção', 17, 'd20(9) + 8'))
 
 dieValues = {8}
 assert(handleUiEvent({id = 'skill_cavalgar', playerColor = 'White'}))
@@ -662,8 +687,9 @@ Player = {
     getPlayers = function() return {failedPlayer} end,
     getSpectators = function() return {failedPlayer} end
 }
-printToColor = function(message, color, _)
+printToColor = function(message, color, tint)
     assert(message == 'Corvan: fallback por cor' and color == 'Blue')
+    assert(tint[1] == 1.0 and tint[2] == 0.39 and tint[3] == 0.39)
     colorFallbackCalls = colorFallbackCalls + 1
 end
 printToAll = function(_, _) globalFallbackCalls = globalFallbackCalls + 1 end
@@ -675,7 +701,7 @@ end
 log = function(_, _) diagnostics = diagnostics + 1 end
 
 printToAll = function(_, _) error('global chat unavailable') end
-assert(publicMessage('Corvan: fallback por cor'))
+assert(publicMessage('Corvan: fallback por cor', nil, {1.0, 0.39, 0.39}))
 assert(directCalls == 0 and colorFallbackCalls == 1 and globalFallbackCalls == 0)
 
 local hostPlayer = {
@@ -711,6 +737,38 @@ $chatFallbackResult = $chatFallbackRunner.DoString($runtime + "`n" + $chatFallba
 $expectedChatFallback = '1, 1, 1, 1, 2'
 if ($chatFallbackResult -ne $expectedChatFallback) {
     throw "Smoke dos fallbacks de chat retornou '$chatFallbackResult'; esperado '$expectedChatFallback'."
+}
+
+$chatRelayHarness = @'
+local relayed = {}
+printToAll = function(message, tint)
+    assert(tint[1] == 0.92 and tint[2] == 0.94 and tint[3] == 0.97)
+    table.insert(relayed, message)
+end
+assert(relayRuntimeChat({
+    message = '[FF6464]Corvan[-] • Espada  │ RESULTADO: [62B8FF]17[-]  │ CÁLCULO: d20(4) + 13',
+    richText = true
+}))
+assert(relayed[1] == '[FF6464]Corvan[-] • Espada  │ RESULTADO: [62B8FF]17[-]  │ CÁLCULO: d20(4) + 13')
+assert(relayRuntimeChat({message = '[b]não permitido[/b] [FF6464]permitido[-]', richText = true}))
+assert(relayed[2] == '［b］não permitido［/b］ ［FF6464］permitido［-］')
+assert(relayRuntimeChat({message = '[FF6464]texto comum[-]', richText = false}))
+assert(relayed[3] == '［FF6464］texto comum［-］')
+assert(relayRuntimeChat({message = '[FF6464]tag aberta', richText = true}))
+assert(relayed[4] == '［FF6464］tag aberta')
+assert(relayRuntimeChat({message = '[FF6464][62B8FF]aninhado[-]', richText = true}))
+assert(relayed[5] == '［FF6464］［62B8FF］aninhado［-］')
+assert(relayRuntimeChat({message = '[FF6464]__CORVAN_CHAT_BLUE__[-]', richText = true}))
+assert(relayed[6] == '[FF6464]__CORVAN_CHAT_BLUE__[-]')
+assert(relayRuntimeChat({message = 'fechamento [-] isolado', richText = true}))
+assert(relayed[7] == 'fechamento ［-］ isolado')
+return #relayed
+'@
+
+$chatRelayRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
+$chatRelayResult = $chatRelayRunner.DoString($bootstrap + "`n" + $chatRelayHarness).Number
+if ($chatRelayResult -ne 7) {
+    throw "Smoke do relay rico de chat retornou '$chatRelayResult'; esperado '7'."
 }
 
 $integrityHarness = @'

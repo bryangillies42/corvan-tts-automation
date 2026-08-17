@@ -85,10 +85,10 @@
                     selectionColor="#376987AA" outline="#52575C" outlineSize="1 1" />
 </Defaults>
 
-<!-- A moldura usa o canvas completo; o painel opaco recua 50 px nas laterais
-     e 30 px no topo/rodapé para preservar uma borda decorativa fina. -->
+<!-- A moldura usa exatamente o canvas físico 1870x841; o painel opaco fica
+     centralizado dentro dele para cobrir texturas legadas sem borda dupla. -->
 <Image id="panelBoardArt" active="false" image="__PANEL_UI_IMAGE_URL_XML__"
-       width="1800" height="810" rectAlignment="MiddleCenter"
+       width="1870" height="841" rectAlignment="MiddleCenter"
        position="0 0 -30" rotation="0 0 180" scale="0.25 0.25 1"
        preserveAspect="false" raycastTarget="false" />
 
