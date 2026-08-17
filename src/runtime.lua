@@ -11,6 +11,8 @@ local ROLL_TIMEOUT_SECONDS = 15
 local SPAWN_TIMEOUT_SECONDS = 4
 local DICE_STABLE_FRAMES = 12
 local DICE_LAUNCH_DELAY_FRAMES = 3
+local DICE_VERTICAL_SPEED_MIN = 13.5
+local DICE_VERTICAL_SPEED_MAX = 18.5
 local LEGACY_DICE_OFFSET = {x = 0, y = 2.5, z = -5}
 local function chatColor()
     -- Use the positional Color table required by the TTS message API. Named
@@ -132,6 +134,12 @@ local function duelModifier(character, currentState, upgradedField, baseField, p
     if value >= upgraded then return upgraded end
     if value >= base then return base end
     return 0
+end
+
+local function randomRange(minimum, maximum, sample)
+    sample = finiteNumber(sample, nil)
+    if sample == nil then sample = math.random() end
+    return minimum + (maximum - minimum) * clamp(sample, 0, 1)
 end
 
 function CorvanRules.calculateAttackModifier(character, currentState, weaponKey)
@@ -1121,12 +1129,13 @@ local function launchDie(token, index)
     local up = localDirectionToWorld({x = 0, y = 1, z = 0}, 1)
     local right = localDirectionToWorld({x = 1, y = 0, z = 0}, 1)
     local forward = localDirectionToWorld({x = 0, y = 0, z = 1}, 1)
+    local verticalSpeed = randomRange(DICE_VERTICAL_SPEED_MIN, DICE_VERTICAL_SPEED_MAX)
     local horizontalRight = (math.random() * 2 - 1) * 1.4
     local horizontalForward = (math.random() * 2 - 1) * 1.4
     local worldVelocity = {
-        x = up.x * 16 + right.x * horizontalRight + forward.x * horizontalForward,
-        y = up.y * 16 + right.y * horizontalRight + forward.y * horizontalForward,
-        z = up.z * 16 + right.z * horizontalRight + forward.z * horizontalForward
+        x = up.x * verticalSpeed + right.x * horizontalRight + forward.x * horizontalForward,
+        y = up.y * verticalSpeed + right.y * horizontalRight + forward.y * horizontalForward,
+        z = up.z * verticalSpeed + right.z * horizontalRight + forward.z * horizontalForward
     }
     -- setVelocity é determinístico depois do congelamento inicial do spawn.
     -- addForce pode retornar sem erro enquanto o TTS ainda ignora o impulso.

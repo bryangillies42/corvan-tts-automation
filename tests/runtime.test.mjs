@@ -326,6 +326,10 @@ test('moldura da UI cobre painéis novos e legados sem recarregar ou alterar o o
 test('dados físicos usam offset local, espera oficial e limpeza por GUID próprio', () => {
   assert.match(runtime, /parent\.positionToWorld\(localPosition\)/);
   assert.match(runtime, /DICE_LAUNCH_DELAY_FRAMES\s*=\s*3/);
+  assert.match(runtime, /DICE_VERTICAL_SPEED_MIN\s*=\s*13\.5/);
+  assert.match(runtime, /DICE_VERTICAL_SPEED_MAX\s*=\s*18\.5/);
+  assert.match(runtime, /local verticalSpeed = randomRange\(DICE_VERTICAL_SPEED_MIN, DICE_VERTICAL_SPEED_MAX\)/);
+  assert.match(runtime, /up\.x \* verticalSpeed[\s\S]*up\.y \* verticalSpeed[\s\S]*up\.z \* verticalSpeed/);
   assert.match(runtime, /Wait\.frames\(function\(\) launchDie\(token, index\) end, DICE_LAUNCH_DELAY_FRAMES\)/);
   assert.match(runtime, /object\.addForce\(worldVelocity, 4\)/);
   assert.match(runtime, /object\.addTorque\(angularVelocity, 4\)/);

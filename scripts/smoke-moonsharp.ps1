@@ -140,6 +140,7 @@ local launchCalls = 0
 local torqueCalls = 0
 local velocityFallbackCalls = 0
 local angularFallbackCalls = 0
+local appliedVelocities = {}
 local frameCalls = 0
 local panelPhysicalImage = 'legacy-panel.png'
 local customObjectInspectionFails = false
@@ -284,12 +285,15 @@ spawnObject = function(params)
         setName = function(_) end,
         roll = function() end,
         setVelocity = function(force)
-            assert(force.y ~= 0)
+            assert(force.y >= DICE_VERTICAL_SPEED_MIN and force.y <= DICE_VERTICAL_SPEED_MAX)
             if guid == 'die3' then error('simulated setVelocity failure') end
+            table.insert(appliedVelocities, force)
             velocityFallbackCalls = velocityFallbackCalls + 1
         end,
         addForce = function(force, forceType)
-            assert(guid == 'die3' and forceType == 4 and force.y ~= 0)
+            assert(guid == 'die3' and forceType == 4)
+            assert(force.y >= DICE_VERTICAL_SPEED_MIN and force.y <= DICE_VERTICAL_SPEED_MAX)
+            table.insert(appliedVelocities, force)
             launchCalls = launchCalls + 1
         end,
         setAngularVelocity = function(torque)
@@ -309,6 +313,9 @@ spawnObject = function(params)
 end
 
 assert(registerParent({parentGuid = 'panel1'}))
+assert(randomRange(DICE_VERTICAL_SPEED_MIN, DICE_VERTICAL_SPEED_MAX, 0) == 13.5)
+assert(randomRange(DICE_VERTICAL_SPEED_MIN, DICE_VERTICAL_SPEED_MAX, 0.5) == 16)
+assert(randomRange(DICE_VERTICAL_SPEED_MIN, DICE_VERTICAL_SPEED_MAX, 1) == 18.5)
 assert(string.find(appliedUiXml, 'id="panelBoardArt" active="false"', 1, true),
     'legacy panel did not start with safe inactive UI art')
 assert(attributes.panelBoardArt == 'true')
@@ -546,6 +553,11 @@ assert(launchCalls == 1 and torqueCalls == 1 and frameCalls == 11
     'unexpected launch counts: ' .. tostring(launchCalls) .. ','
         .. tostring(torqueCalls) .. ',' .. tostring(frameCalls) .. ','
         .. tostring(velocityFallbackCalls) .. ',' .. tostring(angularFallbackCalls))
+assert(#appliedVelocities == 11)
+for _, velocity in ipairs(appliedVelocities) do
+    assert(velocity.y >= DICE_VERTICAL_SPEED_MIN and velocity.y <= DICE_VERTICAL_SPEED_MAX)
+    assert(math.abs(velocity.x) <= 1.4 and math.abs(velocity.z) <= 1.4)
+end
 
 assert(handleUiEvent({id = 'weapon_shield', playerColor = 'White'}))
 dieValues = {12}
