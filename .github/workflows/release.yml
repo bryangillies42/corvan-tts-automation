@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -31,16 +35,32 @@ jobs:
             exit 1
           fi
 
+      - name: Resolve release channel
+        shell: bash
+        run: |
+          prerelease="$(node -p 'require("./package.json").release?.prerelease === true ? "true" : "false"')"
+          echo "CORVAN_RELEASE_PRERELEASE=${prerelease}" >> "${GITHUB_ENV}"
+
       - name: Test
         run: npm test
 
       - name: Discover previous stable version
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          previous_tag="$(git tag --list --sort=-v:refname \
+          set -euo pipefail
+          stable_tags="$(gh release list \
+            --exclude-drafts \
+            --exclude-pre-releases \
+            --limit 100 \
+            --json tagName \
+            --jq '.[].tagName')"
+          previous_tag="$(printf '%s\n' "${stable_tags}" \
             | grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' \
             | grep -Fxv "${GITHUB_REF_NAME}" \
-            | head -n 1 || true)"
+            | sort -V \
+            | tail -n 1 || true)"
           if [[ -n "${previous_tag}" ]]; then
             echo "CORVAN_PREVIOUS_VERSION=${previous_tag#v}" >> "${GITHUB_ENV}"
           fi
@@ -61,11 +81,21 @@ jobs:
               exit 0
             fi
           else
-            gh release create "${GITHUB_REF_NAME}" \
-              --verify-tag \
-              --generate-notes \
-              --title "Corvan Duras Console ${GITHUB_REF_NAME}" \
-              --draft
+            if [[ "${CORVAN_RELEASE_PRERELEASE}" == "true" ]]; then
+              gh release create "${GITHUB_REF_NAME}" \
+                --verify-tag \
+                --generate-notes \
+                --title "Corvan Duras Console ${GITHUB_REF_NAME}" \
+                --draft \
+                --prerelease \
+                --latest=false
+            else
+              gh release create "${GITHUB_REF_NAME}" \
+                --verify-tag \
+                --generate-notes \
+                --title "Corvan Duras Console ${GITHUB_REF_NAME}" \
+                --draft
+            fi
           fi
           gh release upload "${GITHUB_REF_NAME}" \
             dist/corvan-runtime.lua \
@@ -79,5 +109,9 @@ jobs:
         shell: bash
         run: |
           if [[ "$(gh release view "${GITHUB_REF_NAME}" --json isDraft --jq .isDraft)" == "true" ]]; then
-            gh release edit "${GITHUB_REF_NAME}" --draft=false --latest
+            if [[ "${CORVAN_RELEASE_PRERELEASE}" == "true" ]]; then
+              gh release edit "${GITHUB_REF_NAME}" --draft=false --prerelease --latest=false
+            else
+              gh release edit "${GITHUB_REF_NAME}" --draft=false --latest
+            fi
           fi

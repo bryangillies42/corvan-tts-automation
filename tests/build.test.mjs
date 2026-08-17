@@ -26,6 +26,20 @@ const PLACEHOLDERS = [
   "__SEED_RUNTIME_LITERAL__",
 ];
 
+test("a v0.2.0 é publicada como pre-release sem substituir o canal estável", async () => {
+  const packageJson = JSON.parse(await readFile(join(ROOT, "package.json"), "utf8"));
+  const workflow = await readFile(join(ROOT, ".github", "workflows", "release.yml"), "utf8");
+
+  assert.equal(packageJson.version, "0.2.0");
+  assert.equal(packageJson.release?.prerelease, true);
+  assert.match(workflow, /CORVAN_RELEASE_PRERELEASE/);
+  assert.match(workflow, /group: release-\$\{\{ github\.ref \}\}/);
+  assert.match(workflow, /gh release list[\s\S]*--exclude-drafts[\s\S]*--exclude-pre-releases/);
+  assert.match(workflow, /--draft[\s\\]*\n[\s\\]*--prerelease[\s\\]*\n[\s\\]*--latest=false/);
+  assert.match(workflow, /--draft=false --prerelease --latest=false/);
+  assert.match(workflow, /--draft=false --latest/);
+});
+
 async function temporaryProject(t) {
   const directory = await mkdtemp(join(tmpdir(), "corvan-build-test-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
