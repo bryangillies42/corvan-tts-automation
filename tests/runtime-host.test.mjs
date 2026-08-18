@@ -26,4 +26,8 @@ test("host mantém regras de personagem fora da infraestrutura", () => {
   assert.match(host, /host\.clear\(\)/);
   assert.match(host, /for guid, _ in pairs\(requested\)/);
   assert.match(host, /if object and belongsToHost\(object\) and destroy\(object\)/);
+  assert.doesNotMatch(host, /type\(Wait\) ~= "table"/);
+  for (const operation of ["time", "frames", "condition"]) {
+    assert.match(host, new RegExp(`type\\(Wait\\.${operation}\\) ~= "function"`));
+  }
 });

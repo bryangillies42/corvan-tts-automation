@@ -127,6 +127,7 @@ test("runtime usa core, envelope isolado, host opt-in e rollback transacional", 
   assert.match(runtime, /TtsRuntimeHost\.create/);
   assert.match(runtime, /transactionId=transaction\.id/);
   assert.match(runtime, /onRollback=function\(_, reason\) rollbackRoll/);
+  assert.match(runtime, /onFailure=function\(reason\) rejectionReason = reason end/);
   assert.doesNotMatch(runtime, /onFailure=function\(reason\) rollbackRoll/);
   assert.match(runtime, /state\.resources\.temporaryHp = state\.resources\.temporaryHp/);
   assert.match(runtime, /state\.resources\.temporaryHp = 0/);

@@ -541,17 +541,19 @@ local function beginDamageRoll(plan, cost, playerColor)
         rollbackRoll(transaction, "host físico indisponível")
         return false
     end
+    local rejectionReason = nil
     local ok, accepted = pcall(function()
         return host.roll({
             transactionId=transaction.id, playerColor=playerColor,
             groups=deepCopy(plan.groups), rollback=deepCopy(before)
         }, {
             onComplete=function(result) finishRoll(transaction, result) end,
-            onRollback=function(_, reason) rollbackRoll(transaction, reason) end
+            onRollback=function(_, reason) rollbackRoll(transaction, reason) end,
+            onFailure=function(reason) rejectionReason = reason end
         })
     end)
     if not ok or accepted == false then
-        rollbackRoll(transaction, ok and "host recusou a rolagem" or accepted)
+        rollbackRoll(transaction, ok and (rejectionReason or "host recusou a rolagem") or accepted)
         return false
     end
     cacheAndRender()

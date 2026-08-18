@@ -429,8 +429,16 @@ function TtsRuntimeHost.create(rawConfig, rawEnvironment)
         if not groups then invoke(callbacks.onFailure, physicalCountOrFailure, transactionId) return false end
         if physicalCountOrFailure > 0 then
             if not ownerGuid() then invoke(callbacks.onFailure, "o painel proprietário não está disponível.", transactionId) return false end
-            if type(spawnObject) ~= "function" then invoke(callbacks.onFailure, "não foi possível criar dados físicos.", transactionId) return false end
-            if type(Wait) ~= "table" then invoke(callbacks.onFailure, "o agendador do TTS não está disponível.", transactionId) return false end
+            if spawnObject == nil then invoke(callbacks.onFailure, "não foi possível criar dados físicos.", transactionId) return false end
+            -- APIs estáticas do TTS podem ser expostas pelo MoonSharp como
+            -- userdata/proxy em vez de uma table Lua comum. Validamos as
+            -- operações usadas, não a representação interna do host.
+            if Wait == nil or type(Wait.time) ~= "function"
+                or type(Wait.frames) ~= "function" or type(Wait.condition) ~= "function"
+            then
+                invoke(callbacks.onFailure, "o agendador do TTS não está disponível.", transactionId)
+                return false
+            end
         end
 
         host.clear()
