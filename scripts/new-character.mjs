@@ -9,6 +9,19 @@ function fail(message) {
   throw new Error(message);
 }
 
+function jsonStringContents(value) {
+  return JSON.stringify(String(value)).slice(1, -1);
+}
+
+function xmlAttribute(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
 async function exists(path) {
   try { await access(path); return true; } catch { return false; }
 }
@@ -44,7 +57,7 @@ async function main() {
   if (!Array.isArray(registry.characters)) fail("characters/registry.json não contém uma lista characters.");
   if (registry.characters.some((profile) => profile.id === options.id)) fail(`ID já registrado: ${options.id}`);
 
-  const replacements = {
+  const rawReplacements = {
     "__CHARACTER_ID__": options.id,
     "__CHARACTER_NAME__": options.name,
     "__CHARACTER_SHORT_NAME__": options.shortName,
@@ -55,7 +68,12 @@ async function main() {
     const sourcePath = join(templateDir, file);
     if (!(await exists(sourcePath))) fail(`Arquivo obrigatório ausente no template: ${file}`);
     let content = await readFile(sourcePath, "utf8");
-    for (const [token, replacement] of Object.entries(replacements)) content = content.replaceAll(token, replacement);
+    const encode = file === "character.json" ? jsonStringContents
+      : file === "ui.xml" ? xmlAttribute
+        : String;
+    for (const [token, replacement] of Object.entries(rawReplacements)) {
+      content = content.replaceAll(token, encode(replacement));
+    }
     if (/__CHARACTER_(?:ID|NAME|SHORT_NAME)__|__RUNTIME_MARKER__/.test(content)) {
       fail(`Token obrigatório não resolvido no template: ${file}`);
     }

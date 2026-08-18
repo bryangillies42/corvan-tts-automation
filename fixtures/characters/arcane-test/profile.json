@@ -12,8 +12,8 @@
   },
   "assetsDir": "assets",
   "assets": {
-    "panelImageUrl": "https://example.invalid/arcane-test-panel.png",
-    "panelUiImageUrl": "https://example.invalid/arcane-test-panel-ui.jpg"
+    "panelImage": "panel-board.png",
+    "panelUiImage": "panel-board.png"
   },
   "files": {
     "runtime": "arcane-test-runtime.lua",
@@ -33,10 +33,10 @@
   "runtimeMarker": "ARCANE_TEST_RUNTIME",
   "minBootstrapVersion": "1.0.2",
   "geometry": {
-    "canvasWidth": 1000,
-    "canvasHeight": 600,
-    "panelWidth": 920,
-    "panelHeight": 520
+    "canvasWidth": 1200,
+    "canvasHeight": 800,
+    "panelWidth": 1100,
+    "panelHeight": 700
   },
   "guid": "a7c4e1"
 }

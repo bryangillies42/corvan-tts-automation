@@ -137,6 +137,7 @@ A listagem não depende do nome visível do objeto. Ela lê `characterId` e os m
 
 - [Corvan — produto legado e comportamento](characters/corvan/README.md)
 - [Spentar — scaffold e checklist](characters/spentar/README.md)
+- [Roteiro manual multi-personagem da v0.2.1](docs/testing/multi-character-v0.2.1.md)
 
 ## Limitações
 

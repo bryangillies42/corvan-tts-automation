@@ -67,3 +67,32 @@ test("character:new valida o template antes de criar diretório ou alterar o reg
   await assert.rejects(readFile(join(workspace, "characters", "nao-criado", "character.json"), "utf8"));
   assert.equal(await readFile(registryPath, "utf8"), originalRegistry);
 });
+
+test("character:new escapa nomes em JSON e XML sem alterar a identidade registrada", async (t) => {
+  const workspace = await mkdtemp(join(tmpdir(), "character-scaffold-escaped-"));
+  t.after(() => rm(workspace, {recursive: true, force: true}));
+  await mkdir(join(workspace, "characters"), {recursive: true});
+  await cp(join(ROOT, "characters", "registry.json"), join(workspace, "characters", "registry.json"));
+  await cp(join(ROOT, "templates"), join(workspace, "templates"), {recursive: true});
+
+  const name = 'Mago & "Lua" <Norte>';
+  const shortName = "Mago d'Água";
+  await run(process.execPath, [
+    SCRIPT, "--root", workspace,
+    "--id", "mago-lua",
+    "--name", name,
+    "--short-name", shortName,
+  ]);
+
+  const registry = JSON.parse(await readFile(join(workspace, "characters", "registry.json"), "utf8"));
+  const profile = registry.characters.find(({id}) => id === "mago-lua");
+  const character = JSON.parse(await readFile(join(workspace, "characters", "mago-lua", "character.json"), "utf8"));
+  const ui = await readFile(join(workspace, "characters", "mago-lua", "ui.xml"), "utf8");
+
+  assert.equal(profile.displayName, name);
+  assert.equal(profile.shortName, shortName);
+  assert.equal(character.name, name);
+  assert.equal(character.shortName, shortName);
+  assert.match(ui, /text="Mago &amp; &quot;Lua&quot; &lt;Norte&gt;"/);
+  assert.doesNotMatch(ui, /text="Mago & "Lua"/);
+});

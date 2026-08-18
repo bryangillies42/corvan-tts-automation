@@ -1,8 +1,8 @@
 <Defaults>
   <Text color="#FFFFFF" fontSize="18" />
 </Defaults>
-<Image id="arcaneTestArt" image="__PANEL_UI_IMAGE_URL_XML__" width="1000" height="600" position="0 0 -30" rotation="0 0 180" scale="0.25 0.25 1" />
-<Panel id="arcaneTestConsole" width="920" height="520" position="0 0 -30" rotation="0 0 180" scale="0.25 0.25 1">
+<Image id="arcaneTestArt" image="__PANEL_UI_IMAGE_URL_XML__" width="1200" height="800" position="0 0 -30" rotation="0 0 180" scale="0.25 0.25 1" />
+<Panel id="arcaneTestConsole" width="1100" height="700" position="0 0 -30" rotation="0 0 180" scale="0.25 0.25 1">
   <Text id="arcaneTitle" text="Arcane Test" />
   <Text id="arcaneFocus" text="FOCO 12/12" />
   <Text id="arcaneCasts" text="CONJURAÇÕES 0" />

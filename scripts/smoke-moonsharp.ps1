@@ -26,6 +26,17 @@ function ConvertTo-LuaLiteral($value) {
     }
     return ([System.Convert]::ToString($value, [System.Globalization.CultureInfo]::InvariantCulture))
 }
+
+function ConvertTo-LuaLongString([string]$value) {
+    for ($level = 0; $level -le 16; $level++) {
+        $equals = '=' * $level
+        $close = "]$equals]"
+        if (-not $value.Contains($close)) {
+            return "[$equals[$value$close"
+        }
+    }
+    throw 'Não foi possível criar um literal Lua longo sem colisão.'
+}
 $candidateDlls = @()
 if (${env:ProgramFiles(x86)}) {
     $candidateDlls += Join-Path ${env:ProgramFiles(x86)} 'Steam\steamapps\common\Tabletop Simulator\Tabletop Simulator_Data\Managed\MoonSharp.Interpreter.dll'
@@ -78,6 +89,23 @@ $fixtureSavedObject = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'dis
 $fixtureBootstrap = $fixtureSavedObject.ObjectStates[0].LuaScript
 $bootstrap = $savedObject.ObjectStates[0].LuaScript
 
+$fixturePanelAsset = Join-Path $projectRoot 'fixtures\characters\arcane-test\assets\panel-board.png'
+if (-not (Test-Path -LiteralPath $fixturePanelAsset)) {
+    throw 'Asset físico da fixture Arcane Test não foi encontrado.'
+}
+$fixturePanelImage = [System.Drawing.Image]::FromFile($fixturePanelAsset)
+try {
+    if ($fixturePanelImage.Width * 2 -ne $fixturePanelImage.Height * 3) {
+        throw "Asset Arcane possui $($fixturePanelImage.Width)x$($fixturePanelImage.Height); esperado aspecto 3:2."
+    }
+} finally {
+    $fixturePanelImage.Dispose()
+}
+if (($fixtureSavedObject.ObjectStates[0].CustomImage.ImageURL -match 'example\.invalid') -or
+    ($fixtureSavedObject.ObjectStates[0].XmlUI -match 'example\.invalid')) {
+    throw 'Saved Object Arcane ainda contém URL fictícia.'
+}
+
 $compiler = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $null = $compiler.LoadString($runtime)
 $null = $compiler.LoadString($bootstrap)
@@ -126,6 +154,330 @@ $fixtureRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.Core
 $fixtureResult = $fixtureRunner.DoString($fixturePrelude + "`n" + $fixtureRuntime + "`n" + $fixtureAssertions).ToString()
 if ($fixtureResult -ne '11, 1, 8') {
     throw "Smoke da fixture retornou '$fixtureResult'; esperado '11, 1, 8'."
+}
+
+# Executa os dois adaptadores em ambientes Lua isolados, como o TTS faz com
+# objetos diferentes, mas sobre o mesmo mundo fake de painéis, helpers e dados.
+# Isso torna observável qualquer travessia acidental de GUID ou characterId.
+$corvanRuntimeLiteral = ConvertTo-LuaLongString $runtime
+$fixtureRuntimeLiteral = ConvertTo-LuaLongString $fixtureRuntime
+$sharedWorldHarness = @"
+local corvanSource = $corvanRuntimeLiteral
+local fixtureSource = $fixtureRuntimeLiteral
+local corvanConfig = $characterConfigLiteral
+local fixtureConfig = {
+    id = 'arcane-test', version = '0.1.0', name = 'Arcane Test', shortName = 'Arcane',
+    resources = {focus = {max = 12}}, actions = {cast = {formula = '1d6+2'}}
+}
+
+local world = {crossCalls = 0, panels = {}, dice = {}}
+
+local function panel(guid, characterId)
+    local value = {guid = guid, characterId = characterId, calls = 0, cache = nil}
+    value.call = function(name, payload)
+        value.calls = value.calls + 1
+        if type(payload) == 'table' and payload.characterId ~= nil
+            and payload.characterId ~= characterId then
+            world.crossCalls = world.crossCalls + 1
+            return false
+        end
+        if name == 'cacheRuntimeState' then value.cache = payload.state end
+        return true
+    end
+    value.positionToWorld = function(position) return position end
+    value.getPosition = function() return {x = 0, y = 1, z = 0} end
+    world.panels[guid] = value
+    return value
+end
+
+local corvanPanel = panel('corvan-panel', 'corvan')
+local arcanePanel = panel('arcane-panel', 'arcane-test')
+
+local function die(guid, metadata)
+    local value = {guid = guid, metadata = metadata, destroyed = false}
+    value.getGUID = function() return guid end
+    value.getGMNotes = function() return 'DIE:' .. guid end
+    world.dice[guid] = value
+    return value
+end
+
+local corvanDie = die('corvan-die', {
+    project = 'corvan-tts-automation', characterId = 'corvan',
+    kind = 'owned-die', ownerPanelGuid = 'corvan-panel'
+})
+local arcaneDie = die('arcane-die', {
+    project = 'corvan-tts-automation', characterId = 'arcane-test',
+    kind = 'owned-die', ownerPanelGuid = 'arcane-panel'
+})
+
+local function runtimeEnvironment(source, label, helperGuid, config)
+    local env = {}
+    env._G = env
+    setmetatable(env, {__index = _G})
+    env.JSON = {
+        decode = function(text)
+            local dieGuid = type(text) == 'string' and string.match(text, '^DIE:(.+)$') or nil
+            if dieGuid ~= nil and world.dice[dieGuid] ~= nil then
+                return world.dice[dieGuid].metadata
+            end
+            return config
+        end,
+        encode = function(_) return '{}' end
+    }
+    env.self = {
+        getGUID = function() return helperGuid end,
+        setGMNotes = function(_) return true end,
+        getGMNotes = function() return '{}' end
+    }
+    env.getObjectFromGUID = function(guid)
+        return world.panels[guid] or world.dice[guid]
+    end
+    env.getAllObjects = function()
+        return {corvanDie, arcaneDie}
+    end
+    env.destroyObject = function(object)
+        object.destroyed = true
+    end
+    env.Wait = {
+        frames = function(callback, _) callback() end,
+        time = function(callback, _) callback() end
+    }
+    env.Player = {getPlayers = function() return {} end}
+    env.printToAll = function(_, _) return true end
+    env.printToColor = function(_, _, _) return true end
+    env.log = function(_, _) return true end
+    env.WebRequest = nil
+    local chunk, loadError = load(source, label, 't', env)
+    assert(chunk, loadError)
+    chunk()
+    return env
+end
+
+local corvan = runtimeEnvironment(corvanSource, 'corvan-runtime', 'corvan-helper', corvanConfig)
+local arcane = runtimeEnvironment(fixtureSource, 'arcane-runtime', 'arcane-helper', fixtureConfig)
+
+assert(corvan.registerParent({
+    characterId = 'corvan', parentGuid = 'corvan-panel',
+    state = {
+        characterId = 'corvan', runtimeVersion = '0.2.1', schemaVersion = 1,
+        characterStateSchemaVersion = 1,
+        character = {hp = 70, mp = 17, runtimeVersion = '0.2.1', effects = {}},
+        core = {
+            ownedDiceOwnerGuid = 'corvan-panel',
+            ownedDiceGuids = {'corvan-die', 'arcane-die'}
+        }
+    }
+}), 'shared world: Corvan registerParent failed')
+assert(arcane.registerParent({characterId = 'arcane-test', parentGuid = 'arcane-panel'}),
+    'shared world: Arcane registerParent failed')
+
+local corvanBefore = corvan.exportState()
+local arcaneBefore = arcane.exportState()
+assert(corvanBefore.characterId == 'corvan' and corvanBefore.helperGuid == 'corvan-helper',
+    'shared world: Corvan identity/helper mismatch')
+assert(arcaneBefore.characterId == 'arcane-test'
+    and arcane.healthCheck({}).parentGuid == 'arcane-panel',
+    'shared world: Arcane identity/helper mismatch')
+assert(corvanPanel.cache.characterId == 'corvan', 'shared world: Corvan cache mismatch')
+assert(arcanePanel.cache.characterId == 'arcane-test', 'shared world: Arcane cache mismatch')
+
+assert(not corvan.handleUiEvent({
+    characterId = 'arcane-test', parentGuid = 'corvan-panel', id = 'clear_dice'
+}), 'shared world: Corvan accepted Arcane event')
+assert(not arcane.handleUiEvent({
+    characterId = 'corvan', parentGuid = 'arcane-panel', id = 'cast'
+}), 'shared world: Arcane accepted Corvan event')
+assert(not corvan.importState(arcaneBefore), 'shared world: Corvan accepted Arcane state')
+assert(not arcane.importState(corvanBefore), 'shared world: Arcane accepted Corvan state')
+
+assert(arcane.handleUiEvent({
+    characterId = 'arcane-test', parentGuid = 'arcane-panel', id = 'cast', playerColor = 'White'
+}), 'shared world: Arcane cast failed')
+local arcaneAfterCast = arcane.exportState()
+assert(arcaneAfterCast.character.focus == 11 and arcaneAfterCast.character.casts == 1,
+    'shared world: Arcane state did not mutate locally')
+
+assert(corvan.handleUiEvent({
+    characterId = 'corvan', parentGuid = 'corvan-panel', id = 'clear_dice', playerColor = 'White'
+}), 'shared world: Corvan clear failed')
+assert(corvanDie.destroyed == true, 'shared world: Corvan die survived own clear')
+assert(arcaneDie.destroyed == false, 'shared world: Arcane die was destroyed by Corvan')
+local arcaneAfterCorvanClear = arcane.exportState()
+assert(arcaneAfterCorvanClear.character.focus == 11 and arcaneAfterCorvanClear.character.casts == 1,
+    'shared world: Corvan clear changed Arcane state')
+assert(arcanePanel.cache.characterId == 'arcane-test', 'shared world: Arcane cache was replaced')
+assert(world.crossCalls == 0, 'shared world: parent received cross-character callback')
+
+return corvanPanel.cache.characterId, arcanePanel.cache.characterId,
+    corvanDie.destroyed, arcaneDie.destroyed,
+    arcaneAfterCorvanClear.character.focus, world.crossCalls
+"@
+
+$sharedWorldRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
+$sharedWorldResult = $sharedWorldRunner.DoString($sharedWorldHarness).ToString()
+$expectedSharedWorld = '"corvan", "arcane-test", true, false, 11, 0'
+if ($sharedWorldResult -ne $expectedSharedWorld) {
+    throw "Smoke multi-personagem compartilhado retornou '$sharedWorldResult'; esperado '$expectedSharedWorld'."
+}
+
+# O segundo mundo compartilhado executa os dois bootstraps completos. O Arcane
+# enxerga o helper Corvan já existente em getAllObjects e precisa ignorá-lo,
+# criando e mantendo seu próprio helper com GM Notes e binding independentes.
+$corvanBootstrapLiteral = ConvertTo-LuaLongString $bootstrap
+$fixtureBootstrapLiteral = ConvertTo-LuaLongString $fixtureBootstrap
+$sharedBootstrapHarness = @"
+local corvanBootstrapSource = $corvanBootstrapLiteral
+local arcaneBootstrapSource = $fixtureBootstrapLiteral
+local world = {helpers = {}, json = {}, jsonSerial = 0, crossBindings = 0}
+
+local function jsonEncode(value)
+    world.jsonSerial = world.jsonSerial + 1
+    local token = 'JSON:' .. tostring(world.jsonSerial)
+    world.json[token] = value
+    return token
+end
+
+local function jsonDecode(value)
+    return world.json[value]
+end
+
+local function livingHelpers()
+    local values = {}
+    for _, helper in ipairs(world.helpers) do
+        if not helper.destroyed then table.insert(values, helper) end
+    end
+    return values
+end
+
+local function bootstrapEnvironment(source, label, characterId, panelGuid, version, marker)
+    local env = {}
+    env._G = env
+    setmetatable(env, {__index = _G})
+    local installedXml = ''
+    env.JSON = {encode = jsonEncode, decode = jsonDecode}
+    env.Wait = {
+        frames = function(callback, _) callback() end,
+        time = function(callback, _) callback() end,
+        condition = function(callback, condition, _, timeout)
+            if condition() then callback() elseif timeout then timeout() end
+        end
+    }
+    env.self = {
+        UI = {
+            loading = false,
+            setXml = function(xml) installedXml = xml end,
+            getXml = function() return installedXml end,
+            setAttribute = function(_, _, _) return true end
+        },
+        getGUID = function() return panelGuid end,
+        positionToWorld = function(position) return position end,
+        getPosition = function() return {x = 0, y = 1, z = 0} end,
+        createButton = function(_) return true end,
+        clearButtons = function() return true end
+    }
+    env.getAllObjects = livingHelpers
+    env.getObjectFromGUID = function(guid)
+        for _, helper in ipairs(world.helpers) do
+            if not helper.destroyed and helper.getGUID() == guid then return helper end
+        end
+        return nil
+    end
+    env.destroyObject = function(object) object.destroyed = true end
+    env.spawnObject = function(params)
+        local helperGuid = characterId .. '-helper-' .. tostring(#world.helpers + 1)
+        local helper = {
+            destroyed = false,
+            notes = '',
+            boundCharacterId = nil,
+            boundParentGuid = nil
+        }
+        helper.getGUID = function() return helperGuid end
+        helper.getGMNotes = function() return helper.notes end
+        helper.setGMNotes = function(notes) helper.notes = notes end
+        helper.setName = function(_) return true end
+        helper.setDescription = function(_) return true end
+        helper.setLock = function(_) return true end
+        helper.setInvisibleTo = function(_) return true end
+        helper.setLuaScript = function(_) return true end
+        helper.reload = function() return helper end
+        helper.call = function(name, payload)
+            if name == 'registerParent' then
+                if payload.characterId ~= characterId or payload.parentGuid ~= panelGuid then
+                    world.crossBindings = world.crossBindings + 1
+                    return false
+                end
+                helper.boundCharacterId = payload.characterId
+                helper.boundParentGuid = payload.parentGuid
+                return true
+            elseif name == 'healthCheck' then
+                return {
+                    ok = true, characterId = characterId, runtimeMarker = marker,
+                    version = version, parentGuid = panelGuid, rollInProgress = false
+                }
+            elseif name == 'exportState' then
+                return {
+                    characterId = characterId, runtimeVersion = version,
+                    parentGuid = panelGuid, character = {}, core = {}
+                }
+            elseif name == 'importState' then
+                return type(payload) == 'table'
+                    and (payload.characterId == nil or payload.characterId == characterId)
+            end
+            return true
+        end
+        table.insert(world.helpers, helper)
+        params.callback_function(helper)
+    end
+    env.Player = {getPlayers = function() return {} end}
+    env.printToColor = function(_, _, _) return true end
+    env.log = function(_, _) return true end
+    local chunk, loadError = load(source, label, 't', env)
+    assert(chunk, loadError)
+    chunk()
+    return env
+end
+
+local corvan = bootstrapEnvironment(
+    corvanBootstrapSource, 'corvan-bootstrap', 'corvan', 'corvan-panel', '0.2.1', 'CORVAN_RUNTIME')
+local arcane = bootstrapEnvironment(
+    arcaneBootstrapSource, 'arcane-bootstrap', 'arcane-test', 'arcane-panel', '0.1.0', 'ARCANE_TEST_RUNTIME')
+
+corvan.onLoad('')
+assert(#world.helpers == 1, 'shared bootstrap: Corvan did not create exactly one helper')
+local corvanHelper = world.helpers[1]
+arcane.onLoad('')
+assert(#world.helpers == 2, 'shared bootstrap: Arcane adopted Corvan helper or spawned more than one')
+local arcaneHelper = world.helpers[2]
+
+local corvanInfo = corvan.getBootstrapInfo()
+local arcaneInfo = arcane.getBootstrapInfo()
+assert(corvanInfo.characterId == 'corvan' and corvanInfo.helperGuid == corvanHelper.getGUID(),
+    'shared bootstrap: Corvan helper binding mismatch')
+assert(arcaneInfo.characterId == 'arcane-test' and arcaneInfo.helperGuid == arcaneHelper.getGUID(),
+    'shared bootstrap: Arcane helper binding mismatch')
+assert(corvanHelper.boundCharacterId == 'corvan' and corvanHelper.boundParentGuid == 'corvan-panel')
+assert(arcaneHelper.boundCharacterId == 'arcane-test' and arcaneHelper.boundParentGuid == 'arcane-panel')
+
+local corvanNotes = jsonDecode(corvanHelper.getGMNotes())
+local arcaneNotes = jsonDecode(arcaneHelper.getGMNotes())
+assert(corvanNotes.characterId == 'corvan' and corvanNotes.parentGuid == 'corvan-panel')
+assert(arcaneNotes.characterId == 'arcane-test' and arcaneNotes.parentGuid == 'arcane-panel')
+assert(world.crossBindings == 0, 'shared bootstrap: cross-character registerParent occurred')
+
+corvan.onDestroy()
+assert(corvanHelper.destroyed == true, 'shared bootstrap: Corvan helper survived panel destruction')
+assert(arcaneHelper.destroyed == false, 'shared bootstrap: Corvan destroyed Arcane helper')
+assert(arcane.getBootstrapInfo().helperGuid == arcaneHelper.getGUID())
+
+return corvanInfo.characterId, arcaneInfo.characterId,
+    corvanHelper.destroyed, arcaneHelper.destroyed, world.crossBindings
+"@
+
+$sharedBootstrapRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
+$sharedBootstrapResult = $sharedBootstrapRunner.DoString($sharedBootstrapHarness).ToString()
+$expectedSharedBootstrap = '"corvan", "arcane-test", true, false, 0'
+if ($sharedBootstrapResult -ne $expectedSharedBootstrap) {
+    throw "Smoke de bootstraps compartilhados retornou '$sharedBootstrapResult'; esperado '$expectedSharedBootstrap'."
 }
 
 $rulesHarness = @'
@@ -1576,4 +1928,4 @@ if ($releaseDiscoveryResult -ne '"arcane-test-v2.0.0", true') {
     throw "Smoke de descoberta retornou '$releaseDiscoveryResult'."
 }
 
-Write-Output "MoonSharp OK: runtime/bootstrap compilam; combate $runtimeFlowResult; SHA-256 em $integrityFrames frames; onLoad, cópia persistente, watchdog, update e rollback seguros"
+Write-Output "MoonSharp OK: runtime/bootstrap compilam; runtimes e helpers Corvan+Arcane isolados; combate $runtimeFlowResult; SHA-256 em $integrityFrames frames; onLoad, cópia persistente, watchdog, update e rollback seguros"

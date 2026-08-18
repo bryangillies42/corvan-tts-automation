@@ -30,7 +30,7 @@ const PLACEHOLDERS = [
   "__SEED_RUNTIME_LITERAL__",
 ];
 
-test("a v0.2.1 é preparada como pre-release sem substituir o canal estável", async () => {
+test("a v0.2.1 preserva a política de canal e Latest definida no registry", async () => {
   const packageJson = JSON.parse(await readFile(join(ROOT, "package.json"), "utf8"));
   const registry = await loadCharacterRegistry(ROOT);
   const corvan = registry.characters.find((profile) => profile.id === "corvan");
@@ -39,7 +39,7 @@ test("a v0.2.1 é preparada como pre-release sem substituir o canal estável", a
   assert.equal(packageJson.version, undefined);
   assert.equal(packageJson.release, undefined);
   assert.equal(corvan.version, "0.2.1");
-  assert.equal(corvan.prerelease, true);
+  assert.equal(typeof corvan.prerelease, "boolean");
   assert.equal(corvan.globalLatest, true);
   assert.equal(corvan.tagMode, "legacy");
   assert.match(workflow, /group: release-\$\{\{ github\.ref \}\}/);
@@ -47,6 +47,7 @@ test("a v0.2.1 é preparada como pre-release sem substituir o canal estável", a
   assert.match(workflow, /--character "\$\{RELEASE_ID\}"/);
   assert.match(workflow, /latest=false/);
   assert.match(workflow, /gh release edit "\$\{RELEASE_TAG\}" --draft=false --latest/);
+  assert.match(workflow, /RELEASE_PRERELEASE/);
 });
 
 async function temporaryProject(t) {
@@ -543,6 +544,9 @@ test("Corvan e fixture divergente geram produtos isolados sem colisão", async (
   assert.equal(corvan.manifest.releaseTag, "v0.2.1");
   assert.equal(arcane.manifest.characterId, "arcane-test");
   assert.equal(arcane.manifest.releaseTag, "arcane-test-v0.1.0");
+  assert.match(arcane.panelImageUrl, /fixtures\/characters\/arcane-test\/assets\/panel-board\.png\?sha256=[0-9a-f]{64}$/);
+  assert.equal(arcane.panelUiImageUrl, arcane.panelImageUrl);
+  assert.doesNotMatch(arcane.files["Arcane_Test_Console.json"], /example\.invalid/);
   assert.match(arcane.files["arcane-test-runtime.lua"], /CharacterRuntimeCore = \{\}/);
   assert.match(arcane.files["arcane-test-runtime.lua"], /ARCANE_TEST_RUNTIME/);
   assert.doesNotMatch(arcane.files["arcane-test-runtime.lua"], /CorvanRules/);
