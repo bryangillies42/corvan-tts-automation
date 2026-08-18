@@ -1,18 +1,27 @@
--- Corvan Combat Console - stable Tabletop Simulator bootstrap.
+-- Bootstrap estável para consoles de personagem no Tabletop Simulator.
 -- This file deliberately contains no character rules. The replaceable runtime lives
 -- on an invisible helper so this visible panel never needs to be reloaded to update.
 
 local BOOTSTRAP_VERSION = "1.0.2"
 local STATE_SCHEMA_VERSION = 1
 local MANIFEST_SCHEMA_VERSION = 1
-local SEED_RUNTIME_VERSION = "0.2.1"
+local CHARACTER_ID = __CHARACTER_ID_LITERAL__
+local DISPLAY_NAME = __DISPLAY_NAME_LITERAL__
+local SHORT_NAME = __SHORT_NAME_LITERAL__
+local RELEASE_DISCOVERY_MODE = __RELEASE_DISCOVERY_MODE_LITERAL__
+local RELEASE_TAG_PREFIX = __RELEASE_TAG_PREFIX_LITERAL__
+local MANIFEST_ASSET_NAME = __MANIFEST_ASSET_NAME_LITERAL__
+local RUNTIME_ASSET_NAME = __RUNTIME_ASSET_NAME_LITERAL__
+local RUNTIME_MARKER = __RUNTIME_MARKER_LITERAL__
+local SEED_RUNTIME_VERSION = __CHARACTER_VERSION_LITERAL__
 local SEED_UI = __SEED_UI_LITERAL__
 local SEED_RUNTIME = __SEED_RUNTIME_LITERAL__
 
-local RELEASE_API_URL = "https://api.github.com/repos/bryangillies42/corvan-tts-automation/releases/latest"
+local RELEASE_LATEST_API_URL = "https://api.github.com/repos/bryangillies42/corvan-tts-automation/releases/latest"
+local RELEASE_LIST_API_URL = "https://api.github.com/repos/bryangillies42/corvan-tts-automation/releases"
 local TRUSTED_RUNTIME_PREFIX = "https://github.com/bryangillies42/corvan-tts-automation/releases/download/"
-local RUNTIME_MARKER = "CORVAN_RUNTIME"
 local MAX_RUNTIME_BYTES = 1572864
+local MAX_RELEASE_PAGES = 10
 local HELPER_PROBE_INTERVAL = 0.25
 local HELPER_HEALTH_TIMEOUT = 10
 local WEB_REQUEST_TIMEOUT = 20
@@ -60,6 +69,7 @@ local rollbackUpdate
 local function defaultState()
     return {
         schemaVersion = STATE_SCHEMA_VERSION,
+        characterId = CHARACTER_ID,
         bootstrapVersion = BOOTSTRAP_VERSION,
         helperGuid = nil,
         releaseEtag = nil,
@@ -368,6 +378,12 @@ local function sanitizePersistedState(decoded)
     if type(decoded) ~= "table" then
         return clean
     end
+    if decoded.characterId ~= nil and decoded.characterId ~= CHARACTER_ID then
+        return clean
+    end
+    if decoded.characterId == nil and CHARACTER_ID ~= "corvan" then
+        return clean
+    end
 
     if type(decoded.helperGuid) == "string" and decoded.helperGuid ~= "" then
         clean.helperGuid = decoded.helperGuid
@@ -389,7 +405,9 @@ local function sanitizePersistedState(decoded)
             clean.releaseEtag = decoded.releaseEtag
         end
     end
-    if type(decoded.runtimeState) == "table" then
+    if type(decoded.runtimeState) == "table"
+        and (decoded.runtimeState.characterId == CHARACTER_ID
+            or (CHARACTER_ID == "corvan" and decoded.runtimeState.characterId == nil)) then
         clean.runtimeState = decoded.runtimeState
     end
     if type(decoded.uiXml) == "string" then
@@ -415,7 +433,7 @@ end
 
 local function tell(playerColor, message, tint)
     local color = playerColorOf(playerColor)
-    pcall(printToColor, "Corvan • " .. message, color, tint or {0.80, 0.68, 0.38})
+    pcall(printToColor, SHORT_NAME .. " • " .. message, color, tint or {0.80, 0.68, 0.38})
 end
 
 local function chatSafeText(value)
@@ -515,13 +533,13 @@ local function showUiFallback(reason)
             font_color = {0.90, 0.72, 0.34, 1},
             hover_color = {0.18, 0.22, 0.25, 1},
             press_color = {0.30, 0.22, 0.10, 1},
-            tooltip = "Recarregar a interface do Console do Corvan",
+            tooltip = "Recarregar a interface do console de " .. DISPLAY_NAME,
         })
     end)
     if created then
         uiFallbackVisible = true
     end
-    log("Corvan bootstrap: " .. tostring(reason) .. " Use o botão CARREGAR PAINEL.")
+    log(DISPLAY_NAME .. " bootstrap: " .. tostring(reason) .. " Use o botão CARREGAR PAINEL.")
 end
 
 local function installedUiMatches(xml)
@@ -584,7 +602,7 @@ local function installUiXml(xml)
 
     local nextUiIds = collectUiIds(xml)
     if nextUiIds.refresh == nil or nextUiIds.refreshStatus == nil then
-        log("Corvan bootstrap: interface recusada por não declarar os controles estáveis.")
+        log(DISPLAY_NAME .. " bootstrap: interface recusada por não declarar os controles estáveis.")
         return false
     end
 
@@ -796,7 +814,10 @@ end
 
 local function ownsHelper(helper)
     local notes = helperNotes(helper)
-    return notes ~= nil and notes.parentGuid == self.getGUID()
+    return notes ~= nil
+        and notes.parentGuid == self.getGUID()
+        and (notes.characterId == CHARACTER_ID
+            or (CHARACTER_ID == "corvan" and notes.characterId == nil))
 end
 
 local function helperFromState()
@@ -840,9 +861,13 @@ local function configureHelper(helper)
         return
     end
     pcall(function()
-        helper.setGMNotes(safeEncode({parentGuid = self.getGUID()}))
-        helper.setName("Corvan Runtime Helper [" .. self.getGUID() .. "]")
-        helper.setDescription("Gerenciado automaticamente pelo Console de Combate do Corvan.")
+        helper.setGMNotes(safeEncode({
+            project = "corvan-tts-automation",
+            characterId = CHARACTER_ID,
+            parentGuid = self.getGUID()
+        }))
+        helper.setName(DISPLAY_NAME .. " Runtime Helper [" .. self.getGUID() .. "]")
+        helper.setDescription("Gerenciado automaticamente pelo console de " .. DISPLAY_NAME .. ".")
         helper.setLock(true)
         helper.setInvisibleTo(PLAYER_COLORS)
         helper.interactable = false
@@ -862,6 +887,18 @@ local function healthIsValid(health, expectedVersion)
     if health.parentGuid ~= nil and health.parentGuid ~= self.getGUID() then
         return false
     end
+    if health.characterId ~= nil and health.characterId ~= CHARACTER_ID then
+        return false
+    end
+    if health.characterId == nil and CHARACTER_ID ~= "corvan" then
+        return false
+    end
+    if health.runtimeMarker ~= nil and health.runtimeMarker ~= RUNTIME_MARKER then
+        return false
+    end
+    if health.runtimeMarker == nil and CHARACTER_ID ~= "corvan" then
+        return false
+    end
     if expectedVersion ~= nil and health.version ~= expectedVersion then
         return false
     end
@@ -870,7 +907,7 @@ end
 
 local function registerHelper(helper, runtimeState)
     configureHelper(helper)
-    local payload = {parentGuid = self.getGUID()}
+    local payload = {parentGuid = self.getGUID(), characterId = CHARACTER_ID}
     if type(runtimeState) == "table" then
         -- A freshly spawned/reloaded helper starts from its own default state and
         -- may report that state back immediately. Seed it atomically while binding
@@ -957,7 +994,7 @@ beginStableRuntimeInstall = function(helper, runtimeStateToRestore)
         state.runtimeVersion = SEED_RUNTIME_VERSION
         state.runtimeCommitSha = nil
     elseif startupInstallAttempts >= 2 then
-        log("Corvan bootstrap: runtime seed falhou no health check; recuperação automática interrompida.")
+        log(DISPLAY_NAME .. " bootstrap: runtime seed falhou no health check; recuperação automática interrompida.")
         return
     end
     startupInstallAttempts = startupInstallAttempts + 1
@@ -971,7 +1008,7 @@ beginStableRuntimeInstall = function(helper, runtimeStateToRestore)
         return helper.reload()
     end)
     if not ok then
-        log("Corvan bootstrap: não foi possível instalar o runtime estável.")
+        log(DISPLAY_NAME .. " bootstrap: não foi possível instalar o runtime estável.")
         return
     end
     if reloaded ~= nil then
@@ -1004,7 +1041,7 @@ local function spawnHelper(runtimeStateToRestore)
         callback_function = function(helper)
             helperSpawnPending = false
             if helper == nil then
-                log("Corvan bootstrap: falha ao criar helper.")
+                log(DISPLAY_NAME .. " bootstrap: falha ao criar helper.")
                 return
             end
             configureHelper(helper)
@@ -1042,6 +1079,11 @@ local function parseSemver(version)
     if major == nil then
         return nil
     end
+    if (#major > 1 and string.sub(major, 1, 1) == "0")
+        or (#minor > 1 and string.sub(minor, 1, 1) == "0")
+        or (#patch > 1 and string.sub(patch, 1, 1) == "0") then
+        return nil
+    end
     return {tonumber(major), tonumber(minor), tonumber(patch)}
 end
 
@@ -1059,6 +1101,23 @@ local function compareSemver(left, right)
         end
     end
     return 0
+end
+
+local function escapedPattern(value)
+    return tostring(value):gsub("([^%w])", "%%%1")
+end
+
+local function releaseVersion(tagName)
+    if type(tagName) ~= "string" then return nil end
+    if RELEASE_DISCOVERY_MODE == "repository-latest" then
+        local parsed = parseSemver(tagName)
+        if parsed == nil or string.sub(tagName, 1, 1) ~= "v" then return nil end
+        return string.sub(tagName, 2)
+    end
+    local version = string.match(tagName,
+        "^" .. escapedPattern(RELEASE_TAG_PREFIX) .. "(%d+%.%d+%.%d+)$")
+    if version == nil or parseSemver(version) == nil then return nil end
+    return version
 end
 
 local function responseStatus(request)
@@ -1095,7 +1154,7 @@ end
 local function webGet(url, headers, callback)
     local requestHeaders = shallowCopy(headers)
     requestHeaders.Accept = requestHeaders.Accept or "application/vnd.github+json"
-    requestHeaders["User-Agent"] = "corvan-tts-automation/" .. BOOTSTRAP_VERSION
+    requestHeaders["User-Agent"] = "corvan-tts-automation/" .. CHARACTER_ID .. "/" .. BOOTSTRAP_VERSION
     local completed = false
     local request = nil
 
@@ -1145,8 +1204,11 @@ local function findManifestUrl(release)
     end
     for _, asset in ipairs(release.assets) do
         if type(asset) == "table"
-            and asset.name == "manifest.json"
+            and asset.name == MANIFEST_ASSET_NAME
             and type(asset.browser_download_url) == "string"
+            and type(release.tag_name) == "string"
+            and asset.browser_download_url == TRUSTED_RUNTIME_PREFIX
+                .. release.tag_name .. "/" .. MANIFEST_ASSET_NAME
         then
             return asset.browser_download_url
         end
@@ -1168,16 +1230,24 @@ local function validateManifest(manifest, releaseTag)
     if manifest.schemaVersion ~= MANIFEST_SCHEMA_VERSION then
         return false, "schema do manifesto incompatível"
     end
-    if parseSemver(manifest.version) == nil then
+    if manifest.characterId ~= CHARACTER_ID then
+        return false, "manifesto pertence a outro personagem"
+    end
+    if manifest.releaseTag ~= releaseTag then
+        return false, "tag do manifesto não corresponde à release"
+    end
+    if parseSemver(manifest.version) == nil or string.sub(manifest.version, 1, 1) == "v" then
         return false, "versão inválida"
     end
-    if parseSemver(manifest.minBootstrapVersion) == nil then
+    if parseSemver(manifest.minBootstrapVersion) == nil
+        or string.sub(manifest.minBootstrapVersion, 1, 1) == "v" then
         return false, "minBootstrapVersion inválida"
     end
     if compareSemver(BOOTSTRAP_VERSION, manifest.minBootstrapVersion) < 0 then
         return false, "bootstrap precisa ser atualizado manualmente"
     end
-    if type(releaseTag) == "string" and compareSemver(manifest.version, releaseTag) ~= 0 then
+    local taggedVersion = releaseVersion(releaseTag)
+    if taggedVersion == nil or compareSemver(manifest.version, taggedVersion) ~= 0 then
         return false, "release e manifesto não correspondem"
     end
     if type(manifest.commitSha) ~= "string"
@@ -1188,7 +1258,7 @@ local function validateManifest(manifest, releaseTag)
         return false, "commitSha inválido"
     end
     local runtimeUrl, runtimeSize, runtimeSha256 = manifestRuntime(manifest)
-    local expectedRuntimeUrl = TRUSTED_RUNTIME_PREFIX .. "v" .. manifest.version .. "/corvan-runtime.lua"
+    local expectedRuntimeUrl = TRUSTED_RUNTIME_PREFIX .. releaseTag .. "/" .. RUNTIME_ASSET_NAME
     if runtimeUrl ~= expectedRuntimeUrl then
         return false, "URL do runtime não confiável"
     end
@@ -1437,12 +1507,12 @@ local function downloadManifest(serial, manifestUrl, releaseTag, etag)
     end)
 end
 
-local function beginReleaseLookup(serial)
+local function beginLatestReleaseLookup(serial)
     local headers = {}
     if type(state.releaseEtag) == "string" and state.releaseEtag ~= "" then
         headers["If-None-Match"] = state.releaseEtag
     end
-    webGet(RELEASE_API_URL, headers, function(request)
+    webGet(RELEASE_LATEST_API_URL, headers, function(request)
         if not isCurrentUpdate(serial) then
             return
         end
@@ -1457,23 +1527,73 @@ local function beginReleaseLookup(serial)
             return
         end
         local release = safeDecode(request.text)
-        if release == nil or release.draft == true or release.prerelease == true or parseSemver(release.tag_name) == nil then
+        if release == nil or release.draft == true or release.prerelease == true
+            or releaseVersion(release.tag_name) == nil then
             finishUpdate(serial, "resposta de release inválida.", true)
             return
         end
         local manifestUrl = findManifestUrl(release)
         if manifestUrl == nil then
-            finishUpdate(serial, "release sem manifest.json.", true)
+            finishUpdate(serial, "release sem " .. MANIFEST_ASSET_NAME .. ".", true)
             return
         end
         downloadManifest(serial, manifestUrl, release.tag_name, responseEtag(request))
     end)
 end
 
+local function beginNamespacedReleasePage(serial, page, bestRelease, bestVersion)
+    local url = RELEASE_LIST_API_URL .. "?per_page=100&page=" .. tostring(page)
+    webGet(url, {}, function(request)
+        if not isCurrentUpdate(serial) then return end
+        local failure = requestFailure(request, 200)
+        if failure ~= nil then
+            finishUpdate(serial, "não foi possível consultar o GitHub (" .. failure .. ").", true)
+            return
+        end
+        local releases = safeDecode(request.text)
+        if type(releases) ~= "table" then
+            finishUpdate(serial, "lista de releases inválida.", true)
+            return
+        end
+        for _, release in ipairs(releases) do
+            local version = type(release) == "table" and releaseVersion(release.tag_name) or nil
+            if version ~= nil and release.draft ~= true and release.prerelease ~= true
+                and findManifestUrl(release) ~= nil
+                and (bestVersion == nil or compareSemver(version, bestVersion) > 0) then
+                bestRelease = release
+                bestVersion = version
+            end
+        end
+        local count = #releases
+        if count >= 100 then
+            if page >= MAX_RELEASE_PAGES then
+                finishUpdate(serial, "canal possui releases demais para uma busca segura.", true)
+                return
+            end
+            beginNamespacedReleasePage(serial, page + 1, bestRelease, bestVersion)
+            return
+        end
+        if bestRelease == nil then
+            finishUpdate(serial, "nenhuma release estável encontrada para " .. DISPLAY_NAME .. ".", true)
+            return
+        end
+        downloadManifest(serial, findManifestUrl(bestRelease), bestRelease.tag_name, nil)
+    end)
+end
+
+local function beginReleaseLookup(serial)
+    if RELEASE_DISCOVERY_MODE == "repository-latest" then
+        beginLatestReleaseLookup(serial)
+        return
+    end
+    beginNamespacedReleasePage(serial, 1, nil, nil)
+end
+
 function onLoad(savedData)
     state = sanitizePersistedState(safeDecode(savedData))
     state.bootstrapVersion = BOOTSTRAP_VERSION
     state.schemaVersion = STATE_SCHEMA_VERSION
+    state.characterId = CHARACTER_ID
     startupInstallAttempts = 0
     if type(state.uiXml) == "string" and state.uiXml ~= "" then
         installUiXml(state.uiXml)
@@ -1502,6 +1622,7 @@ function onSave()
     end
     state.bootstrapVersion = BOOTSTRAP_VERSION
     state.schemaVersion = STATE_SCHEMA_VERSION
+    state.characterId = CHARACTER_ID
     return safeEncode(state)
 end
 
@@ -1575,6 +1696,11 @@ function runtimeReady(payload)
     if type(payload) == "table" and payload.parentGuid ~= nil and payload.parentGuid ~= self.getGUID() then
         return false
     end
+    if type(payload) ~= "table"
+        or (payload.characterId ~= CHARACTER_ID
+            and not (CHARACTER_ID == "corvan" and payload.characterId == nil)) then
+        return false
+    end
     runtimeReadyPayload = payload
     return true
 end
@@ -1588,6 +1714,12 @@ function cacheRuntimeState(payload)
         candidate = payload.state
     end
     if type(candidate) ~= "table" then
+        return false
+    end
+    if candidate.characterId ~= nil and candidate.characterId ~= CHARACTER_ID then
+        return false
+    end
+    if candidate.characterId == nil and CHARACTER_ID ~= "corvan" then
         return false
     end
     if update.active then
@@ -1604,6 +1736,8 @@ function applyRuntimeUi(payload)
     end
     local xml = payload
     if type(payload) == "table" then
+        if payload.characterId ~= nil and payload.characterId ~= CHARACTER_ID then return false end
+        if payload.characterId == nil and CHARACTER_ID ~= "corvan" then return false end
         xml = payload.xml
     end
     if type(xml) ~= "string" or xml == "" then
@@ -1630,6 +1764,7 @@ function getBootstrapInfo()
     return {
         bootstrapVersion = BOOTSTRAP_VERSION,
         schemaVersion = STATE_SCHEMA_VERSION,
+        characterId = CHARACTER_ID,
         runtimeVersion = state and state.runtimeVersion or SEED_RUNTIME_VERSION,
         helperGuid = state and state.helperGuid or nil,
         updating = update.active,

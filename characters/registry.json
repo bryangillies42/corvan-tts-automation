@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "repository": "bryangillies42/corvan-tts-automation",
+  "characters": [
+    {
+      "id": "corvan",
+      "displayName": "Corvan Duras",
+      "shortName": "Corvan",
+      "version": "0.2.1",
+      "status": "active",
+      "sourceDir": "characters/corvan",
+      "sourceFiles": {
+        "runtime": "runtime.lua",
+        "ui": "ui.xml",
+        "character": "character.json"
+      },
+      "assetsDir": "characters/corvan/assets",
+      "assets": {
+        "panelImage": "panel-board.png",
+        "panelUiImage": "panel-board-ui.jpg"
+      },
+      "files": {
+        "runtime": "corvan-runtime.lua",
+        "manifest": "manifest.json",
+        "savedObject": "Corvan_Duras_Console.json"
+      },
+      "savedObjectName": "Corvan Duras Console",
+      "savedObjectNote": "Console de combate do Corvan Duras",
+      "savedObjectDescription": "Console de combate atualizável • v{version}",
+      "aspectRatio": "2.22:1",
+      "release": {
+        "tagMode": "legacy",
+        "prerelease": true,
+        "globalLatest": true,
+        "productionEnabled": true,
+        "artifacts": {
+          "runtime": "corvan-runtime.lua",
+          "manifest": "manifest.json",
+          "savedObject": "Corvan_Duras_Console.json"
+        }
+      },
+      "discovery": "repository-latest",
+      "uiRootId": "corvanConsole",
+      "panelArtId": "panelBoardArt",
+      "requiredUiIds": [
+        "pvCurrent", "pvMax", "pv_adjust", "pv_subtract", "pv_add",
+        "pmCurrent", "pmMax", "pm_adjust", "pm_subtract", "pm_add",
+        "automatic_resource_spending", "panelBoardArt", "defenseValue", "rdValue",
+        "weapon_sword", "weapon_shield", "roll_attack", "roll_damage", "roll_critical",
+        "power_combat_defensive", "power_duel", "power_baluarte", "power_baluarte_allies",
+        "passive_duelist_shielded", "power_provocacao",
+        "skill_cavalgar", "skill_diplomacia", "skill_guerra", "skill_pontaria",
+        "skill_iniciativa", "skill_luta", "skill_intimidacao", "skill_percepcao",
+        "skill_fortitude", "skill_reflexos", "skill_vontade",
+        "end_turn", "end_scene", "undo", "clear_dice", "toggle_settings", "settingsPanel",
+        "offset_x", "offset_y", "offset_z", "calibrate_roll", "reset_state", "refresh",
+        "refreshStatus"
+      ],
+      "runtimeMarker": "CORVAN_RUNTIME",
+      "minBootstrapVersion": "1.0.2",
+      "geometry": {
+        "canvasWidth": 1870,
+        "canvasHeight": 841,
+        "panelWidth": 1700,
+        "panelHeight": 750
+      },
+      "guid": "c0a4a1"
+    },
+    {
+      "id": "spentar",
+      "displayName": "Spentar",
+      "shortName": "Spentar",
+      "version": null,
+      "status": "scaffold",
+      "sourceDir": "characters/spentar",
+      "sourceFiles": {
+        "runtime": "runtime.lua",
+        "ui": "ui.xml",
+        "character": "character.json"
+      },
+      "assetsDir": "characters/spentar/assets",
+      "assets": {},
+      "files": {
+        "runtime": "spentar-runtime.lua",
+        "manifest": "spentar-manifest.json",
+        "savedObject": "Spentar_Console.json"
+      },
+      "release": {
+        "tagMode": "namespaced",
+        "prerelease": true,
+        "globalLatest": false,
+        "productionEnabled": false,
+        "artifacts": {
+          "runtime": "spentar-runtime.lua",
+          "manifest": "spentar-manifest.json",
+          "savedObject": "Spentar_Console.json"
+        }
+      },
+      "discovery": "character-releases",
+      "uiRootId": "spentarConsole",
+      "runtimeMarker": "SPENTAR_RUNTIME",
+      "minBootstrapVersion": "1.0.2"
+    }
+  ]
+}

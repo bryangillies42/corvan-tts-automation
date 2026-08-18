@@ -7,10 +7,14 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  buildAllCharacters,
+  buildFixture,
   buildProject,
+  loadCharacterRegistry,
   luaLongString,
   replaceSinglePlaceholder,
   validateCharacter,
+  validateRegistry,
   validateUi,
 } from "../scripts/build.mjs";
 
@@ -28,23 +32,29 @@ const PLACEHOLDERS = [
 
 test("a v0.2.1 é preparada como pre-release sem substituir o canal estável", async () => {
   const packageJson = JSON.parse(await readFile(join(ROOT, "package.json"), "utf8"));
+  const registry = await loadCharacterRegistry(ROOT);
+  const corvan = registry.characters.find((profile) => profile.id === "corvan");
   const workflow = await readFile(join(ROOT, ".github", "workflows", "release.yml"), "utf8");
 
-  assert.equal(packageJson.version, "0.2.1");
-  assert.equal(packageJson.release?.prerelease, true);
-  assert.match(workflow, /CORVAN_RELEASE_PRERELEASE/);
+  assert.equal(packageJson.version, undefined);
+  assert.equal(packageJson.release, undefined);
+  assert.equal(corvan.version, "0.2.1");
+  assert.equal(corvan.prerelease, true);
+  assert.equal(corvan.globalLatest, true);
+  assert.equal(corvan.tagMode, "legacy");
   assert.match(workflow, /group: release-\$\{\{ github\.ref \}\}/);
-  assert.match(workflow, /gh release list[\s\S]*--exclude-drafts[\s\S]*--exclude-pre-releases/);
-  assert.match(workflow, /--draft[\s\\]*\n[\s\\]*--prerelease[\s\\]*\n[\s\\]*--latest=false/);
-  assert.match(workflow, /--draft=false --prerelease --latest=false/);
-  assert.match(workflow, /--draft=false --latest/);
+  assert.match(workflow, /scripts\/resolve-release\.mjs/);
+  assert.match(workflow, /--character "\$\{RELEASE_ID\}"/);
+  assert.match(workflow, /latest=false/);
+  assert.match(workflow, /gh release edit "\$\{RELEASE_TAG\}" --draft=false --latest/);
 });
 
 async function temporaryProject(t) {
   const directory = await mkdtemp(join(tmpdir(), "corvan-build-test-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
-  await cp(join(ROOT, "src"), join(directory, "src"), { recursive: true });
-  await cp(join(ROOT, "assets"), join(directory, "assets"), { recursive: true });
+  await cp(join(ROOT, "characters"), join(directory, "characters"), { recursive: true });
+  await cp(join(ROOT, "shared"), join(directory, "shared"), { recursive: true });
+  await cp(join(ROOT, "fixtures"), join(directory, "fixtures"), { recursive: true });
   await cp(join(ROOT, "package.json"), join(directory, "package.json"));
   return directory;
 }
@@ -75,8 +85,6 @@ test("placeholders obrigatórios precisam aparecer exatamente uma vez", async (t
   const cases = [
     { file: "runtime.lua", placeholder: "__UI_XML_LITERAL__" },
     { file: "runtime.lua", placeholder: "__CHARACTER_JSON_LITERAL__" },
-    { file: "runtime.lua", placeholder: "__PANEL_IMAGE_URL_LITERAL__" },
-    { file: "runtime.lua", placeholder: "__PANEL_UI_IMAGE_URL_LITERAL__" },
     { file: "ui.xml", placeholder: "__PANEL_UI_IMAGE_URL_XML__" },
     { file: "bootstrap.lua", placeholder: "__SEED_UI_LITERAL__" },
     { file: "bootstrap.lua", placeholder: "__SEED_RUNTIME_LITERAL__" },
@@ -84,7 +92,9 @@ test("placeholders obrigatórios precisam aparecer exatamente uma vez", async (t
 
   for (const fixture of cases) {
     await t.test(`rejeita ${fixture.placeholder} ausente`, async () => {
-      const path = join(project, "src", fixture.file);
+      const path = fixture.file === "bootstrap.lua"
+        ? join(project, "shared", fixture.file)
+        : join(project, "characters", "corvan", fixture.file);
       const original = await readFile(path, "utf8");
       await writeFile(path, original.replace(fixture.placeholder, "nil"), "utf8");
       try {
@@ -112,7 +122,7 @@ test("literal Lua escolhe delimitador sem colidir com o conteúdo", () => {
 });
 
 test("a ficha possui o schema e os valores canônicos do Corvan", async () => {
-  const character = JSON.parse(await readFile(join(ROOT, "src", "character.json"), "utf8"));
+  const character = JSON.parse(await readFile(join(ROOT, "characters", "corvan", "character.json"), "utf8"));
   validateCharacter(character, "0.2.1");
 
   assert.equal(character.schemaVersion, 1);
@@ -184,7 +194,7 @@ test("a ficha possui o schema e os valores canônicos do Corvan", async () => {
     { base: 2, upgraded: 4, totalUpgradeCost: 2 },
   );
   assert.equal(character.powers.baluarte.sharedCost, 2);
-  const ui = await readFile(join(ROOT, "src", "ui.xml"), "utf8");
+  const ui = await readFile(join(ROOT, "characters", "corvan", "ui.xml"), "utf8");
   assert.match(ui, /id="pvCurrent" text="78"/);
   assert.match(ui, /id="pmCurrent" text="21"/);
   assert.match(ui, /id="defenseValue" text="24"/);
@@ -193,7 +203,7 @@ test("a ficha possui o schema e os valores canônicos do Corvan", async () => {
 });
 
 test("validadores rejeitam character e UI estruturalmente inválidos", async () => {
-  const character = JSON.parse(await readFile(join(ROOT, "src", "character.json"), "utf8"));
+  const character = JSON.parse(await readFile(join(ROOT, "characters", "corvan", "character.json"), "utf8"));
   const invalidCharacter = structuredClone(character);
   invalidCharacter.weapons.sword.damage.sides = 1;
   assert.throws(() => validateCharacter(invalidCharacter, "0.2.1"), /damage\.sides/);
@@ -205,7 +215,7 @@ test("validadores rejeitam character e UI estruturalmente inválidos", async () 
     /SemVer estável X\.Y\.Z/,
   );
 
-  const ui = await readFile(join(ROOT, "src", "ui.xml"), "utf8");
+  const ui = await readFile(join(ROOT, "characters", "corvan", "ui.xml"), "utf8");
   validateUi(ui);
   assert.match(ui, /<Image id="panelBoardArt"[^>]*position="0 0 -30"[^>]*rotation="0 0 180"[^>]*scale="0\.25 0\.25 1"/s);
   assert.match(ui, /<Panel id="corvanConsole"[^>]*position="0 0 -30"[^>]*rotation="0 0 180"[^>]*scale="0\.25 0\.25 1"/s);
@@ -221,7 +231,7 @@ test("validadores rejeitam character e UI estruturalmente inválidos", async () 
   );
   assert.throws(
     () => validateUi(ui.replace('<Panel id="corvanConsole" width="1700"', '<Panel id="corvanConsole" width="1800"')),
-    /preservar o inset/,
+    /preservar a geometria declarada/,
   );
 });
 
@@ -235,6 +245,8 @@ test("manifesto e Saved Object possuem o contrato publicável", async (t) => {
   const saved = JSON.parse(await readFile(join(outDir, "Corvan_Duras_Console.json"), "utf8"));
 
   assert.equal(manifest.schemaVersion, 1);
+  assert.equal(manifest.characterId, "corvan");
+  assert.equal(manifest.releaseTag, "v0.2.1");
   assert.equal(manifest.version, "0.2.1");
   assert.equal(manifest.minBootstrapVersion, "1.0.2");
   assert.equal(manifest.commitSha, FIXED_SHA);
@@ -253,13 +265,13 @@ test("manifesto e Saved Object possuem o contrato publicável", async (t) => {
   assert.match(runtime, /<Panel id="corvanConsole"/);
   assert.match(runtime, /Corvan Duras/);
   const panelHash = createHash("sha256")
-    .update(await readFile(join(ROOT, "assets", "panel-board.png")))
+    .update(await readFile(join(ROOT, "characters", "corvan", "assets", "panel-board.png")))
     .digest("hex");
   const uiPanelHash = createHash("sha256")
-    .update(await readFile(join(ROOT, "assets", "panel-board-ui.jpg")))
+    .update(await readFile(join(ROOT, "characters", "corvan", "assets", "panel-board-ui.jpg")))
     .digest("hex");
-  const expectedPanelUrl = `https://raw.githubusercontent.com/bryangillies42/corvan-tts-automation/${FIXED_SHA}/assets/panel-board.png?sha256=${panelHash}`;
-  const expectedUiPanelUrl = `https://raw.githubusercontent.com/bryangillies42/corvan-tts-automation/${FIXED_SHA}/assets/panel-board-ui.jpg?sha256=${uiPanelHash}`;
+  const expectedPanelUrl = `https://raw.githubusercontent.com/bryangillies42/corvan-tts-automation/${FIXED_SHA}/characters/corvan/assets/panel-board.png?sha256=${panelHash}`;
+  const expectedUiPanelUrl = `https://raw.githubusercontent.com/bryangillies42/corvan-tts-automation/${FIXED_SHA}/characters/corvan/assets/panel-board-ui.jpg?sha256=${uiPanelHash}`;
   assert.ok(runtime.includes(expectedPanelUrl));
   assert.ok(runtime.includes(expectedUiPanelUrl));
 
@@ -301,7 +313,7 @@ test("assets visuais usam fingerprint para invalidar o cache do TTS", async (t) 
     outDir: join(project, "dist-cache-a"),
   });
 
-  const panelPath = join(project, "assets", "panel-board.png");
+  const panelPath = join(project, "characters", "corvan", "assets", "panel-board.png");
   const originalPanel = await readFile(panelPath);
   await writeFile(panelPath, Buffer.concat([originalPanel, Buffer.from("cache-regression")]));
 
@@ -319,11 +331,11 @@ test("assets visuais usam fingerprint para invalidar o cache do TTS", async (t) 
 });
 
 test("a camada visual cobre as dimensões nativas da prancha física", async () => {
-  const physical = await readFile(join(ROOT, "assets", "panel-board.png"));
+  const physical = await readFile(join(ROOT, "characters", "corvan", "assets", "panel-board.png"));
   assert.equal(physical.subarray(1, 4).toString("ascii"), "PNG");
   const physicalWidth = physical.readUInt32BE(16);
   const physicalHeight = physical.readUInt32BE(20);
-  const ui = await readFile(join(ROOT, "src", "ui.xml"), "utf8");
+  const ui = await readFile(join(ROOT, "characters", "corvan", "ui.xml"), "utf8");
   const overlay = ui.match(/<Image id="panelBoardArt"[^>]*width="(\d+)" height="(\d+)"/s);
 
   assert.ok(overlay);
@@ -332,9 +344,17 @@ test("a camada visual cobre as dimensões nativas da prancha física", async () 
   assert.deepEqual({ width: physicalWidth, height: physicalHeight }, { width: 1870, height: 841 });
 });
 
+test("espelho legado de assets preserva as URLs usadas por objetos Corvan v0.2.0", async () => {
+  for (const file of ["panel-board.png", "panel-board-ui.jpg"]) {
+    const legacy = await readFile(join(ROOT, "assets", file));
+    const canonical = await readFile(join(ROOT, "characters", "corvan", "assets", file));
+    assert.deepEqual(legacy, canonical, `${file} precisa permanecer byte a byte no caminho legado`);
+  }
+});
+
 test("URLs locais de textura, camada e fixture legado permanecem independentes", async (t) => {
   const project = await temporaryProject(t);
-  await rm(join(project, "assets"), { recursive: true, force: true });
+  await rm(join(project, "characters", "corvan", "assets"), { recursive: true, force: true });
   const physicalUrl = "C:\\Teste\\painel atual.png";
   const uiUrl = 'https://example.test/painel.jpg?x=1&label="Corvan"';
   const legacyUrl = "https://example.test/painel-antigo.png";
@@ -381,5 +401,82 @@ test("manifesto aceita somente uma versão anterior estável e realmente menor",
       previousVersion: "0.2.1",
     }),
     /deve ser anterior/,
+  );
+});
+
+test("registry é a fonte única e recusa identidades, caminhos e canais conflitantes", async () => {
+  const registry = await loadCharacterRegistry(ROOT);
+  const corvan = registry.characters.find((profile) => profile.id === "corvan");
+  const spentar = registry.characters.find((profile) => profile.id === "spentar");
+
+  assert.equal(corvan.version, "0.2.1");
+  assert.equal(corvan.sourceDir, "characters/corvan");
+  assert.equal(spentar.status, "scaffold");
+  assert.equal(spentar.productionEnabled, false);
+
+  const duplicate = structuredClone(registry);
+  duplicate.characters.push(structuredClone(corvan));
+  assert.throws(() => validateRegistry(duplicate), /ID de personagem duplicado/);
+
+  const externalPath = structuredClone(registry);
+  externalPath.characters[0].sourceDir = "../fora";
+  assert.throws(() => validateRegistry(externalPath), /caminho relativo seguro/);
+
+  const wrongLatest = structuredClone(registry);
+  wrongLatest.characters[1].globalLatest = true;
+  assert.throws(() => validateRegistry(wrongLatest), /Somente o Corvan legacy/);
+
+  const externalAsset = structuredClone(registry);
+  externalAsset.characters[0].assets.panelImage = "../painel.png";
+  assert.throws(() => validateRegistry(externalAsset), /apenas um nome de arquivo/);
+
+  const divergentArtifacts = structuredClone(registry);
+  divergentArtifacts.characters[0].release.artifacts.runtime = "outro-runtime.lua";
+  assert.throws(() => validateRegistry(divergentArtifacts), /devem declarar os mesmos artefatos/);
+
+  const wrongCorvanTagMode = structuredClone(registry);
+  wrongCorvanTagMode.characters[0].tagMode = "character";
+  assert.throws(() => validateRegistry(wrongCorvanTagMode), /Corvan deve preservar tagMode legacy/);
+
+  const legacySecondCharacter = structuredClone(registry);
+  legacySecondCharacter.characters[1].tagMode = "legacy";
+  assert.throws(() => validateRegistry(legacySecondCharacter), /tagMode deve ser namespaced/);
+});
+
+test("Corvan e fixture divergente geram produtos isolados sem colisão", async (t) => {
+  const project = await temporaryProject(t);
+  const productsRoot = join(project, "products");
+  const [corvan] = await buildAllCharacters({
+    rootDir: project,
+    outDir: productsRoot,
+    commitSha: FIXED_SHA,
+  });
+  const arcane = await buildFixture({
+    rootDir: project,
+    outDir: join(productsRoot, "arcane-test"),
+    fixtureId: "arcane-test",
+    commitSha: FIXED_SHA,
+  });
+
+  assert.deepEqual(Object.keys(corvan.files).sort(), [
+    "Corvan_Duras_Console.json", "corvan-runtime.lua", "manifest.json",
+  ]);
+  assert.deepEqual(Object.keys(arcane.files).sort(), [
+    "Arcane_Test_Console.json", "arcane-test-manifest.json", "arcane-test-runtime.lua",
+  ]);
+  assert.equal(corvan.manifest.characterId, "corvan");
+  assert.equal(corvan.manifest.releaseTag, "v0.2.1");
+  assert.equal(arcane.manifest.characterId, "arcane-test");
+  assert.equal(arcane.manifest.releaseTag, "arcane-test-v0.1.0");
+  assert.match(arcane.files["arcane-test-runtime.lua"], /CharacterRuntimeCore = \{\}/);
+  assert.match(arcane.files["arcane-test-runtime.lua"], /ARCANE_TEST_RUNTIME/);
+  assert.doesNotMatch(arcane.files["arcane-test-runtime.lua"], /CorvanRules/);
+  assert.equal(
+    JSON.parse(arcane.savedObject.ObjectStates[0].GMNotes).characterId,
+    "arcane-test",
+  );
+  assert.notEqual(
+    corvan.savedObject.ObjectStates[0].GUID,
+    arcane.savedObject.ObjectStates[0].GUID,
   );
 });

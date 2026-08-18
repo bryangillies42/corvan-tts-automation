@@ -1,0 +1,7 @@
+<Defaults>
+  <Text color="#E8E2D5" fontSize="20" />
+</Defaults>
+<Image id="panelBoardArt" image="__PANEL_UI_IMAGE_URL_XML__" width="900" height="500" position="0 0 -30" rotation="0 0 180" scale="0.25 0.25 1" />
+<Panel id="__CHARACTER_ID__Console" width="800" height="400" position="0 0 -30" rotation="0 0 180" scale="0.25 0.25 1">
+  <Text id="title" text="__CHARACTER_NAME__" />
+</Panel>

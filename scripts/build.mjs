@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -223,8 +223,32 @@ function markupEnd(xml, start) {
   return -1;
 }
 
-export function validateUi(input) {
+const CORVAN_REQUIRED_UI_IDS = [
+  "pvCurrent", "pvMax", "pv_adjust", "pv_subtract", "pv_add",
+  "pmCurrent", "pmMax", "pm_adjust", "pm_subtract", "pm_add",
+  "automatic_resource_spending", "panelBoardArt", "defenseValue", "rdValue",
+  "weapon_sword", "weapon_shield", "roll_attack", "roll_damage", "roll_critical",
+  "power_combat_defensive", "power_duel", "power_baluarte", "power_baluarte_allies",
+  "passive_duelist_shielded", "power_provocacao",
+  "skill_cavalgar", "skill_diplomacia", "skill_guerra", "skill_pontaria",
+  "skill_iniciativa", "skill_luta", "skill_intimidacao", "skill_percepcao",
+  "skill_fortitude", "skill_reflexos", "skill_vontade",
+  "end_turn", "end_scene", "undo", "clear_dice", "toggle_settings", "settingsPanel",
+  "offset_x", "offset_y", "offset_z", "calibrate_roll", "reset_state", "refresh",
+  "refreshStatus",
+];
+
+export function validateUi(input, contract = {}) {
   const xml = normalizeText(input);
+  const uiRootId = contract.uiRootId || "corvanConsole";
+  const panelArtId = contract.panelArtId || "panelBoardArt";
+  const geometry = contract.geometry || {
+    canvasWidth: 1870,
+    canvasHeight: 841,
+    panelWidth: 1700,
+    panelHeight: 750,
+  };
+  const requiredUiIds = contract.requiredUiIds || CORVAN_REQUIRED_UI_IDS;
   assert(xml.trim().length > 0, "src/ui.xml não pode estar vazio.");
 
   const stack = [];
@@ -305,7 +329,7 @@ export function validateUi(input) {
     visualRoots.length === 2 && visualRoots[0] === "Image" && visualRoots[1] === "Panel",
     "src/ui.xml deve possuir a Image da moldura antes do Panel visual raiz.",
   );
-  assert(ids.has("corvanConsole"), "src/ui.xml deve declarar o painel raiz corvanConsole.");
+  assert(ids.has(uiRootId), `ui.xml deve declarar o painel raiz ${uiRootId}.`);
   const rootGeometry = (id) => {
     const tag = xml.match(new RegExp(`<(?:Image|Panel)\\b[^>]*\\bid=["']${id}["'][^>]*>`, "s"));
     assert(tag !== null, `src/ui.xml não declara a raiz ${id}.`);
@@ -319,8 +343,8 @@ export function validateUi(input) {
       dimensions: ["width", "height"].map(attribute),
     };
   };
-  const panelBoardGeometry = rootGeometry("panelBoardArt");
-  const consoleGeometry = rootGeometry("corvanConsole");
+  const panelBoardGeometry = rootGeometry(panelArtId);
+  const consoleGeometry = rootGeometry(uiRootId);
   assert(
     panelBoardGeometry.transform.every(
       (value, index) => value === consoleGeometry.transform[index],
@@ -328,45 +352,32 @@ export function validateUi(input) {
     "A moldura e os controles da UI devem compartilhar a mesma transformação 3D.",
   );
   assert(
-    panelBoardGeometry.dimensions[0] === "1870"
-      && panelBoardGeometry.dimensions[1] === "841"
-      && consoleGeometry.dimensions[0] === "1700"
-      && consoleGeometry.dimensions[1] === "750",
-    "A moldura deve cobrir o canvas físico 1870x841 e o painel deve preservar o inset 1700x750.",
+    panelBoardGeometry.dimensions[0] === String(geometry.canvasWidth)
+      && panelBoardGeometry.dimensions[1] === String(geometry.canvasHeight)
+      && consoleGeometry.dimensions[0] === String(geometry.panelWidth)
+      && consoleGeometry.dimensions[1] === String(geometry.panelHeight),
+    `A moldura e o painel devem preservar a geometria declarada por ${uiRootId}.`,
   );
-  for (const requiredId of [
-    "pvCurrent", "pvMax", "pv_adjust", "pv_subtract", "pv_add",
-    "pmCurrent", "pmMax", "pm_adjust", "pm_subtract", "pm_add",
-    "automatic_resource_spending", "panelBoardArt", "defenseValue", "rdValue",
-    "weapon_sword", "weapon_shield", "roll_attack", "roll_damage", "roll_critical",
-    "power_combat_defensive", "power_duel", "power_baluarte", "power_baluarte_allies",
-    "passive_duelist_shielded", "power_provocacao",
-    "skill_cavalgar", "skill_diplomacia", "skill_guerra", "skill_pontaria",
-    "skill_iniciativa", "skill_luta", "skill_intimidacao", "skill_percepcao",
-    "skill_fortitude", "skill_reflexos", "skill_vontade",
-    "end_turn", "end_scene", "undo", "clear_dice", "toggle_settings", "settingsPanel",
-    "offset_x", "offset_y", "offset_z", "calibrate_roll", "reset_state", "refresh",
-    "refreshStatus",
-  ]) {
+  for (const requiredId of requiredUiIds) {
     assert(ids.has(requiredId), `src/ui.xml não declara o ID obrigatório ${requiredId}.`);
   }
   return xml;
 }
 
 function validateCommitSha(value) {
-  assert(SHA_PATTERN.test(value), "CORVAN_COMMIT_SHA deve ter entre 7 e 40 caracteres hexadecimais.");
+  assert(SHA_PATTERN.test(value), "RELEASE_COMMIT_SHA deve ter entre 7 e 40 caracteres hexadecimais.");
   return value.toLowerCase();
 }
 
 function validatePreviousVersion(value, currentVersion) {
   if (value === undefined || value === null || value === "") return null;
-  assert(VERSION_PATTERN.test(value), "CORVAN_PREVIOUS_VERSION deve usar SemVer estável X.Y.Z.");
+  assert(VERSION_PATTERN.test(value), "RELEASE_PREVIOUS_VERSION deve usar SemVer estável X.Y.Z.");
   const previous = value.split(".").map(Number);
   const current = currentVersion.split(".").map(Number);
   const isOlder = previous.some((part, index) =>
     part < current[index] && previous.slice(0, index).every((prior, priorIndex) => prior === current[priorIndex]),
   );
-  assert(isOlder, "CORVAN_PREVIOUS_VERSION deve ser anterior à versão atual.");
+  assert(isOlder, "RELEASE_PREVIOUS_VERSION deve ser anterior à versão atual.");
   return value;
 }
 
@@ -392,6 +403,8 @@ async function readSource(path, label) {
 function createManifest(version, commitSha, runtime, previousVersion) {
   return {
     schemaVersion: 1,
+    characterId: "corvan",
+    releaseTag: `v${version}`,
     version,
     minBootstrapVersion: "1.0.2",
     commitSha,
@@ -471,7 +484,7 @@ function createSavedObject(bootstrap, ui, version, assetUrl, savedObjectName) {
   };
 }
 
-export async function buildProject({
+async function buildLegacyProject({
   rootDir = PROJECT_ROOT,
   outDir = join(rootDir, "dist"),
   commitSha = process.env.CORVAN_COMMIT_SHA || DEFAULT_COMMIT_SHA,
@@ -619,6 +632,495 @@ export async function buildProject({
   };
 }
 
+const REGISTRY_FILE = "characters/registry.json";
+const ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const SAFE_RELATIVE_PATH = /^(?![\\/])(?:[^\\/:*?"<>|]+[\\/]?)+$/;
+const RELEASE_TAG_MODES = new Set(["legacy", "character"]);
+const DISCOVERY_MODES = new Set(["repository-latest", "character-releases"]);
+
+function assertRelativePath(value, path) {
+  assertString(value, path);
+  assert(!value.includes("\\") && !value.startsWith("/") && !value.includes(".."), `${path} deve ser um caminho relativo seguro.`);
+  assert(SAFE_RELATIVE_PATH.test(value), `${path} contém caracteres inválidos.`);
+}
+
+function releaseTagFor(profile, version = profile.version) {
+  assertString(profile.id, "profile.id");
+  assertString(version, "profile.version");
+  return profile.tagMode === "legacy" ? `v${version}` : `${profile.id}-v${version}`;
+}
+
+function validateArtifactName(value, path) {
+  assertString(value, path);
+  assert(
+    value !== "." && value !== ".." && /^[^\\/:*?"<>|]+$/.test(value) && !value.includes(".."),
+    `${path} deve ser apenas um nome de arquivo seguro.`,
+  );
+}
+
+function rawArtifactNamesDiffer(files, artifacts) {
+  return ["runtime", "manifest", "savedObject"].some(
+    (field) => files?.[field] !== artifacts?.[field],
+  );
+}
+
+function normalizeBuildProfile(raw) {
+  const release = isObject(raw?.release) ? raw.release : {};
+  const artifacts = release.artifacts || raw?.files || {};
+  return {
+    ...raw,
+    tagMode: raw?.tagMode || (release.tagMode === "namespaced" ? "character" : release.tagMode),
+    discovery: raw?.discovery || "character-releases",
+    prerelease: raw?.prerelease ?? release.prerelease,
+    globalLatest: raw?.globalLatest ?? release.globalLatest,
+    productionEnabled: raw?.productionEnabled ?? release.productionEnabled,
+    files: raw?.files || artifacts,
+  };
+}
+
+export function validateCharacterProfile(profile, { allowScaffold = true } = {}) {
+  profile = normalizeBuildProfile(profile);
+  assert(isObject(profile), "Perfil de personagem deve ser um objeto.");
+  assert(typeof profile.id === "string" && ID_PATTERN.test(profile.id), "character.id deve ser um slug kebab-case.");
+  assertString(profile.displayName, `${profile.id}.displayName`);
+  assertString(profile.shortName, `${profile.id}.shortName`);
+  assert(["active", "scaffold", "disabled"].includes(profile.status), `${profile.id}.status inválido.`);
+  assert(allowScaffold || profile.status !== "scaffold", `${profile.id} ainda é um scaffold.`);
+  if (profile.version !== null && profile.version !== undefined && profile.version !== "") {
+    assert(VERSION_PATTERN.test(profile.version), `${profile.id}.version deve usar SemVer estável X.Y.Z.`);
+  } else {
+    assert(profile.status === "scaffold", `${profile.id}.version é obrigatório para um personagem publicável.`);
+  }
+  assertRelativePath(profile.sourceDir, `${profile.id}.sourceDir`);
+  if (profile.assetsDir !== null && profile.assetsDir !== undefined) assertRelativePath(profile.assetsDir, `${profile.id}.assetsDir`);
+  if (profile.assets !== undefined) {
+    assert(isObject(profile.assets), `${profile.id}.assets deve ser um objeto.`);
+    for (const field of ["panelImage", "panelUiImage"]) {
+      if (profile.assets[field] !== undefined) validateArtifactName(profile.assets[field], `${profile.id}.assets.${field}`);
+    }
+  }
+  if (profile.sourceFiles !== undefined) {
+    assert(isObject(profile.sourceFiles), `${profile.id}.sourceFiles deve ser um objeto.`);
+    for (const [field, fileName] of Object.entries(profile.sourceFiles)) {
+      validateArtifactName(fileName, `${profile.id}.sourceFiles.${field}`);
+    }
+  }
+  assert(RELEASE_TAG_MODES.has(profile.tagMode), `${profile.id}.tagMode inválido.`);
+  assert(DISCOVERY_MODES.has(profile.discovery), `${profile.id}.discovery inválido.`);
+  for (const flag of ["prerelease", "globalLatest", "productionEnabled"]) {
+    assert(typeof profile[flag] === "boolean", `${profile.id}.${flag} deve ser booleano.`);
+  }
+  assertString(profile.minBootstrapVersion, `${profile.id}.minBootstrapVersion`);
+  assert(VERSION_PATTERN.test(profile.minBootstrapVersion), `${profile.id}.minBootstrapVersion inválido.`);
+  assert(isObject(profile.files), `${profile.id}.files deve ser um objeto.`);
+  for (const field of ["runtime", "bootstrap", "ui", "character", "manifest", "savedObject"]) {
+    if (profile.files[field] !== undefined) validateArtifactName(profile.files[field], `${profile.id}.files.${field}`);
+  }
+  if (isObject(profile.release?.artifacts) && rawArtifactNamesDiffer(profile.files, profile.release.artifacts)) {
+    fail(`${profile.id}.files e ${profile.id}.release.artifacts devem declarar os mesmos artefatos.`);
+  }
+  assertString(profile.runtimeMarker, `${profile.id}.runtimeMarker`);
+  assertString(profile.uiRootId, `${profile.id}.uiRootId`);
+  if (profile.status === "active") {
+    assert(typeof profile.guid === "string" && /^[0-9a-f]{6}$/i.test(profile.guid), `${profile.id}.guid deve ter 6 caracteres hexadecimais.`);
+  }
+  for (const field of ["savedObjectName", "savedObjectNote", "savedObjectDescription", "aspectRatio"]) {
+    if (profile[field] !== undefined) assertString(profile[field], `${profile.id}.${field}`);
+  }
+  if (profile.panelArtId !== undefined) assertString(profile.panelArtId, `${profile.id}.panelArtId`);
+  if (profile.requiredUiIds !== undefined) {
+    assert(Array.isArray(profile.requiredUiIds), `${profile.id}.requiredUiIds deve ser uma lista.`);
+    const requiredIds = new Set();
+    for (const id of profile.requiredUiIds) {
+      assertString(id, `${profile.id}.requiredUiIds[]`);
+      assert(!requiredIds.has(id), `${profile.id}.requiredUiIds contém ID duplicado: ${id}.`);
+      requiredIds.add(id);
+    }
+  }
+  if (profile.geometry !== undefined) {
+    assert(isObject(profile.geometry), `${profile.id}.geometry deve ser um objeto.`);
+    for (const field of ["canvasWidth", "canvasHeight", "panelWidth", "panelHeight"]) {
+      if (profile.geometry[field] !== undefined) assertNumber(profile.geometry[field], `${profile.id}.geometry.${field}`);
+    }
+  }
+  return profile;
+}
+
+export function validateRegistry(registry) {
+  assert(isObject(registry), "characters/registry.json deve conter um objeto.");
+  assert(registry.schemaVersion === 1, "registry.schemaVersion deve ser 1.");
+  assert(Array.isArray(registry.characters), "registry.characters deve ser uma lista.");
+  const ids = new Set();
+  const artifactNames = new Set();
+  const guids = new Set();
+  const uiRootIds = new Set();
+  const runtimeMarkers = new Set();
+  const assetDirectories = new Set();
+  const normalizedCharacters = registry.characters.map((entry) => {
+    const profile = normalizeBuildProfile(entry);
+    validateCharacterProfile(profile);
+    assert(!ids.has(profile.id), `ID de personagem duplicado: ${profile.id}.`);
+    ids.add(profile.id);
+    const characterRoot = `characters/${profile.id}`;
+    assert(profile.sourceDir === characterRoot, `${profile.id}.sourceDir deve ser ${characterRoot}.`);
+    assert(
+      profile.id === "corvan" ? profile.tagMode === "legacy" : profile.tagMode === "character",
+      profile.id === "corvan"
+        ? "Corvan deve preservar tagMode legacy."
+        : `${profile.id}.tagMode deve ser namespaced/character.`,
+    );
+    if (profile.assetsDir !== null && profile.assetsDir !== undefined) {
+      assert(
+        profile.assetsDir === `${characterRoot}/assets`
+          || profile.assetsDir.startsWith(`${characterRoot}/assets/`),
+        `${profile.id}.assetsDir deve permanecer dentro de ${characterRoot}/assets.`,
+      );
+    }
+    if (profile.status === "active") {
+      for (const artifact of [profile.files.runtime, profile.files.manifest, profile.files.savedObject]) {
+        assert(!artifactNames.has(artifact), `Artefato duplicado entre personagens ativos: ${artifact}.`);
+        artifactNames.add(artifact);
+      }
+      if (profile.guid) {
+        assert(!guids.has(profile.guid), `GUID duplicado entre personagens ativos: ${profile.guid}.`);
+        guids.add(profile.guid);
+      }
+      assert(!uiRootIds.has(profile.uiRootId), `Raiz de UI duplicada entre personagens ativos: ${profile.uiRootId}.`);
+      uiRootIds.add(profile.uiRootId);
+      assert(!runtimeMarkers.has(profile.runtimeMarker), `Marker duplicado entre personagens ativos: ${profile.runtimeMarker}.`);
+      runtimeMarkers.add(profile.runtimeMarker);
+      if (profile.assetsDir) {
+        assert(!assetDirectories.has(profile.assetsDir), `Diretório de assets duplicado entre personagens ativos: ${profile.assetsDir}.`);
+        assetDirectories.add(profile.assetsDir);
+      }
+    }
+    if (profile.globalLatest) {
+      assert(profile.id === "corvan" && profile.tagMode === "legacy", "Somente o Corvan legacy pode usar globalLatest.");
+    }
+    return profile;
+  });
+  return { ...registry, characters: normalizedCharacters };
+}
+
+async function loadRegistry(rootDir) {
+  let parsed;
+  try {
+    parsed = JSON.parse(normalizeText(await readFile(join(rootDir, REGISTRY_FILE), "utf8")));
+  } catch (error) {
+    fail(`Não foi possível ler ${REGISTRY_FILE}: ${error.message}`);
+  }
+  return validateRegistry(parsed);
+}
+
+async function pathExists(path) {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function filesForProfile(profile) {
+  return {
+    runtime: profile.files?.runtime || `${profile.id}-runtime.lua`,
+    bootstrap: profile.files?.bootstrap || "bootstrap.lua",
+    ui: profile.files?.ui || "ui.xml",
+    character: profile.files?.character || "character.json",
+    manifest: profile.files?.manifest || `${profile.id}-manifest.json`,
+    savedObject: profile.files?.savedObject || `${profile.displayName.replace(/[^A-Za-z0-9]+/g, "_")}_Console.json`,
+  };
+}
+
+function profileTag(profile) {
+  assert(profile.version, `${profile.id} não possui versão publicável.`);
+  return releaseTagFor(profile);
+}
+
+function luaStringLiteral(value) {
+  return JSON.stringify(String(value));
+}
+
+function replaceOptionalPlaceholders(source, profile, manifestAssetName, runtimeAssetName) {
+  const profileJson = stableJson(profile);
+  const values = {
+    __PROFILE_JSON_LITERAL__: luaLongString(profileJson),
+    __CHARACTER_ID_LITERAL__: luaStringLiteral(profile.id),
+    __CHARACTER_VERSION_LITERAL__: luaStringLiteral(profile.version || ""),
+    __DISPLAY_NAME_LITERAL__: luaStringLiteral(profile.displayName),
+    __SHORT_NAME_LITERAL__: luaStringLiteral(profile.shortName),
+    __RELEASE_DISCOVERY_MODE_LITERAL__: luaStringLiteral(profile.discovery),
+    __RELEASE_TAG_PREFIX_LITERAL__: luaStringLiteral(profile.tagMode === "legacy" ? "v" : `${profile.id}-v`),
+    __MANIFEST_ASSET_NAME_LITERAL__: luaStringLiteral(manifestAssetName),
+    __RUNTIME_ASSET_NAME_LITERAL__: luaStringLiteral(runtimeAssetName),
+    __RUNTIME_MARKER_LITERAL__: luaStringLiteral(profile.runtimeMarker),
+  };
+  let result = source.replaceAll("__RUNTIME_MARKER__", profile.runtimeMarker);
+  for (const [placeholder, replacement] of Object.entries(values)) {
+    if (result.includes(placeholder)) result = replaceSinglePlaceholder(result, placeholder, replacement, placeholder);
+  }
+  return result;
+}
+
+function sourcePathFor(profile, rootDir, fileName) {
+  return join(rootDir, profile.sourceDir, fileName);
+}
+
+function normalizeAssetReference(value, label) {
+  assertString(value, label);
+  return value;
+}
+
+function genericUiValidation(input, profile) {
+  const xml = normalizeText(input);
+  assert(xml.trim().length > 0, `${profile.id} ui.xml não pode estar vazio.`);
+  const ids = new Set();
+  for (const match of xml.matchAll(/\bid\s*=\s*(["'])(.*?)\1/g)) {
+    const id = match[2];
+    assert(id.length > 0 && !ids.has(id), `${profile.id} ui.xml possui ID inválido ou duplicado: ${id}.`);
+    ids.add(id);
+  }
+  assert(/<\s*(?:Image|Panel)\b/i.test(xml), `${profile.id} ui.xml deve declarar um Image ou Panel.`);
+  if (profile.uiRootId) assert(ids.has(profile.uiRootId), `${profile.id} ui.xml deve declarar ${profile.uiRootId}.`);
+  return xml;
+}
+
+function createGenericManifest(profile, version, commitSha, runtime, previousVersion, files) {
+  const tag = releaseTagFor(profile, version);
+  return {
+    schemaVersion: 1,
+    characterId: profile.id,
+    releaseTag: tag,
+    version,
+    minBootstrapVersion: profile.minBootstrapVersion,
+    commitSha,
+    runtime: {
+      url: `${RELEASE_BASE_URL}/${tag}/${files.runtime}`,
+      size: Buffer.byteLength(runtime, "utf8"),
+      sha256: sha256(runtime),
+    },
+    previousVersion: previousVersion || null,
+  };
+}
+
+function createGenericSavedObject(profile, bootstrap, ui, version, imageUrl, savedObjectName) {
+  const name = savedObjectName || `${profile.displayName} Console`;
+  return {
+    SaveName: name,
+    GameMode: "",
+    Gravity: 0.5,
+    PlayArea: 0.5,
+    Date: "",
+    Table: "",
+    Sky: "",
+    Note: profile.savedObjectNote || `${profile.displayName} Console`,
+    Rules: "",
+    XmlUI: "",
+    LuaScript: "",
+    LuaScriptState: "",
+    ObjectStates: [{
+      Name: "Custom_Tile",
+      Transform: { posX: 0, posY: 1.1, posZ: 0, rotX: 0, rotY: 180, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 },
+      Nickname: name,
+      Description: profile.savedObjectDescription
+        ? profile.savedObjectDescription.replaceAll("{version}", version)
+        : `Console atualizável • ${profile.displayName} v${version}`,
+      GMNotes: stableJson({
+        project: "corvan-tts-automation",
+        characterId: profile.id,
+        version,
+        ...(profile.aspectRatio ? { aspectRatio: profile.aspectRatio } : {}),
+      }).trim(),
+      ColorDiffuse: { r: 1, g: 1, b: 1 },
+      Locked: false,
+      Grid: true,
+      Snap: true,
+      IgnoreFoW: false,
+      MeasureMovement: false,
+      DragSelectable: true,
+      Autoraise: true,
+      Sticky: true,
+      Tooltip: true,
+      GridProjection: false,
+      HideWhenFaceDown: false,
+      Hands: false,
+      CustomImage: {
+        ImageURL: imageUrl,
+        ImageSecondaryURL: "",
+        ImageScalar: 1,
+        WidthScale: 0,
+        CustomTile: { Type: 0, Thickness: 0.2, Stackable: false, Stretch: true },
+      },
+      LuaScript: bootstrap,
+      LuaScriptState: "",
+      XmlUI: ui,
+      GUID: profile.guid || undefined,
+    }],
+    TabStates: {},
+    VersionNumber: "",
+  };
+}
+
+async function buildRegisteredCharacter({
+  rootDir = PROJECT_ROOT,
+  outDir = null,
+  characterId,
+  profileOverride = null,
+  commitSha = process.env.RELEASE_COMMIT_SHA || process.env.CORVAN_COMMIT_SHA || DEFAULT_COMMIT_SHA,
+  previousVersion = process.env.RELEASE_PREVIOUS_VERSION || process.env.CORVAN_PREVIOUS_VERSION || null,
+  assetUrl = null,
+  uiAssetUrl = null,
+  savedObjectAssetUrl = null,
+  savedObjectName = null,
+} = {}) {
+  const absoluteRoot = resolve(rootDir);
+  const registry = profileOverride ? null : await loadRegistry(absoluteRoot);
+  const profile = profileOverride || registry.characters.find((candidate) => candidate.id === characterId);
+  assert(profile, `Personagem não registrado: ${characterId}.`);
+  assert(profile.status === "active", `Personagem ${characterId} não está ativo.`);
+  assert(profile.productionEnabled, `Personagem ${characterId} não está habilitado para produção.`);
+  assert(profile.version, `Personagem ${characterId} não possui versão.`);
+  const files = filesForProfile(profile);
+  const absoluteOut = resolve(outDir || join(absoluteRoot, "dist", profile.id));
+  const validatedCommitSha = validateCommitSha(commitSha);
+  const assetRef = validatedCommitSha === DEFAULT_COMMIT_SHA ? "main" : validatedCommitSha;
+  const sourceFiles = {
+    runtime: await readSource(sourcePathFor(profile, absoluteRoot, profile.sourceFiles?.runtime || "runtime.lua"), `${profile.sourceDir}/runtime.lua`),
+    ui: await readSource(sourcePathFor(profile, absoluteRoot, profile.sourceFiles?.ui || "ui.xml"), `${profile.sourceDir}/ui.xml`),
+    character: await readSource(sourcePathFor(profile, absoluteRoot, profile.sourceFiles?.character || "character.json"), `${profile.sourceDir}/character.json`),
+  };
+  const sharedBootstrapPath = join(absoluteRoot, "shared", "bootstrap.lua");
+  const bootstrap = await readSource(sharedBootstrapPath, "shared/bootstrap.lua");
+  let character;
+  try {
+    character = JSON.parse(sourceFiles.character);
+  } catch (error) {
+    fail(`${profile.sourceDir}/character.json não é JSON válido: ${error.message}`);
+  }
+  assert(isObject(character), `${profile.id} character.json deve conter um objeto.`);
+  assert(character.schemaVersion === 1, `${profile.id} character.schemaVersion deve ser 1.`);
+  assertString(character.name, `${profile.id}.character.name`);
+  if (character.id !== undefined) assert(character.id === profile.id, `${profile.id}.character.id deve corresponder ao registry.`);
+  character.id = profile.id;
+  character.version = profile.version;
+  if (profile.id === "corvan") validateCharacter(character, profile.version);
+  else if (character.version !== undefined && character.version !== null) assert(character.version === profile.version, `${profile.id}.character.version deve ser igual ao registry.`);
+
+  const assets = profile.assets || {};
+  const panelImagePath = assets.panelImage ? join(absoluteRoot, profile.assetsDir || "", assets.panelImage) : null;
+  const panelUiImagePath = assets.panelUiImage ? join(absoluteRoot, profile.assetsDir || "", assets.panelUiImage) : null;
+  const panelImageContents = assetUrl || !panelImagePath || !(await pathExists(panelImagePath)) ? null : await readFile(panelImagePath);
+  const panelUiImageContents = uiAssetUrl || !panelUiImagePath || !(await pathExists(panelUiImagePath)) ? null : await readFile(panelUiImagePath);
+  assert(
+    assetUrl || assets.panelImageUrl || panelImageContents,
+    `${profile.id} deve declarar assets.panelImage existente ou assets.panelImageUrl.`,
+  );
+  assert(
+    uiAssetUrl || assets.panelUiImageUrl || panelUiImageContents,
+    `${profile.id} deve declarar assets.panelUiImage existente ou assets.panelUiImageUrl.`,
+  );
+  const panelImageUrl = normalizeAssetReference(assetUrl || assets.panelImageUrl || fingerprintedAssetUrl(`${RAW_ASSET_BASE_URL}/${assetRef}/${profile.assetsDir}/${assets.panelImage}`, panelImageContents), "assetUrl");
+  const panelUiImageUrl = normalizeAssetReference(uiAssetUrl || assets.panelUiImageUrl || fingerprintedAssetUrl(`${RAW_ASSET_BASE_URL}/${assetRef}/${profile.assetsDir}/${assets.panelUiImage}`, panelUiImageContents), "uiAssetUrl");
+  const savedImageUrl = normalizeAssetReference(savedObjectAssetUrl || panelImageUrl, "savedObjectAssetUrl");
+  const uiTokens = {
+    "__CHARACTER_ID__": profile.id,
+    "__CHARACTER_NAME__": profile.displayName,
+    "__CHARACTER_SHORT_NAME__": profile.shortName,
+    "__CHARACTER_VERSION__": profile.version,
+  };
+  let uiSource = sourceFiles.ui;
+  for (const [token, value] of Object.entries(uiTokens)) uiSource = uiSource.replaceAll(token, escapeXmlAttribute(value));
+  uiSource = replaceSinglePlaceholder(uiSource, PLACEHOLDERS.panelUiImageUrl, escapeXmlAttribute(panelUiImageUrl), PLACEHOLDERS.panelUiImageUrl);
+  const ui = withFinalNewline(validateUi(uiSource, {
+    uiRootId: profile.uiRootId,
+    panelArtId: profile.panelArtId,
+    geometry: profile.geometry,
+    requiredUiIds: profile.requiredUiIds,
+  }));
+  const characterJson = stableJson(character);
+  const runtimeSharedPath = join(absoluteRoot, "shared", "runtime-core.lua");
+  let runtime = sourceFiles.runtime;
+  if (await pathExists(runtimeSharedPath)) {
+    const sharedRuntime = await readSource(runtimeSharedPath, "shared/runtime-core.lua");
+    if (runtime.includes("__RUNTIME_CORE_LITERAL__")) {
+      runtime = replaceSinglePlaceholder(runtime, "__RUNTIME_CORE_LITERAL__", sharedRuntime, "__RUNTIME_CORE_LITERAL__");
+    } else {
+      runtime = `${sharedRuntime}\n${runtime}`;
+    }
+  }
+  runtime = replaceSinglePlaceholder(runtime, PLACEHOLDERS.ui, luaLongString(ui), PLACEHOLDERS.ui);
+  runtime = replaceSinglePlaceholder(runtime, PLACEHOLDERS.character, luaLongString(characterJson), PLACEHOLDERS.character);
+  if (runtime.includes(PLACEHOLDERS.panelImageUrl)) {
+    runtime = replaceSinglePlaceholder(runtime, PLACEHOLDERS.panelImageUrl, luaLongString(panelImageUrl), PLACEHOLDERS.panelImageUrl);
+  }
+  if (runtime.includes(PLACEHOLDERS.panelUiImageUrlLiteral)) {
+    runtime = replaceSinglePlaceholder(runtime, PLACEHOLDERS.panelUiImageUrlLiteral, luaLongString(panelUiImageUrl), PLACEHOLDERS.panelUiImageUrlLiteral);
+  }
+  runtime = replaceOptionalPlaceholders(runtime, profile, files.manifest, files.runtime);
+  runtime = withFinalNewline(runtime);
+  assert(runtime.includes(profile.runtimeMarker), `${profile.id} runtime não contém o marcador ${profile.runtimeMarker}.`);
+  let generatedBootstrap = replaceSinglePlaceholder(bootstrap, PLACEHOLDERS.seedRuntime, luaLongString(runtime), PLACEHOLDERS.seedRuntime);
+  generatedBootstrap = replaceSinglePlaceholder(generatedBootstrap, PLACEHOLDERS.seedUi, luaLongString(ui), PLACEHOLDERS.seedUi);
+  generatedBootstrap = replaceOptionalPlaceholders(generatedBootstrap, profile, files.manifest, files.runtime);
+  generatedBootstrap = withFinalNewline(generatedBootstrap);
+  for (const placeholder of Object.values(PLACEHOLDERS)) {
+    assert(!runtime.includes(placeholder), `${profile.id} runtime ainda contém ${placeholder}.`);
+    assert(!generatedBootstrap.includes(placeholder), `${profile.id} bootstrap ainda contém ${placeholder}.`);
+  }
+  const unresolvedRuntime = runtime.match(/__[A-Z][A-Z0-9_]*__/);
+  const unresolvedBootstrap = generatedBootstrap.match(/__[A-Z][A-Z0-9_]*__/);
+  const unresolvedUi = ui.match(/__[A-Z][A-Z0-9_]*__/);
+  assert(unresolvedRuntime === null, `${profile.id} runtime ainda contém ${unresolvedRuntime?.[0]}.`);
+  assert(unresolvedBootstrap === null, `${profile.id} bootstrap ainda contém ${unresolvedBootstrap?.[0]}.`);
+  assert(unresolvedUi === null, `${profile.id} UI ainda contém ${unresolvedUi?.[0]}.`);
+  const manifest = createGenericManifest(profile, profile.version, validatedCommitSha, runtime, validatePreviousVersion(previousVersion, profile.version), files);
+  const savedObject = createGenericSavedObject(profile, generatedBootstrap, ui, profile.version, savedImageUrl, savedObjectName || profile.savedObjectName);
+  const output = {
+    [files.runtime]: runtime,
+    [files.manifest]: stableJson(manifest),
+    [files.savedObject]: stableJson(savedObject),
+  };
+  await mkdir(absoluteOut, { recursive: true });
+  await Promise.all(Object.entries(output).map(([name, contents]) => writeFile(join(absoluteOut, name), contents, "utf8")));
+  return { outDir: absoluteOut, profile, version: profile.version, manifest, savedObject, files: output, panelImageUrl, panelUiImageUrl };
+}
+
+export async function loadCharacterRegistry(rootDir = PROJECT_ROOT) {
+  return loadRegistry(resolve(rootDir));
+}
+
+export async function buildProject(options = {}) {
+  return buildRegisteredCharacter({
+    ...options,
+    characterId: options.characterId || options.character || "corvan",
+  });
+}
+
+export async function buildAllCharacters({ rootDir = PROJECT_ROOT, outDir = null, ...options } = {}) {
+  const absoluteRoot = resolve(rootDir);
+  const registry = await loadRegistry(absoluteRoot);
+  const results = [];
+  for (const profile of registry.characters.filter((candidate) => candidate.status === "active")) {
+    if (!profile.productionEnabled) continue;
+    results.push(await buildRegisteredCharacter({ rootDir: absoluteRoot, outDir: outDir ? join(outDir, profile.id) : join(absoluteRoot, "dist", profile.id), characterId: profile.id, ...options }));
+  }
+  return results;
+}
+
+export async function buildFixture({ rootDir = PROJECT_ROOT, fixtureId = "arcane-test", outDir = null, ...options } = {}) {
+  const fixtureRoot = join(resolve(rootDir), "fixtures", "characters", fixtureId);
+  assert(await pathExists(fixtureRoot), `Fixture não encontrada: ${fixtureId}.`);
+  const fixtureRegistryPath = join(fixtureRoot, "profile.json");
+  let profile;
+  try { profile = JSON.parse(normalizeText(await readFile(fixtureRegistryPath, "utf8"))); } catch (error) { fail(`Fixture inválida: ${error.message}`); }
+  profile = normalizeBuildProfile(profile);
+  validateCharacterProfile(profile);
+  const fixtureBuildRoot = resolve(rootDir);
+  const virtual = { ...profile, sourceDir: `fixtures/characters/${fixtureId}`, assetsDir: `fixtures/characters/${fixtureId}/assets` };
+  // Não escreva no repositório: o builder interno recebe um perfil diretamente.
+  return buildRegisteredCharacter({ rootDir: fixtureBuildRoot, profileOverride: virtual, characterId: fixtureId, outDir: outDir || join(fixtureBuildRoot, "dist", fixtureId), ...options });
+}
+
 function parseCliArguments(argv) {
   const options = {};
   for (let index = 0; index < argv.length; index += 1) {
@@ -648,6 +1150,13 @@ function parseCliArguments(argv) {
     } else if (argument === "--saved-object-name" && value) {
       options.savedObjectName = value;
       index += 1;
+    } else if (argument === "--character" && value) {
+      options.characterId = value;
+      index += 1;
+    } else if (argument === "--fixture" && value) {
+      options.fixtureId = value;
+      options.fixture = true;
+      index += 1;
     } else {
       fail(`Argumento desconhecido ou sem valor: ${argument}`);
     }
@@ -657,8 +1166,17 @@ function parseCliArguments(argv) {
 
 async function main() {
   try {
-    const result = await buildProject(parseCliArguments(process.argv.slice(2)));
-    process.stdout.write(`Artefatos v${result.version} gerados em ${result.outDir}\n`);
+    const options = parseCliArguments(process.argv.slice(2));
+    if (options.fixture) {
+      const result = await buildFixture(options);
+      process.stdout.write(`Fixture ${result.profile.id} v${result.version} gerada em ${result.outDir}\n`);
+    } else if (options.characterId) {
+      const result = await buildProject(options);
+      process.stdout.write(`Artefatos ${result.profile.id} v${result.version} gerados em ${result.outDir}\n`);
+    } else {
+      const results = await buildAllCharacters(options);
+      process.stdout.write(`${results.length} personagem(ns) gerado(s):\n${results.map((result) => `- ${result.profile.id} v${result.version}: ${result.outDir}`).join("\n")}\n`);
+    }
   } catch (error) {
     process.stderr.write(`Build falhou: ${error.message}\n`);
     process.exitCode = 1;

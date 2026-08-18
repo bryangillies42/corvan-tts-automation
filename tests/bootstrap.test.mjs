@@ -2,16 +2,16 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const bootstrapUrl = new URL('../src/bootstrap.lua', import.meta.url);
+const bootstrapUrl = new URL('../shared/bootstrap.lua', import.meta.url);
 const source = await readFile(bootstrapUrl, 'utf8');
-const runtimeSource = await readFile(new URL('../src/runtime.lua', import.meta.url), 'utf8');
-const uiSource = await readFile(new URL('../src/ui.xml', import.meta.url), 'utf8');
+const runtimeSource = await readFile(new URL('../characters/corvan/runtime.lua', import.meta.url), 'utf8');
+const uiSource = await readFile(new URL('../characters/corvan/ui.xml', import.meta.url), 'utf8');
 
 test('keeps one build-time placeholder for the seed UI and runtime', () => {
   assert.equal((source.match(/__SEED_UI_LITERAL__/g) ?? []).length, 1);
   assert.equal((source.match(/__SEED_RUNTIME_LITERAL__/g) ?? []).length, 1);
   assert.match(source, /local BOOTSTRAP_VERSION = "1\.0\.2"/);
-  assert.match(source, /local SEED_RUNTIME_VERSION = "0\.2\.1"/);
+  assert.match(source, /local SEED_RUNTIME_VERSION = __CHARACTER_VERSION_LITERAL__/);
   assert.match(source, /local SEED_UI = __SEED_UI_LITERAL__/);
   assert.match(source, /local SEED_RUNTIME = __SEED_RUNTIME_LITERAL__/);
   assert.match(source, /uiXml = SEED_UI/);
@@ -140,8 +140,13 @@ test('pins updates to public GitHub release assets and validates the manifest/ru
   assert.match(source, /#runtimeSha256 ~= 64/);
   assert.match(
     source,
-    /TRUSTED_RUNTIME_PREFIX \..*"v" \..*manifest\.version \..*"\/corvan-runtime\.lua"/,
+    /local expectedRuntimeUrl = TRUSTED_RUNTIME_PREFIX \.\. releaseTag \.\. "\/" \.\. RUNTIME_ASSET_NAME/,
   );
+  assert.match(source, /manifest\.characterId ~= CHARACTER_ID/);
+  assert.match(source, /manifest\.releaseTag ~= releaseTag/);
+  assert.match(source, /asset\.browser_download_url == TRUSTED_RUNTIME_PREFIX/);
+  assert.match(source, /local MAX_RELEASE_PAGES = 10/);
+  assert.match(source, /beginNamespacedReleasePage\(serial, page \+ 1/);
   assert.match(source, /local actualSha256 = sha256Digest\(job\.hash\)/);
   assert.match(source, /string\.lower\(actualSha256\) ~= string\.lower\(expectedSha256\)/);
   assert.match(source, /Wait\.frames\(/);

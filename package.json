@@ -1,14 +1,13 @@
 {
   "name": "corvan-tts-automation",
-  "version": "0.2.1",
-  "release": {
-    "prerelease": true
-  },
   "private": true,
   "type": "module",
-  "description": "Console de combate do Corvan Duras para Tabletop Simulator",
+  "description": "Ferramentas para Saved Objects de personagens no Tabletop Simulator",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "build:character": "node scripts/build.mjs",
+    "build:fixture": "node scripts/build.mjs --fixture arcane-test",
+    "character:new": "node scripts/new-character.mjs",
     "test": "node --test",
     "test:lua": "pwsh -NoProfile -File scripts/smoke-moonsharp.ps1"
   },

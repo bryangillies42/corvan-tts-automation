@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const character = JSON.parse(await readFile(new URL('../src/character.json', import.meta.url), 'utf8'));
-const runtime = await readFile(new URL('../src/runtime.lua', import.meta.url), 'utf8');
-const ui = await readFile(new URL('../src/ui.xml', import.meta.url), 'utf8');
+const character = JSON.parse(await readFile(new URL('../characters/corvan/character.json', import.meta.url), 'utf8'));
+const runtime = await readFile(new URL('../characters/corvan/runtime.lua', import.meta.url), 'utf8');
+const ui = await readFile(new URL('../characters/corvan/ui.xml', import.meta.url), 'utf8');
 
 function initialState() {
   return {
@@ -278,7 +278,9 @@ test('runtime expõe o contrato público e o estado de busy para o bootstrap', (
   for (const name of ['healthCheck', 'exportState', 'importState', 'handleUiEvent', 'registerParent']) {
     assert.match(runtime, new RegExp(`function\\s+${name}\\s*\\(`));
   }
-  assert.match(runtime, /exported\.rollInProgress\s*=\s*rollInProgress/);
+  assert.match(runtime, /envelope\.rollInProgress\s*=\s*rollInProgress/);
+  assert.match(runtime, /AdapterApi\.state\.envelope\(character, core\)/);
+  assert.match(runtime, /AdapterApi\.state\.unwrap\(payload\)/);
   assert.match(runtime, /safeParentCall\("runtimeReady"/);
   assert.match(runtime, /parent\.call\(functionName, payload\)/);
   assert.match(runtime, /cacheRuntimeState/);
@@ -354,8 +356,8 @@ test('dados físicos usam offset local, espera oficial e limpeza por GUID própr
   assert.match(runtime, /object\.getRotationValue\(\)/);
   assert.match(runtime, /state\.ownedDiceGuids/);
   assert.match(runtime, /state\.ownedDiceOwnerGuid/);
-  assert.match(runtime, /metadata\.ownerPanelGuid == parentGuid/);
-  assert.match(runtime, /metadata\.kind == "owned-die"/);
+  assert.match(runtime, /AdapterApi\.dice\.owns\(metadata, parentGuid\)/);
+  assert.match(runtime, /AdapterApi\.dice\.metadata\(parentGuid\)/);
   assert.match(runtime, /markOwnedDie\(object\)/);
   assert.match(runtime, /destroyObject\(object\)/);
   assert.doesNotMatch(runtime, /getAllObjects\s*\(/, 'não pode apagar dados que não pertencem ao painel');
@@ -393,9 +395,7 @@ test('chat usa entrega resiliente, formato centralizado e nunca notificações c
   assert.ok(runtime.includes('[62B8FF]'));
   assert.doesNotMatch(runtime, /\[E8EDF2\]|\[63E6A5\]|\[FFD166\]|\[b\]|\[\/b\]/);
   assert.match(runtime, /formatChatDice\(count, sides, values\)/);
-  assert.match(runtime, /│ RESULTADO:/);
-  assert.match(runtime, /│ CÁLCULO:/);
-  assert.match(runtime, /suffix == "CRÍTICO"[\s\S]*chatColorSegment\("FF6464", suffix\)/);
+  assert.match(runtime, /AdapterApi\.chat\.formatRoll\(/);
   assert.match(runtime, /threat and "CRÍTICO" or nil/);
   assert.doesNotMatch(runtime, /AMEAÇA!/);
   assert.match(runtime, /Player\[functionName\]/);

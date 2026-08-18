@@ -24,35 +24,14 @@ local function errorColor()
     return {0.95, 0.36, 0.30}
 end
 
-local function deepCopy(value, seen)
-    if type(value) ~= "table" then return value end
-    seen = seen or {}
-    if seen[value] then return seen[value] end
-    local result = {}
-    seen[value] = result
-    for key, item in pairs(value) do
-        result[deepCopy(key, seen)] = deepCopy(item, seen)
-    end
-    return result
-end
-
-local function finiteNumber(value, fallback)
-    local number = tonumber(value)
-    if number == nil or number ~= number or number == math.huge or number == -math.huge then
-        return fallback
-    end
-    return number
-end
-
-local function clamp(value, minimum, maximum)
-    value = finiteNumber(value, minimum)
-    if value < minimum then return minimum end
-    if value > maximum then return maximum end
-    return value
-end
+local RuntimeCore = CharacterRuntimeCore
+local deepCopy = RuntimeCore.deepCopy
+local finiteNumber = RuntimeCore.finiteNumber
+local clamp = RuntimeCore.clamp
 
 local DEFAULT_CHARACTER = {
     schemaVersion = 1,
+    id = "corvan",
     version = "0.2.1",
     name = "Corvan Duras",
     shortName = "Corvan",
@@ -104,13 +83,25 @@ local DEFAULT_CHARACTER = {
     diceOffset = {x = 0, y = 3.2, z = 0}
 }
 
+local EXPECTED_CHARACTER_ID = "corvan"
+local EXPECTED_RUNTIME_VERSION = "0.2.1"
 local characterLoaded = false
+local configurationError = nil
 local function decodeCharacter()
     if type(JSON) ~= "table" or type(JSON.decode) ~= "function" then
+        configurationError = "JSON.decode indisponível ao carregar a configuração do Corvan."
         return deepCopy(DEFAULT_CHARACTER)
     end
     local ok, decoded = pcall(function() return JSON.decode(CHARACTER_JSON) end)
-    if not ok or type(decoded) ~= "table" or type(decoded.weapons) ~= "table" then
+    if not ok or type(decoded) ~= "table" then
+        configurationError = "character.json do Corvan é inválido."
+        return deepCopy(DEFAULT_CHARACTER)
+    end
+    if decoded.id ~= EXPECTED_CHARACTER_ID
+        or type(decoded.weapons) ~= "table"
+        or type(decoded.resources) ~= "table"
+        or type(decoded.powers) ~= "table" then
+        configurationError = "character.json não corresponde ao contrato do Corvan."
         return deepCopy(DEFAULT_CHARACTER)
     end
     characterLoaded = true
@@ -118,6 +109,16 @@ local function decodeCharacter()
 end
 
 local CHARACTER = decodeCharacter()
+local CHARACTER_ID = EXPECTED_CHARACTER_ID
+local CHARACTER_NAME = tostring(CHARACTER.shortName or CHARACTER.name or CHARACTER_ID)
+local CORE_CONFIG = {
+    characterId = CHARACTER_ID,
+    runtimeVersion = CHARACTER.version,
+    allowLegacyIdentity = CHARACTER_ID == "corvan",
+    project = "corvan-tts-automation",
+    legacyProject = CHARACTER_ID == "corvan" and "corvan-tts-automation" or nil
+}
+local AdapterApi = RuntimeCore.createRuntimeApi(CORE_CONFIG)
 local parentGuid = nil
 
 -- Funções puras expostas para um harness Lua sem depender das APIs do TTS.
@@ -497,18 +498,8 @@ function CorvanRules.formatRollResult(label, total, count, sides, values, modifi
 end
 
 function CorvanRules.formatChatRollResult(shortName, label, total, count, sides, values, modifier, suffix)
-    local formula = formatChatDice(count, sides, values) .. formatModifier(modifier)
-    -- Duas tags curtas preservam a hierarquia visual sem recriar as sete cores
-    -- e os blocos de negrito que tornavam o renderer do chat frágil.
-    local result = chatColorSegment("FF6464", shortName) .. " • " .. chatSafeText(label)
-        .. "  │ RESULTADO: " .. chatColorSegment("62B8FF", total)
-        .. "  │ CÁLCULO: " .. chatSafeText(formula)
-    if type(suffix) == "string" and suffix ~= "" then
-        local renderedSuffix = suffix == "CRÍTICO"
-            and chatColorSegment("FF6464", suffix) or chatSafeText(suffix)
-        result = result .. "  │ " .. renderedSuffix
-    end
-    return result
+    return AdapterApi.chat.formatRoll(
+        shortName, label, total, count, sides, values, modifier, suffix)
 end
 
 local function damageFormula(spec)
@@ -585,6 +576,7 @@ local function preparePanelBoardArt()
 end
 
 local function renderNow()
+    if not characterLoaded then return end
     if not parent then return end
     local weapon = CHARACTER.weapons[state.activeWeapon]
     local attack = CorvanRules.calculateAttackModifier(CHARACTER, state, state.activeWeapon)
@@ -664,6 +656,7 @@ local function scheduleRender()
 end
 
 local function applyUi()
+    if not characterLoaded then return false end
     if not parent then return false end
     -- O XML completo também carrega o valor atual do toggle. Isso mantém a
     -- preferência sincronizada até em painéis importados com um bootstrap
@@ -678,7 +671,11 @@ local function applyUi()
     renderedXml = renderedXml:gsub(
         'id="panelBoardArt" active="[^"]*"',
         'id="panelBoardArt" active="' .. overlayValue .. '"', 1)
-    local ok, accepted = safeParentCall("applyRuntimeUi", {xml = renderedXml, version = CHARACTER.version})
+    local ok, accepted = safeParentCall("applyRuntimeUi", {
+        xml = renderedXml,
+        characterId = CHARACTER_ID,
+        version = CHARACTER.version
+    })
     preparePanelBoardArt()
     scheduleRender()
     return ok and accepted ~= false
@@ -701,9 +698,9 @@ end
 
 local function chatDiagnostic(message)
     if type(log) == "function" then
-        pcall(function() log(message, "Corvan chat") end)
+        pcall(function() log(message, CHARACTER_NAME .. " chat") end)
     elseif type(print) == "function" then
-        pcall(function() print("Corvan chat: " .. message) end)
+        pcall(function() print(CHARACTER_NAME .. " chat: " .. message) end)
     end
 end
 
@@ -862,16 +859,16 @@ end
 
 local function privateError(playerColor, message)
     local relayed, accepted = safeParentCall("relayRuntimePrivate", {
-        message = "Corvan • " .. message,
+        message = CHARACTER_NAME .. " • " .. message,
         playerColor = playerColor
     })
     if relayed and accepted == true then return end
     if type(playerColor) == "table" then playerColor = playerColor.color end
     if type(printToColor) == "function" and type(playerColor) == "string" and playerColor ~= "" then
-        local ok = pcall(function() printToColor("Corvan • " .. message, playerColor, errorColor()) end)
+        local ok = pcall(function() printToColor(CHARACTER_NAME .. " • " .. message, playerColor, errorColor()) end)
         if ok then return end
     end
-    if type(print) == "function" then print("Corvan • " .. message) end
+    if type(print) == "function" then print(CHARACTER_NAME .. " • " .. message) end
 end
 
 local function ownedDieMetadata(object)
@@ -886,10 +883,7 @@ end
 local function dieBelongsToParent(object)
     local metadata, hasNotes = ownedDieMetadata(object)
     if hasNotes then
-        return metadata ~= nil
-            and metadata.project == "corvan-tts-automation"
-            and metadata.kind == "owned-die"
-            and metadata.ownerPanelGuid == parentGuid
+        return AdapterApi.dice.owns(metadata, parentGuid)
     end
     -- Dados criados até a v0.1.6 não possuíam metadados próprios. Eles só são
     -- aceitos quando o owner persistido (migrado de parentGuid) ainda coincide.
@@ -899,11 +893,7 @@ end
 local function markOwnedDie(object)
     if not object or type(JSON) ~= "table" or type(JSON.encode) ~= "function" then return false end
     local encodedOk, notes = pcall(function()
-        return JSON.encode({
-            project = "corvan-tts-automation",
-            kind = "owned-die",
-            ownerPanelGuid = parentGuid
-        })
+        return JSON.encode(AdapterApi.dice.metadata(parentGuid))
     end)
     if not encodedOk or type(notes) ~= "string" then return false end
     return pcall(function() object.setGMNotes(notes) end)
@@ -1193,7 +1183,7 @@ local function onDieSpawned(token, index, object)
     state.ownedDiceOwnerGuid = parentGuid
     markOwnedDie(object)
     if guid then table.insert(state.ownedDiceGuids, guid) end
-    pcall(function() object.setName("Corvan • dado da ferramenta") end)
+    pcall(function() object.setName(CHARACTER_NAME .. " • dado da ferramenta") end)
     -- O TTS congela objetos recém-criados por um frame. Aplicar a força no
     -- callback imediato faz o dado nascer sem movimento em algumas sessões.
     local scheduled = pcall(function()
@@ -1540,6 +1530,7 @@ local SKILL_IDS = {
 }
 
 function handleUiEvent(payload)
+    if not characterLoaded then return false end
     payload = type(payload) == "table" and payload or {}
     local id = tostring(payload.id or ""):lower():gsub("%-", "_"):gsub("%s+", "_")
     id = ID_ALIASES[id] or id
@@ -1632,17 +1623,47 @@ function handleUiEvent(payload)
     return false
 end
 
+local CORE_STATE_FIELDS = {
+    diceOffset = true,
+    ownedDiceGuids = true,
+    ownedDiceOwnerGuid = true,
+    lastResult = true,
+    settingsOpen = true,
+}
+
+local function unwrapStatePayload(payload)
+    if type(payload) ~= "table" then return nil end
+    if finiteNumber(payload.schemaVersion, 1) > STATE_SCHEMA_VERSION then return nil end
+    local characterState, coreState, stateError = AdapterApi.state.unwrap(payload)
+    if stateError ~= nil then return nil end
+    local flattened = characterState
+    for key in pairs(CORE_STATE_FIELDS) do
+        if coreState[key] ~= nil then flattened[key] = deepCopy(coreState[key]) end
+    end
+    flattened.runtimeVersion = payload.runtimeVersion or flattened.runtimeVersion
+    flattened.schemaVersion = payload.characterStateSchemaVersion or flattened.schemaVersion
+    return flattened
+end
+
 function exportState()
-    local exported = deepCopy(state)
-    exported.schemaVersion = STATE_SCHEMA_VERSION
-    exported.runtimeVersion = CHARACTER.version
-    exported.parentGuid = parentGuid
-    exported.rollInProgress = rollInProgress
-    exported.helperGuid = safeObjectGuid(self)
-    return exported
+    if not characterLoaded then return nil end
+    local core = {}
+    local character = {}
+    for key, value in pairs(state) do
+        if CORE_STATE_FIELDS[key] then core[key] = deepCopy(value)
+        else character[key] = deepCopy(value) end
+    end
+    local envelope = AdapterApi.state.envelope(character, core)
+    envelope.schemaVersion = 1
+    envelope.characterStateSchemaVersion = STATE_SCHEMA_VERSION
+    envelope.parentGuid = parentGuid
+    envelope.rollInProgress = rollInProgress
+    envelope.helperGuid = safeObjectGuid(self)
+    return envelope
 end
 
 function importState(payload)
+    if not characterLoaded then return false end
     if rollInProgress then return false end
     if type(payload) == "string" and type(JSON) == "table" then
         local ok, decoded = pcall(function() return JSON.decode(payload) end)
@@ -1651,8 +1672,9 @@ function importState(payload)
     end
     if type(payload) ~= "table" then return false end
     if type(payload.state) == "table" then payload = payload.state end
-    if finiteNumber(payload.schemaVersion, 1) > STATE_SCHEMA_VERSION then return false end
-    state = normalizeState(payload)
+    local unwrapped = unwrapStatePayload(payload)
+    if unwrapped == nil or finiteNumber(unwrapped.schemaVersion, 1) > STATE_SCHEMA_VERSION then return false end
+    state = normalizeState(unwrapped)
     resourceAdjustments = {hp = "", mp = ""}
     currentRoll = nil
     rollInProgress = false
@@ -1663,7 +1685,10 @@ end
 function healthCheck(_)
     return {
         ok = characterLoaded,
-        version = tostring(CHARACTER.version),
+        characterId = CHARACTER_ID,
+        runtimeMarker = "CORVAN_RUNTIME",
+        version = tostring(CHARACTER.version or EXPECTED_RUNTIME_VERSION),
+        error = configurationError,
         schemaVersion = STATE_SCHEMA_VERSION,
         parentGuid = parentGuid,
         rollInProgress = rollInProgress
@@ -1677,6 +1702,7 @@ end
 local function notifyReady()
     safeParentCall("runtimeReady", {
         parentGuid = parentGuid,
+        characterId = CHARACTER_ID,
         version = CHARACTER.version,
         health = healthCheck({})
     })
@@ -1684,13 +1710,24 @@ end
 
 local function persistParentNotes()
     if not self or type(self.setGMNotes) ~= "function" or type(JSON) ~= "table" then return end
-    pcall(function() self.setGMNotes(JSON.encode({parentGuid = parentGuid})) end)
+    pcall(function()
+        self.setGMNotes(JSON.encode({
+            project = "corvan-tts-automation",
+            characterId = CHARACTER_ID,
+            parentGuid = parentGuid
+        }))
+    end)
 end
 
 function registerParent(payload)
+    if not characterLoaded then return false end
     if type(payload) == "string" then
         parentGuid = payload
     elseif type(payload) == "table" then
+        -- O bootstrap 1.0.2 distribuído no Saved Object v0.2.0 ainda não
+        -- enviava identidade. Somente o Corvan aceita essa ausência legada;
+        -- uma identidade explícita divergente continua sempre recusada.
+        if payload.characterId ~= nil and payload.characterId ~= CHARACTER_ID then return false end
         parentGuid = payload.parentGuid or payload.guid or parentGuid
     end
     if type(parentGuid) ~= "string" or parentGuid == "" then return false end
@@ -1698,7 +1735,9 @@ function registerParent(payload)
     if not resolveParent() then return false end
     persistParentNotes()
     if type(payload) == "table" and type(payload.state) == "table" then
-        state = normalizeState(payload.state)
+        local unwrapped = unwrapStatePayload(payload.state)
+        if unwrapped == nil then return false end
+        state = normalizeState(unwrapped)
     end
     applyUi()
     cacheAndRender()
@@ -1711,12 +1750,16 @@ local function readParentNotes()
     local ok, notes = pcall(function() return self.getGMNotes() end)
     if not ok or type(notes) ~= "string" or notes == "" then return end
     local decodedOk, decoded = pcall(function() return JSON.decode(notes) end)
-    if decodedOk and type(decoded) == "table" and type(decoded.parentGuid) == "string" then
+    if decodedOk and type(decoded) == "table"
+        and (decoded.characterId == nil and CHARACTER_ID == "corvan"
+            or decoded.characterId == CHARACTER_ID)
+        and type(decoded.parentGuid) == "string" then
         parentGuid = decoded.parentGuid
     end
 end
 
 local function bindWithRetry(remaining)
+    if not characterLoaded then return end
     if resolveParent() then
         applyUi()
         cacheAndRender()
@@ -1731,15 +1774,20 @@ local function bindWithRetry(remaining)
 end
 
 function onLoad(savedData)
+    if not characterLoaded then return end
     readParentNotes()
     if type(savedData) == "string" and savedData ~= "" and type(JSON) == "table" then
         local ok, decoded = pcall(function() return JSON.decode(savedData) end)
-        if ok and type(decoded) == "table" then state = normalizeState(decoded.state or decoded) end
+        if ok and type(decoded) == "table" then
+            local unwrapped = unwrapStatePayload(decoded.state or decoded)
+            if unwrapped ~= nil then state = normalizeState(unwrapped) end
+        end
     end
     bindWithRetry(8)
 end
 
 function onSave()
+    if not characterLoaded then return "" end
     if type(JSON) ~= "table" or type(JSON.encode) ~= "function" then return "" end
     local ok, encoded = pcall(function() return JSON.encode(exportState()) end)
     return ok and encoded or ""

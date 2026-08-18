@@ -1,6 +1,31 @@
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
+
+function ConvertTo-LuaLiteral($value) {
+    if ($null -eq $value) { return 'nil' }
+    if ($value -is [bool]) { return $(if ($value) { 'true' } else { 'false' }) }
+    if ($value -is [string]) {
+        return "'" + $value.Replace('\', '\\').Replace("'", "\'").Replace("`r", '\r').Replace("`n", '\n') + "'"
+    }
+    if ($value -is [System.Collections.IDictionary]) {
+        $pairs = foreach ($key in $value.Keys) {
+            "[" + (ConvertTo-LuaLiteral ([string]$key)) + "] = " + (ConvertTo-LuaLiteral $value[$key])
+        }
+        return '{' + ($pairs -join ', ') + '}'
+    }
+    if ($value -is [System.Collections.IEnumerable] -and $value -isnot [string]) {
+        $items = foreach ($item in $value) { ConvertTo-LuaLiteral $item }
+        return '{' + ($items -join ', ') + '}'
+    }
+    if ($value -is [pscustomobject]) {
+        $pairs = foreach ($property in $value.PSObject.Properties) {
+            "[" + (ConvertTo-LuaLiteral $property.Name) + "] = " + (ConvertTo-LuaLiteral $property.Value)
+        }
+        return '{' + ($pairs -join ', ') + '}'
+    }
+    return ([System.Convert]::ToString($value, [System.Globalization.CultureInfo]::InvariantCulture))
+}
 $candidateDlls = @()
 if (${env:ProgramFiles(x86)}) {
     $candidateDlls += Join-Path ${env:ProgramFiles(x86)} 'Steam\steamapps\common\Tabletop Simulator\Tabletop Simulator_Data\Managed\MoonSharp.Interpreter.dll'
@@ -18,9 +43,13 @@ if (-not $moonSharpDll) {
 if ($LASTEXITCODE -ne 0) {
     throw 'O build falhou antes do smoke Lua.'
 }
+& node (Join-Path $projectRoot 'scripts\build.mjs') --fixture arcane-test
+if ($LASTEXITCODE -ne 0) {
+    throw 'O build da fixture falhou antes do smoke Lua.'
+}
 
 Add-Type -Path $moonSharpDll
-$panelUiAsset = Join-Path $projectRoot 'assets\panel-board-ui.jpg'
+$panelUiAsset = Join-Path $projectRoot 'characters\corvan\assets\panel-board-ui.jpg'
 if (-not (Test-Path -LiteralPath $panelUiAsset)) {
     throw 'Asset otimizado da moldura não foi encontrado.'
 }
@@ -37,14 +66,63 @@ $panelUiSize = (Get-Item -LiteralPath $panelUiAsset).Length
 if ($panelUiSize -gt 180KB) {
     throw "A moldura otimizada possui $panelUiSize bytes; esperado no máximo 180 KB."
 }
-$runtime = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'dist\corvan-runtime.lua')
-$savedObject = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'dist\Corvan_Duras_Console.json') | ConvertFrom-Json
-$manifest = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'dist\manifest.json') | ConvertFrom-Json
+$runtime = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'dist\corvan\corvan-runtime.lua')
+$legacyBootstrap = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'fixtures\legacy\corvan-v0.2.0-bootstrap.lua')
+$characterData = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'characters\corvan\character.json') | ConvertFrom-Json
+$characterConfigLiteral = ConvertTo-LuaLiteral $characterData
+$runtimeConfigPrelude = "JSON = { decode = function(_) return $characterConfigLiteral end, encode = function(_) return '{}' end }"
+$savedObject = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'dist\corvan\Corvan_Duras_Console.json') | ConvertFrom-Json
+$manifest = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'dist\corvan\manifest.json') | ConvertFrom-Json
+$fixtureRuntime = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'dist\arcane-test\arcane-test-runtime.lua')
+$fixtureSavedObject = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'dist\arcane-test\Arcane_Test_Console.json') | ConvertFrom-Json
+$fixtureBootstrap = $fixtureSavedObject.ObjectStates[0].LuaScript
 $bootstrap = $savedObject.ObjectStates[0].LuaScript
 
 $compiler = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $null = $compiler.LoadString($runtime)
 $null = $compiler.LoadString($bootstrap)
+$null = $compiler.LoadString($fixtureRuntime)
+$null = $compiler.LoadString($fixtureBootstrap)
+$null = $compiler.LoadString($legacyBootstrap)
+
+$fixturePrelude = @'
+JSON = {
+    decode = function(_)
+        return {
+            id = 'arcane-test', version = '0.1.0',
+            resources = {focus = {max = 12}}
+        }
+    end,
+    encode = function(_) return '{}' end
+}
+local parentCalls = {}
+local fixtureParent = {
+    call = function(name, payload)
+        parentCalls[#parentCalls + 1] = {name = name, payload = payload}
+        return true
+    end
+}
+function getObjectFromGUID(guid)
+    if guid == 'arcane-panel' then return fixtureParent end
+    return nil
+end
+'@
+$fixtureAssertions = @'
+assert(healthCheck({}).ok and healthCheck({}).characterId == 'arcane-test')
+assert(registerParent({parentGuid = 'arcane-panel', characterId = 'arcane-test'}))
+assert(handleUiEvent({id = 'cast', playerColor = 'White'}))
+local exported = exportState()
+assert(exported.characterId == 'arcane-test'
+    and exported.character.focus == 11
+    and exported.character.casts == 1)
+assert(not importState({characterId = 'corvan', character = {focus = 99}}))
+return exported.character.focus, exported.character.casts, #parentCalls
+'@
+$fixtureRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
+$fixtureResult = $fixtureRunner.DoString($fixturePrelude + "`n" + $fixtureRuntime + "`n" + $fixtureAssertions).ToString()
+if ($fixtureResult -ne '11, 1, 8') {
+    throw "Smoke da fixture retornou '$fixtureResult'; esperado '11, 1, 8'."
+}
 
 $rulesHarness = @'
 local character = {
@@ -116,10 +194,29 @@ return CorvanRules.calculateAttackModifier(character, state, 'sword'),
 '@
 
 $runner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
-$actual = $runner.DoString($runtime + "`n" + $rulesHarness).ToString()
+$actual = $runner.DoString($runtimeConfigPrelude + "`n" + $runtime + "`n" + $rulesHarness).ToString()
 $expected = '14, 29, 15, 11, 2, 8, 8, true'
 if ($actual -ne $expected) {
     throw "Smoke de regras retornou '$actual'; esperado '$expected'."
+}
+
+$invalidConfigurationHarness = @'
+local health = healthCheck({})
+assert(not health.ok and health.characterId == 'corvan')
+assert(type(health.error) == 'string' and health.error ~= '')
+assert(not registerParent({parentGuid = 'other-panel', characterId = 'arcane-test'}))
+assert(not handleUiEvent({id = 'roll_attack', playerColor = 'White'}))
+assert(exportState() == nil)
+assert(not importState({characterId = 'corvan', character = {}}))
+return health.characterId, health.ok, exportState() == nil
+'@
+$invalidConfigurationPrelude = "JSON = { decode = function(_) return {id = 'outro'} end, encode = function(_) return '{}' end }"
+$invalidConfigurationRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
+$invalidConfigurationResult = $invalidConfigurationRunner.DoString(
+    $invalidConfigurationPrelude + "`n" + $runtime + "`n" + $invalidConfigurationHarness
+).ToString()
+if ($invalidConfigurationResult -ne '"corvan", false, true') {
+    throw "Smoke de configuração inválida retornou '$invalidConfigurationResult'."
 }
 
 $runtimeFlowHarness = @'
@@ -312,7 +409,21 @@ spawnObject = function(params)
     params.callback_function(die)
 end
 
-assert(registerParent({parentGuid = 'panel1'}))
+assert(not registerParent({parentGuid = 'foreign-panel', characterId = 'arcane-test'}))
+-- Contrato exato do bootstrap 1.0.2 congelado: tabela sem characterId.
+assert(registerParent({parentGuid = 'panel1', state = {
+    schemaVersion = 1,
+    runtimeVersion = '0.2.0',
+    hp = 70,
+    mp = 17,
+    effects = {duel = 2}
+}}))
+local legacyBootstrapBinding = exportState()
+assert(legacyBootstrapBinding.characterId == 'corvan'
+    and legacyBootstrapBinding.parentGuid == 'panel1'
+    and legacyBootstrapBinding.character.hp == 70
+    and legacyBootstrapBinding.character.mp == 17
+    and legacyBootstrapBinding.character.effects.duel == 2)
 assert(randomRange(DICE_VERTICAL_SPEED_MIN, DICE_VERTICAL_SPEED_MAX, 0) == 13.5)
 assert(randomRange(DICE_VERTICAL_SPEED_MIN, DICE_VERTICAL_SPEED_MAX, 0.5) == 16)
 assert(randomRange(DICE_VERTICAL_SPEED_MIN, DICE_VERTICAL_SPEED_MAX, 1) == 18.5)
@@ -320,24 +431,64 @@ assert(string.find(appliedUiXml, 'id="panelBoardArt" active="false"', 1, true),
     'legacy panel did not start with safe inactive UI art')
 assert(attributes.panelBoardArt == 'true')
 panelPhysicalImage = PANEL_IMAGE_URL
-assert(registerParent({parentGuid = 'panel1'}))
+assert(registerParent({parentGuid = 'panel1', characterId = 'corvan'}))
 assert(string.find(appliedUiXml, 'id="panelBoardArt" active="false"', 1, true),
     'current physical art did not start with safe inactive UI art')
 assert(attributes.panelBoardArt == 'true', 'current physical art was not covered by aligned UI art')
 customObjectInspectionFails = true
-assert(registerParent({parentGuid = 'panel1'}))
+assert(registerParent({parentGuid = 'panel1', characterId = 'corvan'}))
 assert(string.find(appliedUiXml, 'id="panelBoardArt" active="false"', 1, true),
     'inspection failure did not keep UI art safe during preflight')
 assert(attributes.panelBoardArt == 'true')
 customObjectInspectionFails = false
 panelPhysicalImage = 'legacy-panel.png'
 panelArtRequestFails = true
-assert(registerParent({parentGuid = 'panel1'}))
+assert(registerParent({parentGuid = 'panel1', characterId = 'corvan'}))
 assert(attributes.panelBoardArt == 'false', 'network failure exposed the white image fallback')
 panelArtRequestFails = false
-assert(registerParent({parentGuid = 'panel1'}))
+assert(registerParent({parentGuid = 'panel1', characterId = 'corvan'}))
 assert(attributes.panelBoardArt == 'true' and panelArtRequests == 5)
-local legacyState = exportState()
+-- O restante deste harness histórico opera sobre o estado plano das versões
+-- antigas. Preserve essa visão somente no teste, enquanto a função nativa fica
+-- disponível para validar o novo envelope ao final.
+local nativeExportState = exportState
+function exportState()
+    local envelope = nativeExportState()
+    local flat = deepCopy(envelope.character)
+    for key, value in pairs(envelope.core or {}) do flat[key] = deepCopy(value) end
+    flat.parentGuid = envelope.parentGuid
+    flat.rollInProgress = envelope.rollInProgress
+    return flat
+end
+local legacy020 = exportState()
+legacy020.runtimeVersion = '0.2.0'
+legacy020.hp = 31
+legacy020.mp = 6
+legacy020.effects.duel = 3
+legacy020.effects.baluarte = 4
+legacy020.effects.provocation = true
+legacy020.automaticResourceSpending = false
+legacy020.diceOffset = {x = 1.25, y = 4.5, z = -2.75}
+legacy020.lastResult = 'resultado preservado'
+legacy020.parentGuid = 'panel1'
+legacy020.ownedDiceOwnerGuid = 'panel1'
+legacy020.ownedDiceGuids = {'legacy-020-die'}
+legacy020.undo = deepCopy(legacy020)
+legacy020.undo.hp = 44
+legacy020.undo.mp = 9
+legacy020.undo.undo = nil
+assert(importState(legacy020))
+local migrated020 = exportState()
+assert(migrated020.hp == 31 and migrated020.mp == 6)
+assert(migrated020.effects.duel == 3 and migrated020.effects.baluarte == 4
+    and migrated020.effects.provocation)
+assert(not migrated020.automaticResourceSpending)
+assert(migrated020.diceOffset.x == 1.25 and migrated020.diceOffset.y == 4.5
+    and migrated020.diceOffset.z == -2.75)
+assert(migrated020.lastResult == 'resultado preservado')
+assert(#migrated020.ownedDiceGuids == 1 and migrated020.ownedDiceGuids[1] == 'legacy-020-die')
+assert(migrated020.undo ~= nil and migrated020.undo.hp == 44 and migrated020.undo.mp == 9)
+local legacyState = defaultState()
 legacyState.runtimeVersion = '0.1.5'
 legacyState.hp = 47
 legacyState.mp = 12
@@ -629,7 +780,7 @@ local inheritedState = exportState()
 inheritedState.parentGuid = 'panel1'
 inheritedState.ownedDiceOwnerGuid = 'panel1'
 inheritedState.ownedDiceGuids = {originalGuid}
-assert(registerParent({parentGuid = 'panel-copy', state = inheritedState}))
+assert(registerParent({parentGuid = 'panel-copy', characterId = 'corvan', state = inheritedState}))
 assert(exportState().ownedDiceOwnerGuid == 'panel-copy' and #exportState().ownedDiceGuids == 0)
 assert(not exportState().automaticResourceSpending)
 assert(handleUiEvent({id = 'clear_dice', playerColor = 'White'}))
@@ -640,7 +791,7 @@ diceByGuid[sameOwnerLegacyGuid] = {
     getGUID = function() return sameOwnerLegacyGuid end,
     getGMNotes = function() return '' end
 }
-assert(registerParent({parentGuid = 'panel1', state = {
+assert(registerParent({parentGuid = 'panel1', characterId = 'corvan', state = {
     schemaVersion = 1,
     runtimeVersion = '0.1.6',
     parentGuid = 'panel1',
@@ -663,6 +814,11 @@ state.ownedDiceOwnerGuid = 'panel1'
 assert(handleUiEvent({id = 'clear_dice', playerColor = 'White'}))
 assert(#exportState().ownedDiceGuids == 0)
 assert(#privateChat >= 5)
+local nativeEnvelope = nativeExportState()
+assert(nativeEnvelope.characterId == 'corvan'
+    and nativeEnvelope.runtimeVersion == '0.2.1'
+    and type(nativeEnvelope.core) == 'table'
+    and type(nativeEnvelope.character) == 'table')
 
 return afterDuel.mp, afterTurn.mp, afterDamage.lastResult, afterAttack.pendingThreat.natural,
     afterCritical.lastResult, #publicChat, globalChatCalls, #privateChat
@@ -670,7 +826,7 @@ return afterDuel.mp, afterTurn.mp, afterDamage.lastResult, afterAttack.pendingTh
 
 $runtimeFlowRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 try {
-    $runtimeFlowResult = $runtimeFlowRunner.DoString($runtime + "`n" + $runtimeFlowHarness).ToString()
+    $runtimeFlowResult = $runtimeFlowRunner.DoString($runtimeConfigPrelude + "`n" + $runtime + "`n" + $runtimeFlowHarness).ToString()
 } catch {
     $moonSharpError = $_.Exception.InnerException
     if ($moonSharpError -and $moonSharpError.DecoratedMessage) {
@@ -745,7 +901,7 @@ return directCalls, colorFallbackCalls, globalFallbackCalls, hostPrintCalls, dia
 '@
 
 $chatFallbackRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
-$chatFallbackResult = $chatFallbackRunner.DoString($runtime + "`n" + $chatFallbackHarness).ToString()
+$chatFallbackResult = $chatFallbackRunner.DoString($runtimeConfigPrelude + "`n" + $runtime + "`n" + $chatFallbackHarness).ToString()
 $expectedChatFallback = '1, 1, 1, 1, 2'
 if ($chatFallbackResult -ne $expectedChatFallback) {
     throw "Smoke dos fallbacks de chat retornou '$chatFallbackResult'; esperado '$expectedChatFallback'."
@@ -817,6 +973,82 @@ if (-not $integrityResult.Tuple[0].Boolean) {
     throw "Verificação incremental de integridade falhou: $($integrityResult.Tuple[1])"
 }
 $integrityFrames = [int]$integrityResult.Tuple[2].Number
+
+$manifestValidationHarness = @"
+local function manifest()
+    return {
+        schemaVersion = $($manifest.schemaVersion),
+        characterId = '$($manifest.characterId)',
+        releaseTag = '$($manifest.releaseTag)',
+        version = '$($manifest.version)',
+        minBootstrapVersion = '$($manifest.minBootstrapVersion)',
+        commitSha = '$($manifest.commitSha)',
+        runtime = {
+            url = '$($manifest.runtime.url)',
+            size = $($manifest.runtime.size),
+            sha256 = '$($manifest.runtime.sha256)'
+        }
+    }
+end
+local valid, reason = validateManifest(manifest(), '$($manifest.releaseTag)')
+assert(valid, reason)
+local wrongCharacter = manifest(); wrongCharacter.characterId = 'arcane-test'
+assert(not validateManifest(wrongCharacter, '$($manifest.releaseTag)'))
+local wrongTag = manifest(); wrongTag.releaseTag = 'v9.9.9'
+assert(not validateManifest(wrongTag, '$($manifest.releaseTag)'))
+local wrongUrl = manifest(); wrongUrl.runtime.url = 'https://evil.invalid/runtime.lua'
+assert(not validateManifest(wrongUrl, '$($manifest.releaseTag)'))
+local wrongSize = manifest(); wrongSize.runtime.size = 999999999
+assert(not validateManifest(wrongSize, '$($manifest.releaseTag)'))
+local wrongHash = manifest(); wrongHash.runtime.sha256 = 'abc'
+assert(not validateManifest(wrongHash, '$($manifest.releaseTag)'))
+assert(runtimeSourceIsValid(ACTUAL_RUNTIME_SOURCE))
+assert(not runtimeSourceIsValid('-- WRONG_RUNTIME\nfunction healthCheck() return {ok=true} end'))
+assert(not healthIsValid({ok = true, characterId = 'arcane-test', runtimeMarker = 'CORVAN_RUNTIME', version = '$($manifest.version)'}, '$($manifest.version)'))
+assert(not healthIsValid({ok = true, characterId = 'corvan', runtimeMarker = 'OTHER_RUNTIME', version = '$($manifest.version)'}, '$($manifest.version)'))
+return valid, true
+"@
+$manifestValidationRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
+$manifestValidationRunner.Globals.Set('ACTUAL_RUNTIME_SOURCE', [MoonSharp.Interpreter.DynValue]::NewString($runtime))
+$manifestValidationResult = $manifestValidationRunner.DoString($bootstrap + "`n" + $manifestValidationHarness).ToString()
+if ($manifestValidationResult -ne 'true, true') {
+    throw "Validação negativa de identidade/integridade retornou '$manifestValidationResult'."
+}
+
+$legacyIntegrityRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
+$legacyIntegrityRunner.Globals.Set('HASH_INPUT', [MoonSharp.Interpreter.DynValue]::NewString($runtime))
+$legacyIntegrityRunner.Globals.Set('HASH_SIZE', [MoonSharp.Interpreter.DynValue]::NewNumber($manifest.runtime.size))
+$legacyIntegrityRunner.Globals.Set('HASH_EXPECTED', [MoonSharp.Interpreter.DynValue]::NewString($manifest.runtime.sha256))
+$legacyIntegrityResult = $legacyIntegrityRunner.DoString($legacyBootstrap + "`n" + $integrityHarness)
+if (-not $legacyIntegrityResult.Tuple[0].Boolean) {
+    throw "Bootstrap congelado v0.2.0 rejeitou a integridade do runtime v0.2.1: $($legacyIntegrityResult.Tuple[1])"
+}
+
+$legacyManifestHarness = @"
+local manifest = {
+    schemaVersion = $($manifest.schemaVersion),
+    version = '$($manifest.version)',
+    minBootstrapVersion = '$($manifest.minBootstrapVersion)',
+    commitSha = '$($manifest.commitSha)',
+    runtime = {
+        url = '$($manifest.runtime.url)',
+        size = $($manifest.runtime.size),
+        sha256 = '$($manifest.runtime.sha256)'
+    }
+}
+local valid, reason = validateManifest(manifest, '$($manifest.releaseTag)')
+assert(valid, reason)
+assert(runtimeSourceIsValid(ACTUAL_RUNTIME_SOURCE))
+manifest.runtime.url = manifest.runtime.url .. '.untrusted'
+assert(not validateManifest(manifest, '$($manifest.releaseTag)'))
+return valid, runtimeSourceIsValid(ACTUAL_RUNTIME_SOURCE)
+"@
+$legacyManifestRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
+$legacyManifestRunner.Globals.Set('ACTUAL_RUNTIME_SOURCE', [MoonSharp.Interpreter.DynValue]::NewString($runtime))
+$legacyManifestResult = $legacyManifestRunner.DoString($legacyBootstrap + "`n" + $legacyManifestHarness).ToString()
+if ($legacyManifestResult -ne 'true, true') {
+    throw "Contrato do manifesto v0.2.1 falhou no bootstrap congelado v0.2.0: '$legacyManifestResult'."
+}
 
 $onLoadHarness = @'
 local timeQueue = {}
@@ -1176,10 +1408,10 @@ return state.runtimeVersion,
     state.uiXml == oldXml
 '@
 
-function Invoke-TransactionSmoke([bool]$healthy) {
+function Invoke-TransactionSmoke([bool]$healthy, [string]$bootstrapSource = $bootstrap) {
     $runner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
     $runner.Globals.Set('CANDIDATE_HEALTH_OK', [MoonSharp.Interpreter.DynValue]::NewBoolean($healthy))
-    return $runner.DoString($bootstrap + "`n" + $transactionHarness).ToString()
+    return $runner.DoString($bootstrapSource + "`n" + $transactionHarness).ToString()
 }
 
 $updateSuccess = Invoke-TransactionSmoke $true
@@ -1192,6 +1424,112 @@ $updateRollback = Invoke-TransactionSmoke $false
 $expectedUpdateRollback = '"0.1.2", false, true, false, "rollback-guid", 23, false, true'
 if ($updateRollback -ne $expectedUpdateRollback) {
     throw "Smoke de rollback retornou '$updateRollback'; esperado '$expectedUpdateRollback'."
+}
+
+$legacyUpdateSuccess = Invoke-TransactionSmoke $true $legacyBootstrap
+if ($legacyUpdateSuccess -ne $expectedUpdateSuccess) {
+    throw "Bootstrap congelado v0.2.0 não instalou a transação v0.2.1: '$legacyUpdateSuccess'."
+}
+
+$releaseDiscoveryHarness = @'
+local selectedTag = nil
+local failureReason = nil
+local responseMode = 'normal'
+
+local function manifestAsset(tag)
+    return {
+        name = 'arcane-test-manifest.json',
+        browser_download_url = TRUSTED_RUNTIME_PREFIX .. tag .. '/arcane-test-manifest.json'
+    }
+end
+
+local function stable(tag)
+    return {tag_name = tag, draft = false, prerelease = false, assets = {manifestAsset(tag)}}
+end
+
+local pageOne = {}
+pageOne[1] = stable('arcane-test-v1.5.0')
+for index = 2, 100 do
+    pageOne[index] = stable('outro-v0.0.' .. tostring(index))
+end
+local pageTwo = {
+    stable('arcane-test-v1.10.0'),
+    {tag_name = 'arcane-test-v9.0.0', draft = true, prerelease = false, assets = {manifestAsset('arcane-test-v9.0.0')}},
+    {tag_name = 'arcane-test-v8.0.0', draft = false, prerelease = true, assets = {manifestAsset('arcane-test-v8.0.0')}},
+    stable('arcane-test-v2.0.0'),
+    {tag_name = 'arcane-test-v3.0.0', draft = false, prerelease = false,
+        assets = {{name = 'arcane-test-manifest.json', browser_download_url = 'https://evil.invalid/manifest.json'}}},
+    stable('arcane-testing-v99.0.0')
+}
+local fullPage = {}
+for index = 1, 100 do fullPage[index] = stable('outro-v9.9.' .. tostring(index)) end
+
+JSON = {
+    decode = function(text)
+        if text == 'PAGE_ONE' then return pageOne end
+        if text == 'PAGE_TWO' then return pageTwo end
+        if text == 'FULL_PAGE' then return fullPage end
+        return nil
+    end,
+    encode = function(_) return '{}' end
+}
+Wait = {time = function(callback, _) callback() end}
+WebRequest = {
+    custom = function(url, _, _, _, _, complete)
+        if responseMode == 'rate-limit' then
+            complete({is_error = false, response_code = 403, text = ''})
+        elseif responseMode == 'malformed' then
+            complete({is_error = false, response_code = 200, text = 'MALFORMED'})
+        elseif responseMode == 'full' then
+            complete({is_error = false, response_code = 200, text = 'FULL_PAGE'})
+        elseif string.find(url, '&page=1', 1, true) then
+            complete({is_error = false, response_code = 200, text = 'PAGE_ONE'})
+        else
+            complete({is_error = false, response_code = 200, text = 'PAGE_TWO'})
+        end
+        return {dispose = function() end}
+    end
+}
+
+downloadManifest = function(_, _, releaseTag, _)
+    selectedTag = releaseTag
+end
+finishUpdate = function(_, reason, _)
+    failureReason = reason
+end
+state = defaultState()
+update.active = true
+update.serial = 41
+beginNamespacedReleasePage(41, 1, nil, nil)
+assert(selectedTag == 'arcane-test-v2.0.0')
+
+responseMode = 'rate-limit'
+selectedTag = nil
+failureReason = nil
+update.active = true
+update.serial = 42
+beginNamespacedReleasePage(42, 1, nil, nil)
+assert(selectedTag == nil and string.find(failureReason, 'HTTP 403', 1, true))
+
+responseMode = 'malformed'
+failureReason = nil
+update.active = true
+update.serial = 43
+beginNamespacedReleasePage(43, 1, nil, nil)
+assert(string.find(failureReason, 'JSON', 1, true) or string.find(failureReason, 'inválid', 1, true))
+
+responseMode = 'full'
+failureReason = nil
+update.active = true
+update.serial = 44
+beginNamespacedReleasePage(44, 1, nil, nil)
+assert(string.find(failureReason, 'releases demais', 1, true))
+return 'arcane-test-v2.0.0', failureReason ~= nil
+'@
+$releaseDiscoveryRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
+$releaseDiscoveryResult = $releaseDiscoveryRunner.DoString($fixtureBootstrap + "`n" + $releaseDiscoveryHarness).ToString()
+if ($releaseDiscoveryResult -ne '"arcane-test-v2.0.0", true') {
+    throw "Smoke de descoberta retornou '$releaseDiscoveryResult'."
 }
 
 Write-Output "MoonSharp OK: runtime/bootstrap compilam; combate $runtimeFlowResult; SHA-256 em $integrityFrames frames; onLoad, cópia persistente, watchdog, update e rollback seguros"

@@ -1,0 +1,17 @@
+{
+  "bootstrapVersion": "1.0.2",
+  "bootstrapSha256": "001a1d412d79493145756bf75d96f7bcaac3b20f4545ab8d9f0f378887314ce8",
+  "manifestSchemaVersion": 1,
+  "releaseTag": "v0.2.1",
+  "manifestAsset": "manifest.json",
+  "runtimeAsset": "corvan-runtime.lua",
+  "runtimeMarker": "CORVAN_RUNTIME",
+  "requiredCallbacks": [
+    "registerParent",
+    "exportState",
+    "importState",
+    "healthCheck",
+    "handleUiEvent"
+  ],
+  "legacyStateHasCharacterId": false
+}
