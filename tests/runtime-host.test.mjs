@@ -30,4 +30,8 @@ test("host mantém regras de personagem fora da infraestrutura", () => {
   for (const operation of ["time", "frames", "condition"]) {
     assert.match(host, new RegExp(`type\\(Wait\\.${operation}\\) ~= "function"`));
   }
+  assert.match(host, /entry\.motionObserved = true/);
+  assert.doesNotMatch(host, /elseif not entry\.motionObserved then/);
+  assert.match(host, /spawnTimeout \+ rollTimeout \+ 2/);
+  assert.match(host, /if not completed then\s+host\.clear\(\)\s+notifyFailure/s);
 });

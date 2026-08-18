@@ -404,6 +404,7 @@ local function render()
     safeSet("cast_souls_value", "text", state.casting.releasedSouls)
     safeSet("resolution_failed_value", "text", state.casting.failed)
     safeSet("resolution_defeated_value", "text", state.casting.defeated)
+    safeSet("roll_cancel", "interactable", state.casting.transaction ~= nil and "true" or "false")
     safeSet("last_result", "text", coreState.lastResult)
     safeSet("offset_x_value", "text", string.format("%.1f", coreState.diceOffset.x))
     safeSet("offset_y_value", "text", string.format("%.1f", coreState.diceOffset.y))
@@ -480,6 +481,7 @@ local function finishRoll(transaction, result)
     coreState.lastResult = transaction.plan.label .. ": " .. total
     state.casting.transaction = nil
     state.casting.phase = transaction.plan.kind == "check" and "configure" or "resolution"
+    if transaction.plan.kind ~= "check" then coreState.page = "casting" end
     state.casting.failed = 0
     state.casting.defeated = 0
     local rich = "[FF6464]" .. RuntimeCore.chatSafeText(CHARACTER.shortName) .. "[-] • "
@@ -520,6 +522,7 @@ local function beginDamageRoll(plan, cost, playerColor)
     }
     state.casting.transaction = transaction
     state.casting.phase = "rolling"
+    coreState.lastResult = "ROLANDO • " .. tostring(plan.label)
     if state.preferences.physicalDice == false then
         local result = {groups={}, ownedGuids=coreState.ownedDice}
         for _, group in ipairs(plan.groups or {}) do
@@ -754,7 +757,8 @@ function handleUiEvent(payload)
         or payload.parentGuid ~= parentGuid or configurationError ~= nil then return false end
     local id = payload.id
     if type(id) ~= "string" then return false end
-    if state.casting.transaction ~= nil and not NAVIGATION[id] then
+    if state.casting.transaction ~= nil and not NAVIGATION[id]
+        and id ~= "clear_dice" and id ~= "roll_cancel" then
         privateError("Aguarde a conclusão dos dados antes de alterar o estado.", payload.playerColor)
         return false
     end
@@ -823,9 +827,14 @@ function handleUiEvent(payload)
             quick_inflict_wounds="inflict_wounds", quick_animate_dead="animate_dead"}
         state.casting.spellId = quickSpells[id]
         state.casting.phase = "configure"
+        coreState.page = "casting"
         return beginSelectedCast(payload.playerColor)
     elseif id == "cast_now" or id == "cast_confirm" then
         return beginSelectedCast(payload.playerColor)
+    elseif id == "roll_cancel" then
+        local host = createDiceHost()
+        if state.casting.transaction == nil or not host or type(host.cancel) ~= "function" then return false end
+        return host.cancel("rolagem cancelada pelo jogador")
     elseif id == "resolution_failed_add" or id == "resolution_failed_sub" then
         state.casting.failed = boundedInteger(state.casting.failed
             + (id == "resolution_failed_add" and 1 or -1), 0, state.casting.targets, 0)
@@ -944,6 +953,9 @@ function handleUiEvent(payload)
     elseif id == "clear_dice" then
         local host = createDiceHost()
         if not host or type(host.clear) ~= "function" then return false end
+        if state.casting.transaction ~= nil and type(host.cancel) == "function" then
+            return host.cancel("rolagem cancelada pelo jogador")
+        end
         local ok, result = pcall(function() return host.clear(coreState.ownedDice) end)
         if not ok or result == false then return false end
         coreState.ownedDice = {}

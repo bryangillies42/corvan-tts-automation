@@ -294,9 +294,15 @@ function TtsRuntimeHost.create(rawConfig, rawEnvironment)
         local result, failure = resultFor(transaction)
         if not result then fail(token, failure) return end
         active = nil
+        local completed = invoke(transaction.callbacks.onComplete, copy(result))
+        if not completed then
+            host.clear()
+            notifyFailure(transaction, "o adaptador não concluiu a rolagem; estado restaurado.")
+            render()
+            return
+        end
         lastTransactionId = transaction.id
         lastResult = copy(result)
-        invoke(transaction.callbacks.onComplete, copy(result))
         render()
     end
 
@@ -312,8 +318,6 @@ function TtsRuntimeHost.create(rawConfig, rawEnvironment)
                 entry.motionObserved = true
                 entry.stableFrames = 0
                 entry.lastValue = nil
-                allSettled = false
-            elseif not entry.motionObserved then
                 allSettled = false
             else
                 local valueOk, value = pcall(function() return object.getRotationValue() end)
@@ -368,6 +372,10 @@ function TtsRuntimeHost.create(rawConfig, rawEnvironment)
         if not spun then pcall(function() entry.object.addTorque(angular, 4) end) end
         if not launched then launched = pcall(function() entry.object.roll() end) end
         if not launched then fail(token, "não foi possível lançar o dado.") return end
+        -- O monitor coletivo começa apenas depois do último lançamento. Um
+        -- dado anterior pode já ter parado; o lançamento bem-sucedido prova
+        -- movimento, e os frames de face estável evitam leitura prematura.
+        entry.motionObserved = true
         active.pendingLaunches = active.pendingLaunches - 1
         if active.pendingSpawns == 0 and active.pendingLaunches == 0 then waitForDice(token) end
     end
@@ -488,6 +496,11 @@ function TtsRuntimeHost.create(rawConfig, rawEnvironment)
                     fail(sequence, "a criação dos dados expirou.")
                 end
             end, spawnTimeout)
+            Wait.time(function()
+                if active and active.token == sequence then
+                    fail(sequence, "a rolagem excedeu o tempo máximo; estado restaurado.")
+                end
+            end, spawnTimeout + rollTimeout + 2)
         end)
         if not timeoutOk then fail(sequence, "não foi possível iniciar o temporizador dos dados.") return true end
         return true

@@ -384,8 +384,12 @@ local function runtimeEnvironment(source, label, helperGuid, config)
         time = function(callback, _) callback() end,
         condition = function(callback, condition, _, timeout)
             for cycle = 1, 4 do
-                for _, object in pairs(world.dice) do
-                    if object.spawned and not object.destroyed then object.resting = cycle > 1 end
+                for guid, object in pairs(world.dice) do
+                    if object.spawned and not object.destroyed then
+                        -- Modela spawns escalonados reais: o primeiro d6 pode
+                        -- já ter parado quando o último começa a ser observado.
+                        object.resting = cycle > 1 or guid == 'spentar-die-1'
+                    end
                 end
                 if condition() then callback() return end
             end

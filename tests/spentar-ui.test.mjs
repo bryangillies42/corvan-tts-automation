@@ -93,7 +93,7 @@ test('Spentar guided casting and lifecycle controls remain wired', async () => {
     'cast_targets_add', 'cast_targets_sub',
     'cast_souls_add', 'cast_souls_sub',
     'resolution_failed_add', 'resolution_failed_sub',
-    'resolution_defeated_add', 'resolution_defeated_sub', 'resolution_apply',
+    'resolution_defeated_add', 'resolution_defeated_sub', 'roll_cancel', 'resolution_apply',
     'connection_off', 'connection_normal', 'connection_doubled',
     'undead_roll', 'ballistic_roll',
     'end_turn', 'end_scene', 'end_day', 'undo', 'clear_dice', 'reset_state',

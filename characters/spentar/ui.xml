@@ -263,6 +263,7 @@
               <Button id="resolution_defeated_sub" class="miniButton" text="-" onClick="dispatch" preferredWidth="46" />
               <Text id="resolution_defeated_value" text="0" preferredWidth="55" />
               <Button id="resolution_defeated_add" class="miniButton" text="+" onClick="dispatch" preferredWidth="46" />
+              <Button id="roll_cancel" class="baseButton" text="CANCELAR ROLAGEM" onClick="dispatch" preferredWidth="165" interactable="false" />
               <Button id="resolution_apply" class="dangerButton" text="APLICAR CONSEQUÊNCIAS" onClick="dispatch" flexibleWidth="1" />
             </HorizontalLayout>
           </Panel>

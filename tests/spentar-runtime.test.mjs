@@ -180,3 +180,10 @@ test("reset remove primeiro os dados físicos próprios persistidos", () => {
   assert.match(runtime, /id == "reset_state" then\s+local host = createDiceHost\(\)/s);
   assert.match(runtime, /host\.clear\(coreState\.ownedDice\)/);
 });
+
+test("atalho abre a resolução e uma rolagem presa pode ser cancelada", () => {
+  assert.match(runtime, /coreState\.page = "casting"\s+return beginSelectedCast/);
+  assert.match(runtime, /transaction\.plan\.kind ~= "check" then coreState\.page = "casting"/);
+  assert.match(runtime, /id ~= "clear_dice" and id ~= "roll_cancel"/);
+  assert.match(runtime, /return host\.cancel\("rolagem cancelada pelo jogador"\)/);
+});
