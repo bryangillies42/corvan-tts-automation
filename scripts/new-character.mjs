@@ -1,5 +1,5 @@
-import { access, cp, mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { access, cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -37,28 +37,34 @@ async function main() {
   const characterDir = join(rootDir, "characters", options.id);
   const templateDir = join(rootDir, "templates", "character");
   const registryPath = join(rootDir, "characters", "registry.json");
+  const charactersDir = dirname(registryPath);
   if (await exists(characterDir)) fail(`O diretório do personagem já existe: ${characterDir}`);
   if (!(await exists(templateDir))) fail(`Template não encontrado: ${templateDir}`);
   const registry = JSON.parse(await readFile(registryPath, "utf8"));
   if (!Array.isArray(registry.characters)) fail("characters/registry.json não contém uma lista characters.");
   if (registry.characters.some((profile) => profile.id === options.id)) fail(`ID já registrado: ${options.id}`);
 
-  await mkdir(dirname(characterDir), { recursive: true });
-  await cp(templateDir, characterDir, { recursive: true });
   const replacements = {
     "__CHARACTER_ID__": options.id,
     "__CHARACTER_NAME__": options.name,
     "__CHARACTER_SHORT_NAME__": options.shortName,
     "__RUNTIME_MARKER__": `${options.id.toUpperCase().replaceAll("-", "_")}_RUNTIME`,
   };
+  const generatedFiles = new Map();
   for (const file of ["README.md", "character.json", "runtime.lua", "ui.xml"]) {
-    const path = join(characterDir, file);
-    let content = await readFile(path, "utf8");
+    const sourcePath = join(templateDir, file);
+    if (!(await exists(sourcePath))) fail(`Arquivo obrigatório ausente no template: ${file}`);
+    let content = await readFile(sourcePath, "utf8");
     for (const [token, replacement] of Object.entries(replacements)) content = content.replaceAll(token, replacement);
-    await writeFile(path, content, "utf8");
+    if (/__CHARACTER_(?:ID|NAME|SHORT_NAME)__|__RUNTIME_MARKER__/.test(content)) {
+      fail(`Token obrigatório não resolvido no template: ${file}`);
+    }
+    generatedFiles.set(file, content);
   }
-  await mkdir(join(characterDir, "assets"), { recursive: true });
-  registry.characters.push({
+  const generatedCharacter = JSON.parse(generatedFiles.get("character.json"));
+  if (generatedCharacter.id !== options.id) fail("O template gerou character.json com identidade incompatível.");
+
+  const profile = {
     id: options.id,
     displayName: options.name,
     shortName: options.shortName,
@@ -85,14 +91,48 @@ async function main() {
       },
     },
     discovery: "character-releases",
+    uiContract: "generic",
     uiRootId: `${options.id}Console`,
-    panelArtId: "panelBoardArt",
-    requiredUiIds: ["panelBoardArt", `${options.id}Console`, "title"],
+    requiredUiIds: [`${options.id}Console`, "title"],
     runtimeMarker: `${options.id.toUpperCase().replaceAll("-", "_")}_RUNTIME`,
     minBootstrapVersion: "1.0.2",
-    geometry: { canvasWidth: 900, canvasHeight: 500, panelWidth: 800, panelHeight: 400 },
-  });
-  await writeFile(registryPath, `${JSON.stringify(registry, null, 2)}\n`, "utf8");
+  };
+  const nextRegistry = {...registry, characters: [...registry.characters, profile]};
+  const serializedRegistry = `${JSON.stringify(nextRegistry, null, 2)}\n`;
+  JSON.parse(serializedRegistry);
+
+  const transactionSuffix = `${process.pid}-${Date.now()}`;
+  const stagingDir = join(charactersDir, `.${options.id}.scaffold-${transactionSuffix}`);
+  const registryTempPath = join(charactersDir, `.registry.json.${transactionSuffix}.tmp`);
+  const isExactChild = (path) => resolve(dirname(path)) === resolve(charactersDir)
+    && resolve(path).startsWith(`${resolve(charactersDir)}${sep}`);
+  const removeCreatedDirectory = async (path) => {
+    if (!isExactChild(path) || ![basename(stagingDir), options.id].includes(basename(path))) {
+      fail(`Rollback recusou caminho inesperado: ${path}`);
+    }
+    await rm(path, {recursive: true, force: true});
+  };
+
+  let finalDirectoryCreated = false;
+  try {
+    await mkdir(charactersDir, { recursive: true });
+    await cp(templateDir, stagingDir, { recursive: true, errorOnExist: true, force: false });
+    for (const [file, content] of generatedFiles) {
+      await writeFile(join(stagingDir, file), content, "utf8");
+    }
+    await mkdir(join(stagingDir, "assets"), { recursive: true });
+    if (await exists(characterDir)) fail(`O diretório do personagem já existe: ${characterDir}`);
+    await rename(stagingDir, characterDir);
+    finalDirectoryCreated = true;
+
+    await writeFile(registryTempPath, serializedRegistry, {encoding: "utf8", flag: "wx"});
+    await rename(registryTempPath, registryPath);
+  } catch (error) {
+    await rm(registryTempPath, {force: true}).catch(() => {});
+    if (finalDirectoryCreated) await removeCreatedDirectory(characterDir);
+    else if (await exists(stagingDir)) await removeCreatedDirectory(stagingDir);
+    throw error;
+  }
   process.stdout.write(`Scaffold ${options.id} criado em ${characterDir} e registrado como scaffold.\n`);
 }
 

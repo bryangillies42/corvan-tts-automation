@@ -59,10 +59,12 @@ end
 local function render()
     if not characterLoaded then return end
     parentCall("setRuntimeUiAttribute", {
+        characterId = CHARACTER_ID,
         id = "arcaneFocus", attribute = "text",
         value = "FOCO " .. tostring(state.focus) .. "/" .. tostring(CHARACTER.resources.focus.max)
     })
     parentCall("setRuntimeUiAttribute", {
+        characterId = CHARACTER_ID,
         id = "arcaneCasts", attribute = "text",
         value = "CONJURAÇÕES " .. tostring(state.casts)
     })
@@ -87,13 +89,14 @@ end
 function importState(payload)
     if type(payload) == "table" and type(payload.state) == "table" then payload = payload.state end
     if not acceptState(payload) then return false end
-    parentCall("cacheRuntimeState", {state = exportState()})
+    parentCall("cacheRuntimeState", {characterId = CHARACTER_ID, state = exportState()})
     render()
     return true
 end
 
 function handleUiEvent(payload)
     if type(payload) ~= "table" then return false end
+    if payload.characterId ~= CHARACTER_ID or payload.parentGuid ~= parentGuid then return false end
     if payload.id == "cast" and state.focus > 0 then
         state.focus = state.focus - 1
         state.casts = state.casts + 1
@@ -102,7 +105,7 @@ function handleUiEvent(payload)
     else
         return false
     end
-    parentCall("cacheRuntimeState", {state = exportState()})
+    parentCall("cacheRuntimeState", {characterId = CHARACTER_ID, state = exportState()})
     render()
     return true
 end
@@ -124,7 +127,7 @@ function registerParent(payload)
     if type(parentGuid) ~= "string" or parentGuid == "" then return false end
     if type(payload.state) == "table" and not acceptState(payload.state) then return false end
     parentCall("applyRuntimeUi", {xml = UI_XML, characterId = CHARACTER_ID, version = CHARACTER_VERSION})
-    parentCall("cacheRuntimeState", {state = exportState()})
+    parentCall("cacheRuntimeState", {characterId = CHARACTER_ID, state = exportState()})
     render()
     parentCall("runtimeReady", {
         characterId = CHARACTER_ID,

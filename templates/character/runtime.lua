@@ -38,11 +38,17 @@ function importState(payload)
     local characterState, _, stateError = AdapterApi.state.unwrap(payload)
     if stateError ~= nil then return false end
     state.events = math.max(0, math.floor(CharacterRuntimeCore.finiteNumber(characterState.events, 0)))
-    parentCall("cacheRuntimeState", {state = exportState()})
+    parentCall("cacheRuntimeState", {characterId = CHARACTER_ID, state = exportState()})
     return true
 end
 
-function handleUiEvent(_)
+function handleUiEvent(payload)
+    if type(payload) ~= "table"
+        or payload.characterId ~= CHARACTER_ID
+        or payload.parentGuid ~= parentGuid
+    then
+        return false
+    end
     return false
 end
 
@@ -63,7 +69,7 @@ function registerParent(payload)
     if type(parentGuid) ~= "string" or parentGuid == "" then return false end
     if type(payload.state) == "table" and not importState(payload.state) then return false end
     parentCall("applyRuntimeUi", {xml = UI_XML, characterId = CHARACTER_ID, version = CHARACTER_VERSION})
-    parentCall("cacheRuntimeState", {state = exportState()})
+    parentCall("cacheRuntimeState", {characterId = CHARACTER_ID, state = exportState()})
     parentCall("runtimeReady", {
         characterId = CHARACTER_ID,
         version = CHARACTER_VERSION,

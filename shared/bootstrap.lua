@@ -477,6 +477,11 @@ function relayRuntimeChat(payload)
     if type(payload) ~= "table" or type(payload.message) ~= "string" or payload.message == "" then
         return false
     end
+    if payload.characterId ~= CHARACTER_ID
+        and not (CHARACTER_ID == "corvan" and payload.characterId == nil)
+    then
+        return false
+    end
     local message = payload.richText == true
         and chatSafeRichText(payload.message) or chatSafeText(payload.message)
     local tint = type(payload.tint) == "table" and payload.tint or {0.92, 0.94, 0.97}
@@ -488,6 +493,11 @@ end
 
 function relayRuntimePrivate(payload)
     if type(payload) ~= "table" or type(payload.message) ~= "string" then return false end
+    if payload.characterId ~= CHARACTER_ID
+        and not (CHARACTER_ID == "corvan" and payload.characterId == nil)
+    then
+        return false
+    end
     local color = playerColorOf(payload.playerColor)
     if color == "Black" then return false end
     return pcall(printToColor, payload.message, color, {1.0, 0.38, 0.30})
@@ -1650,6 +1660,8 @@ function dispatch(player, value, id)
         return
     end
     local ok = safeObjectCall(helper, "handleUiEvent", {
+        characterId = CHARACTER_ID,
+        parentGuid = self.getGUID(),
         playerColor = playerColor,
         value = value,
         id = id,
@@ -1711,6 +1723,11 @@ function cacheRuntimeState(payload)
     end
     local candidate = payload
     if type(payload) == "table" and type(payload.state) == "table" then
+        if payload.characterId ~= CHARACTER_ID
+            and not (CHARACTER_ID == "corvan" and payload.characterId == nil)
+        then
+            return false
+        end
         candidate = payload.state
     end
     if type(candidate) ~= "table" then
@@ -1754,6 +1771,11 @@ function setRuntimeUiAttribute(payload)
     if type(payload) ~= "table"
         or type(payload.id) ~= "string"
         or type(payload.attribute) ~= "string"
+    then
+        return false
+    end
+    if payload.characterId ~= CHARACTER_ID
+        and not (CHARACTER_ID == "corvan" and payload.characterId == nil)
     then
         return false
     end

@@ -55,9 +55,9 @@ npm run character:new -- --id novo-personagem --name "Nome de Exibição"
 npm run test:lua
 ```
 
-O build conjunto compila os personagens ativos em `dist/<characterId>/`. O build individual permite validar apenas um perfil. `build:fixture` compila fixtures técnicas, mas elas não podem ser selecionadas pelo workflow de release. `character:new` copia o template, valida o slug e cria um scaffold não publicável; falha se o id ou o diretório já existirem.
+O build conjunto compila todos os personagens ativos em `dist/<characterId>/`, inclusive enquanto `productionEnabled` estiver desligado para testes. O build individual permite validar apenas um perfil; a permissão de produção é exigida exclusivamente pelo resolvedor de release. `build:fixture` compila fixtures técnicas, mas elas não podem ser selecionadas pelo workflow. `character:new` valida o template, monta o scaffold de forma recuperável e o registra como não publicável; falha se o id ou o diretório já existirem.
 
-O validador comum verifica identidade, SemVer, tag, paths internos, assets, XML estrutural, dimensões declaradas e colisões de nomes/URLs/GUIDs. A geometria e os eventos são contratos do perfil; não há uma regra global que obrigue outro personagem a ter o layout ou os cálculos do Corvan.
+O validador comum verifica identidade, SemVer, tag, paths internos, assets, XML estrutural e colisões de nomes/URLs/GUIDs. O perfil escolhe `uiContract: panel-board` quando precisa da moldura e geometria rígidas do Corvan, ou `uiContract: generic` para layouts sem overlay e com estrutura própria. IDs e eventos continuam declarados por personagem.
 
 `test:lua` é o gate local obrigatório antes de uma release: usa no Windows o MoonSharp fornecido pelo TTS para compilar os runtimes/bootstrap, executar fórmulas, simular callbacks, persistência, Refresh, timeout de rede, integridade e rollback. Ele também executa o bootstrap congelado do Saved Object Corvan v0.2.0 contra os artefatos atuais. O CI hospedado não o executa porque a DLL vem da instalação local do TTS.
 
@@ -110,7 +110,7 @@ As tags são independentes por personagem:
 | Outro personagem | `<id>-vX.Y.Z` | lista paginada de releases filtrada pela tag completa | não |
 | Pre-release | mesma forma, com prerelease | ignorada por instalações estáveis | não |
 
-O workflow resolve a tag no registry antes de compilar. Tags desconhecidas, perfis desabilitados, fixtures, versões incompatíveis ou tags ambíguas falham antes da publicação. Para cada personagem, `previousVersion` considera somente a release estável anterior daquele personagem. A release é criada como draft, recebe exatamente runtime, manifesto e Saved Object, é verificada e só então publicada. O `Latest` global continua apontando para o Corvan legado; releases estáveis de outros personagens usam `--latest=false`.
+O workflow resolve a tag no registry antes de compilar. Tags desconhecidas, perfis desabilitados, fixtures, versões incompatíveis ou tags ambíguas falham antes da publicação. Para cada personagem, `previousVersion` considera somente a release estável anterior daquele personagem. A release é criada como draft, recebe exatamente runtime, manifesto e Saved Object, é baixada e comparada byte a byte ainda como draft, e só então é publicada. O `Latest` global continua apontando para o Corvan legado; releases estáveis de outros personagens usam `--latest=false`.
 
 O bootstrap novo consulta até dez páginas de 100 releases, ignora draft/prerelease e escolhe a maior versão SemVer da tag inteira do próprio personagem. Se a última página estiver cheia, a busca falha de forma segura para não escolher uma lista incompleta. Rate limit, rede, identidade, tag, URL, tamanho, SHA, marker ou health check inválidos preservam o runtime anterior.
 

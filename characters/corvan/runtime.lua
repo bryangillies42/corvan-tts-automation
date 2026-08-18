@@ -120,6 +120,7 @@ local CORE_CONFIG = {
 }
 local AdapterApi = RuntimeCore.createRuntimeApi(CORE_CONFIG)
 local parentGuid = nil
+local legacyParentBinding = false
 
 -- Funções puras expostas para um harness Lua sem depender das APIs do TTS.
 CorvanRules = {}
@@ -413,6 +414,7 @@ end
 
 local function safeSetAttribute(id, attribute, value)
     local ok, accepted = safeParentCall("setRuntimeUiAttribute", {
+        characterId = CHARACTER_ID,
         id = id,
         attribute = attribute,
         value = tostring(value)
@@ -692,7 +694,7 @@ local function pushUndo()
 end
 
 local function cacheAndRender()
-    safeParentCall("cacheRuntimeState", {state = exportState()})
+    safeParentCall("cacheRuntimeState", {characterId = CHARACTER_ID, state = exportState()})
     scheduleRender()
 end
 
@@ -802,6 +804,7 @@ local function publicMessage(message, preferredColor, messageTint, richText)
     -- aceitar silenciosamente chamadas de chat feitas pelo helper invisível
     -- sem inseri-las no cliente, enquanto o mesmo envio pelo painel funciona.
     local relayOk, relayAccepted = safeParentCall("relayRuntimeChat", {
+        characterId = CHARACTER_ID,
         message = message,
         playerColor = preferredColor,
         tint = tint,
@@ -859,6 +862,7 @@ end
 
 local function privateError(playerColor, message)
     local relayed, accepted = safeParentCall("relayRuntimePrivate", {
+        characterId = CHARACTER_ID,
         message = CHARACTER_NAME .. " • " .. message,
         playerColor = playerColor
     })
@@ -1532,6 +1536,14 @@ local SKILL_IDS = {
 function handleUiEvent(payload)
     if not characterLoaded then return false end
     payload = type(payload) == "table" and payload or {}
+    local legacyEvent = legacyParentBinding
+        and payload.characterId == nil
+        and payload.parentGuid == nil
+    if not legacyEvent
+        and (payload.characterId ~= CHARACTER_ID or payload.parentGuid ~= parentGuid)
+    then
+        return false
+    end
     local id = tostring(payload.id or ""):lower():gsub("%-", "_"):gsub("%s+", "_")
     id = ID_ALIASES[id] or id
     local playerColor = payload.playerColor
@@ -1566,7 +1578,7 @@ function handleUiEvent(payload)
     if id == "automatic_resource_spending" then
         local enabled = value == true or tostring(value):lower() == "true" or tostring(value) == "1"
         state.automaticResourceSpending = enabled
-        safeParentCall("cacheRuntimeState", {state = exportState()})
+        safeParentCall("cacheRuntimeState", {characterId = CHARACTER_ID, state = exportState()})
         applyUi()
         return true
     end
@@ -1722,12 +1734,14 @@ end
 function registerParent(payload)
     if not characterLoaded then return false end
     if type(payload) == "string" then
+        legacyParentBinding = true
         parentGuid = payload
     elseif type(payload) == "table" then
         -- O bootstrap 1.0.2 distribuído no Saved Object v0.2.0 ainda não
         -- enviava identidade. Somente o Corvan aceita essa ausência legada;
         -- uma identidade explícita divergente continua sempre recusada.
         if payload.characterId ~= nil and payload.characterId ~= CHARACTER_ID then return false end
+        legacyParentBinding = payload.characterId == nil
         parentGuid = payload.parentGuid or payload.guid or parentGuid
     end
     if type(parentGuid) ~= "string" or parentGuid == "" then return false end

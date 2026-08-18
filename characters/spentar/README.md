@@ -62,10 +62,10 @@ Preencher somente com dados conferidos na ficha e nas referências aprovadas:
 Quando todas as pendências estiverem resolvidas:
 
 1. Criar as fontes do personagem a partir de `templates/character/`.
-2. Adicionar o perfil ao registry com uma versão SemVer real.
-3. Ativar `productionEnabled` somente após revisão e testes.
-4. Executar build individual, build conjunto, fixtures e smoke Lua.
-5. Importar o objeto e testar Spentar e Corvan na mesma mesa.
+2. Completar o perfil no registry com uma versão SemVer real, `status: active` e `productionEnabled: false`.
+3. Executar build individual, build conjunto, fixtures e smoke Lua.
+4. Importar o objeto e testar Spentar e Corvan na mesma mesa.
+5. Ativar `productionEnabled` somente depois da revisão e dos testes reais.
 6. Publicar a primeira tag `spentar-vX.Y.Z` como release independente, sempre com `--latest=false`.
 
 Até esse ponto, este README é a única definição deliberada de Spentar no repositório.

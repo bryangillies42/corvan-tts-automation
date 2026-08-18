@@ -21,8 +21,9 @@
     "savedObject": "Arcane_Test_Console.json"
   },
   "savedObjectName": "Arcane Test Console",
-  "tagMode": "character",
+  "tagMode": "namespaced",
   "discovery": "character-releases",
+  "uiContract": "panel-board",
   "prerelease": true,
   "globalLatest": false,
   "productionEnabled": true,

@@ -233,6 +233,81 @@ test("validadores rejeitam character e UI estruturalmente inválidos", async () 
     () => validateUi(ui.replace('<Panel id="corvanConsole" width="1700"', '<Panel id="corvanConsole" width="1800"')),
     /preservar a geometria declarada/,
   );
+
+  const genericUi = '<Panel id="customRoot"><VerticalLayout><Text id="customValue" /></VerticalLayout></Panel>';
+  validateUi(genericUi, {
+    uiContract: "generic",
+    uiRootId: "customRoot",
+    requiredUiIds: ["customValue"],
+  });
+  assert.throws(
+    () => validateUi(genericUi.replace("</VerticalLayout>", ""), {
+      uiContract: "generic",
+      uiRootId: "customRoot",
+      requiredUiIds: ["customValue"],
+    }),
+    /não corresponde|não foi fechada/,
+  );
+  assert.throws(
+    () => validateUi(genericUi, {
+      uiContract: "generic",
+      uiRootId: "customRoot",
+      requiredUiIds: ["missing"],
+    }),
+    /ID obrigatório missing/,
+  );
+});
+
+test("build não depende da permissão de publicação", async (t) => {
+  const project = await temporaryProject(t);
+  const registryPath = join(project, "characters", "registry.json");
+  const registry = JSON.parse(await readFile(registryPath, "utf8"));
+  registry.characters[0].release.productionEnabled = false;
+  await writeFile(registryPath, JSON.stringify(registry, null, 2), "utf8");
+
+  const individual = await buildProject({
+    rootDir: project,
+    outDir: join(project, "dist-disabled-individual"),
+    characterId: "corvan",
+    commitSha: FIXED_SHA,
+  });
+  const all = await buildAllCharacters({
+    rootDir: project,
+    outDir: join(project, "dist-disabled-all"),
+    commitSha: FIXED_SHA,
+  });
+
+  assert.equal(individual.profile.productionEnabled, false);
+  assert.equal(all.some((result) => result.profile.id === "corvan"), true);
+});
+
+test("contrato generic builda uma UI estrutural sem moldura nem asset visual de UI", async (t) => {
+  const project = await temporaryProject(t);
+  const fixtureRoot = join(project, "fixtures", "characters", "arcane-test");
+  const profilePath = join(fixtureRoot, "profile.json");
+  const profile = JSON.parse(await readFile(profilePath, "utf8"));
+  profile.uiContract = "generic";
+  profile.tagMode = "namespaced";
+  profile.requiredUiIds = ["arcaneTestConsole", "arcaneFocus", "cast"];
+  delete profile.panelArtId;
+  delete profile.geometry;
+  delete profile.assets.panelUiImageUrl;
+  await writeFile(profilePath, JSON.stringify(profile, null, 2), "utf8");
+  await writeFile(
+    join(fixtureRoot, "ui.xml"),
+    '<Panel id="arcaneTestConsole"><Text id="arcaneFocus" /><Button id="cast" /></Panel>\n',
+    "utf8",
+  );
+
+  const result = await buildFixture({
+    rootDir: project,
+    outDir: join(project, "dist-generic"),
+    commitSha: FIXED_SHA,
+  });
+
+  assert.equal(result.panelUiImageUrl, null);
+  assert.match(result.savedObject.ObjectStates[0].XmlUI, /^<Panel id="arcaneTestConsole">/);
+  assert.doesNotMatch(result.savedObject.ObjectStates[0].XmlUI, /<Image\b|PANEL_UI_IMAGE/);
 });
 
 test("manifesto e Saved Object possuem o contrato publicável", async (t) => {
@@ -435,7 +510,7 @@ test("registry é a fonte única e recusa identidades, caminhos e canais conflit
   assert.throws(() => validateRegistry(divergentArtifacts), /devem declarar os mesmos artefatos/);
 
   const wrongCorvanTagMode = structuredClone(registry);
-  wrongCorvanTagMode.characters[0].tagMode = "character";
+  wrongCorvanTagMode.characters[0].tagMode = "namespaced";
   assert.throws(() => validateRegistry(wrongCorvanTagMode), /Corvan deve preservar tagMode legacy/);
 
   const legacySecondCharacter = structuredClone(registry);

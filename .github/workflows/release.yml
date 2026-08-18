@@ -183,7 +183,98 @@ jobs:
             "${saved_object_path}" \
             --clobber
 
-      - name: Publish release atomically
+      - name: Verify draft assets before publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ steps.resolve.outputs.id }}
+          RELEASE_VERSION: ${{ steps.resolve.outputs.version }}
+          RELEASE_TAG: ${{ steps.resolve.outputs.tag }}
+          RELEASE_COMMIT_SHA: ${{ github.sha }}
+          RELEASE_PREVIOUS_VERSION: ${{ steps.previous.outputs.version }}
+          RELEASE_PRERELEASE: ${{ steps.resolve.outputs.prerelease }}
+          RELEASE_RUNTIME_MARKER: ${{ steps.resolve.outputs.runtimeMarker }}
+          RELEASE_MIN_BOOTSTRAP_VERSION: ${{ steps.resolve.outputs.minBootstrapVersion }}
+          RELEASE_SAVED_OBJECT_NAME: ${{ steps.resolve.outputs.savedObjectName }}
+          RELEASE_SAVED_OBJECT_NOTE: ${{ steps.resolve.outputs.savedObjectNote }}
+          RELEASE_SAVED_OBJECT_DESCRIPTION: ${{ steps.resolve.outputs.savedObjectDescription }}
+          RELEASE_RUNTIME: ${{ steps.resolve.outputs.runtime }}
+          RELEASE_MANIFEST: ${{ steps.resolve.outputs.manifest }}
+          RELEASE_SAVED_OBJECT: ${{ steps.resolve.outputs.savedObject }}
+          RELEASE_RUNTIME_PATH: ${{ steps.stage.outputs.runtime_path }}
+          RELEASE_MANIFEST_PATH: ${{ steps.stage.outputs.manifest_path }}
+          RELEASE_SAVED_OBJECT_PATH: ${{ steps.stage.outputs.saved_object_path }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          release_json="$(gh release view "${RELEASE_TAG}" --json isDraft,isPrerelease,tagName,assets)"
+          jq -e --arg tag "${RELEASE_TAG}" --argjson prerelease "${RELEASE_PRERELEASE}" \
+            '.isDraft == true and .tagName == $tag and .isPrerelease == $prerelease' \
+            <<<"${release_json}" >/dev/null
+
+          expected_assets="$(jq -cn \
+            --arg runtime "${RELEASE_RUNTIME}" \
+            --arg manifest "${RELEASE_MANIFEST}" \
+            --arg savedObject "${RELEASE_SAVED_OBJECT}" \
+            '[$runtime, $manifest, $savedObject] | sort')"
+          actual_assets="$(jq -c '[.assets[].name] | sort' <<<"${release_json}")"
+          if [[ "${actual_assets}" != "${expected_assets}" ]]; then
+            echo "Assets da draft não correspondem exatamente aos três artefatos esperados." >&2
+            echo "Esperados: ${expected_assets}" >&2
+            echo "Encontrados: ${actual_assets}" >&2
+            exit 1
+          fi
+
+          verify_dir="$(mktemp -d)"
+          trap 'rm -rf "${verify_dir}"' EXIT
+          gh release download "${RELEASE_TAG}" --dir "${verify_dir}" \
+            --pattern "${RELEASE_RUNTIME}" \
+            --pattern "${RELEASE_MANIFEST}" \
+            --pattern "${RELEASE_SAVED_OBJECT}"
+          cmp --silent "${RELEASE_RUNTIME_PATH}" "${verify_dir}/${RELEASE_RUNTIME}"
+          cmp --silent "${RELEASE_MANIFEST_PATH}" "${verify_dir}/${RELEASE_MANIFEST}"
+          cmp --silent "${RELEASE_SAVED_OBJECT_PATH}" "${verify_dir}/${RELEASE_SAVED_OBJECT}"
+          grep -Fq -- "${RELEASE_RUNTIME_MARKER}" "${verify_dir}/${RELEASE_RUNTIME}"
+          runtime_sha256="$(sha256sum "${verify_dir}/${RELEASE_RUNTIME}" | awk '{print $1}')"
+          runtime_size="$(wc -c < "${verify_dir}/${RELEASE_RUNTIME}" | tr -d '[:space:]')"
+          runtime_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${RELEASE_RUNTIME}"
+          jq -e \
+            --arg id "${RELEASE_ID}" \
+            --arg tag "${RELEASE_TAG}" \
+            --arg version "${RELEASE_VERSION}" \
+            --arg commitSha "${RELEASE_COMMIT_SHA}" \
+            --arg minBootstrapVersion "${RELEASE_MIN_BOOTSTRAP_VERSION}" \
+            --arg previousVersion "${RELEASE_PREVIOUS_VERSION}" \
+            --arg runtimeUrl "${runtime_url}" \
+            --arg runtimeSha256 "${runtime_sha256}" \
+            --argjson runtimeSize "${runtime_size}" \
+            '.schemaVersion == 1
+              and .characterId == $id
+              and .releaseTag == $tag
+              and .version == $version
+              and .commitSha == $commitSha
+              and .minBootstrapVersion == $minBootstrapVersion
+              and .previousVersion == (if $previousVersion == "" then null else $previousVersion end)
+              and .runtime.url == $runtimeUrl
+              and .runtime.sha256 == $runtimeSha256
+              and .runtime.size == $runtimeSize' \
+            "${verify_dir}/${RELEASE_MANIFEST}" >/dev/null
+          jq -e \
+            --arg id "${RELEASE_ID}" \
+            --arg version "${RELEASE_VERSION}" \
+            --arg name "${RELEASE_SAVED_OBJECT_NAME}" \
+            --arg note "${RELEASE_SAVED_OBJECT_NOTE}" \
+            --arg description "${RELEASE_SAVED_OBJECT_DESCRIPTION}" \
+            '. as $saved
+              | ($saved.ObjectStates | length == 1)
+              and $saved.ObjectStates[0].Nickname == $name
+              and $saved.ObjectStates[0].Description == $description
+              and $saved.ObjectStates[0].LuaScript != ""
+              and ($saved.ObjectStates[0].GMNotes | fromjson | .characterId == $id and .version == $version)
+              and $saved.Note == $note' \
+            "${verify_dir}/${RELEASE_SAVED_OBJECT}" >/dev/null
+
+      - name: Publish verified release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.resolve.outputs.tag }}
@@ -200,51 +291,20 @@ jobs:
             gh release edit "${RELEASE_TAG}" --draft=false --latest=false
           fi
 
-      - name: Verify immutable release and global Latest
+      - name: Confirm published state and global Latest
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_ID: ${{ steps.resolve.outputs.id }}
-          RELEASE_VERSION: ${{ steps.resolve.outputs.version }}
           RELEASE_TAG: ${{ steps.resolve.outputs.tag }}
           RELEASE_TAG_MODE: ${{ steps.resolve.outputs.tagMode }}
-          RELEASE_RUNTIME_MARKER: ${{ steps.resolve.outputs.runtimeMarker }}
           RELEASE_PRERELEASE: ${{ steps.resolve.outputs.prerelease }}
           RELEASE_LATEST: ${{ steps.resolve.outputs.latest }}
-          RELEASE_RUNTIME: ${{ steps.resolve.outputs.runtime }}
-          RELEASE_MANIFEST: ${{ steps.resolve.outputs.manifest }}
-          RELEASE_SAVED_OBJECT: ${{ steps.resolve.outputs.savedObject }}
-          RELEASE_RUNTIME_PATH: ${{ steps.stage.outputs.runtime_path }}
-          RELEASE_MANIFEST_PATH: ${{ steps.stage.outputs.manifest_path }}
-          RELEASE_SAVED_OBJECT_PATH: ${{ steps.stage.outputs.saved_object_path }}
         shell: bash
         run: |
           set -euo pipefail
-          release_json="$(gh release view "${RELEASE_TAG}" --json isDraft,isPrerelease,tagName,assets)"
+          release_json="$(gh release view "${RELEASE_TAG}" --json isDraft,isPrerelease,tagName)"
           jq -e --arg tag "${RELEASE_TAG}" --argjson prerelease "${RELEASE_PRERELEASE}" \
             '.isDraft == false and .tagName == $tag and .isPrerelease == $prerelease' \
             <<<"${release_json}" >/dev/null
-          for asset in "${RELEASE_RUNTIME}" "${RELEASE_MANIFEST}" "${RELEASE_SAVED_OBJECT}"; do
-            jq -e --arg name "${asset}" '.assets | any(.name == $name)' <<<"${release_json}" >/dev/null
-          done
-          verify_dir="$(mktemp -d)"
-          trap 'rm -rf "${verify_dir}"' EXIT
-          gh release download "${RELEASE_TAG}" --dir "${verify_dir}" \
-            --pattern "${RELEASE_RUNTIME}" \
-            --pattern "${RELEASE_MANIFEST}" \
-            --pattern "${RELEASE_SAVED_OBJECT}"
-          test -f "${RELEASE_RUNTIME_PATH}"
-          test -f "${RELEASE_MANIFEST_PATH}"
-          test -f "${RELEASE_SAVED_OBJECT_PATH}"
-          cmp --silent "${RELEASE_RUNTIME_PATH}" "${verify_dir}/${RELEASE_RUNTIME}"
-          cmp --silent "${RELEASE_MANIFEST_PATH}" "${verify_dir}/${RELEASE_MANIFEST}"
-          cmp --silent "${RELEASE_SAVED_OBJECT_PATH}" "${verify_dir}/${RELEASE_SAVED_OBJECT}"
-          grep -Fq -- "${RELEASE_RUNTIME_MARKER}" "${verify_dir}/${RELEASE_RUNTIME}"
-          jq -e \
-            --arg id "${RELEASE_ID}" \
-            --arg tag "${RELEASE_TAG}" \
-            --arg version "${RELEASE_VERSION}" \
-            '.schemaVersion == 1 and .characterId == $id and .releaseTag == $tag and .version == $version' \
-            "${verify_dir}/${RELEASE_MANIFEST}" >/dev/null
 
           latest_tag="$(gh api \
             -H 'Accept: application/vnd.github+json' \

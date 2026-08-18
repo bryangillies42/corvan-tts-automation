@@ -25,6 +25,7 @@ function profile({ id, version, status = "active", tagMode, productionEnabled = 
     displayName: id,
     shortName: id,
     runtimeMarker: `${id.toUpperCase().replaceAll("-", "_")}_RUNTIME`,
+    minBootstrapVersion: "1.0.2",
     version,
     status,
     sourceDir: `characters/${id}`,
@@ -56,6 +57,9 @@ test("mapeia tags legacy e namespaced para o perfil correto", () => {
   const corvan = resolveRelease({ tag: "v0.2.1", profiles });
   assert.equal(corvan.id, "corvan");
   assert.equal(corvan.latest, true);
+  assert.equal(corvan.minBootstrapVersion, "1.0.2");
+  assert.equal(corvan.savedObjectName, "corvan Console");
+  assert.equal(corvan.savedObjectDescription, "Console atualizável • corvan v0.2.1");
   assert.equal(corvan.artifactPaths.runtime, "dist/corvan/corvan-runtime.lua");
 
   const fixture = resolveRelease({ tag: "arcane-test-v1.4.0", profiles });
@@ -156,5 +160,7 @@ test("emite outputs simples e JSON para o GitHub Actions", async () => {
   assert.equal(resolved.id, "corvan");
   assert.match(output, /id=corvan/);
   assert.match(output, /latest=true/);
+  assert.match(output, /minBootstrapVersion=1\.0\.2/);
+  assert.match(output, /savedObjectDescription=Console atualizável • corvan v0\.2\.1/);
   assert.match(output, /releaseJson=\{"id":"corvan"/);
 });

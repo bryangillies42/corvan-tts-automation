@@ -110,7 +110,11 @@ end
 $fixtureAssertions = @'
 assert(healthCheck({}).ok and healthCheck({}).characterId == 'arcane-test')
 assert(registerParent({parentGuid = 'arcane-panel', characterId = 'arcane-test'}))
-assert(handleUiEvent({id = 'cast', playerColor = 'White'}))
+assert(not handleUiEvent({id = 'cast', playerColor = 'White', characterId = 'corvan', parentGuid = 'arcane-panel'}))
+assert(handleUiEvent({
+    id = 'cast', playerColor = 'White',
+    characterId = 'arcane-test', parentGuid = 'arcane-panel'
+}))
 local exported = exportState()
 assert(exported.characterId == 'arcane-test'
     and exported.character.focus == 11
@@ -448,6 +452,20 @@ assert(attributes.panelBoardArt == 'false', 'network failure exposed the white i
 panelArtRequestFails = false
 assert(registerParent({parentGuid = 'panel1', characterId = 'corvan'}))
 assert(attributes.panelBoardArt == 'true' and panelArtRequests == 5)
+assert(not handleUiEvent({
+    id = 'power_duel', playerColor = 'White',
+    characterId = 'arcane-test', parentGuid = 'panel1'
+}))
+assert(not handleUiEvent({
+    id = 'power_duel', playerColor = 'White',
+    characterId = 'corvan', parentGuid = 'foreign-panel'
+}))
+local isolatedHandleUiEvent = handleUiEvent
+function handleUiEvent(payload)
+    payload.characterId = 'corvan'
+    payload.parentGuid = parentGuid
+    return isolatedHandleUiEvent(payload)
+end
 -- O restante deste harness histórico opera sobre o estado plano das versões
 -- antigas. Preserve essa visão somente no teste, enquanto a função nativa fica
 -- disponível para validar o novo envelope ao final.
@@ -913,7 +931,33 @@ printToAll = function(message, tint)
     assert(tint[1] == 0.92 and tint[2] == 0.94 and tint[3] == 0.97)
     table.insert(relayed, message)
 end
+assert(not relayRuntimeChat({
+    characterId = 'outro-personagem',
+    message = 'não pode atravessar identidade',
+    richText = false
+}))
+assert(#relayed == 0)
+assert(not setRuntimeUiAttribute({
+    characterId = 'outro-personagem',
+    id = 'versionLabel',
+    attribute = 'text',
+    value = 'não autorizado'
+}))
+assert(not relayRuntimePrivate({
+    characterId = 'outro-personagem',
+    playerColor = 'White',
+    message = 'não autorizado'
+}))
+assert(not cacheRuntimeState({
+    characterId = 'outro-personagem',
+    state = {characterId = 'corvan'}
+}))
+assert(cacheRuntimeState({
+    characterId = 'corvan',
+    state = {characterId = 'corvan'}
+}))
 assert(relayRuntimeChat({
+    characterId = 'corvan',
     message = '[FF6464]Corvan[-] • Espada  │ RESULTADO: [62B8FF]17[-]  │ CÁLCULO: d20(4) + 13',
     richText = true
 }))

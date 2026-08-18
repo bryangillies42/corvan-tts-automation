@@ -202,6 +202,12 @@ test('blocks refresh during duplicate requests and physical rolls', () => {
   assert.match(source, /interactable", pendingRefreshBusy and "false" or "true"/);
   assert.match(source, /pcall\(printToColor,/);
   assert.match(source, /function relayRuntimeChat\(payload\)/);
+  assert.match(source, /CHARACTER_ID == "corvan" and payload\.characterId == nil/);
+  assert.match(source, /function setRuntimeUiAttribute\(payload\)[\s\S]*payload\.characterId ~= CHARACTER_ID/);
+  assert.match(source, /safeObjectCall\(helper, "handleUiEvent", \{\s*characterId = CHARACTER_ID,\s*parentGuid = self\.getGUID\(\),/);
+  assert.match(source, /function cacheRuntimeState\(payload\)[\s\S]*payload\.characterId ~= CHARACTER_ID/);
+  assert.match(runtimeSource, /payload\.characterId ~= CHARACTER_ID or payload\.parentGuid ~= parentGuid/);
+  assert.match(runtimeSource, /safeParentCall\("setRuntimeUiAttribute", \{\s*characterId = CHARACTER_ID,/);
   assert.match(source, /local function chatSafeRichText\(value\)/);
   assert.match(source, /if colorOpen then return chatSafeText\(text\) end/);
   assert.match(source, /tag == "\[FF6464\]" or tag == "\[62B8FF\]"/);
@@ -214,6 +220,8 @@ test('blocks refresh during duplicate requests and physical rolls', () => {
   assert.match(source, /local tint = type\(payload\.tint\) == "table" and payload\.tint or \{0\.92, 0\.94, 0\.97\}/);
   assert.match(source, /payload\.tint/);
   assert.match(source, /function relayRuntimePrivate\(payload\)/);
+  assert.match(runtimeSource, /safeParentCall\("relayRuntimeChat", \{\s*characterId = CHARACTER_ID,/);
+  assert.match(runtimeSource, /safeParentCall\("relayRuntimePrivate", \{\s*characterId = CHARACTER_ID,/);
   assert.doesNotMatch(source, /\bbroadcastTo(?:All|Color)\s*\(/);
 });
 

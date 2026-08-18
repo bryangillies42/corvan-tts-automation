@@ -40,6 +40,7 @@
         }
       },
       "discovery": "repository-latest",
+      "uiContract": "panel-board",
       "uiRootId": "corvanConsole",
       "panelArtId": "panelBoardArt",
       "requiredUiIds": [
@@ -97,6 +98,7 @@
         }
       },
       "discovery": "character-releases",
+      "uiContract": "generic",
       "uiRootId": "spentarConsole",
       "runtimeMarker": "SPENTAR_RUNTIME",
       "minBootstrapVersion": "1.0.2"

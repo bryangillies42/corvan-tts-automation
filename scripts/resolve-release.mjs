@@ -73,6 +73,8 @@ function normalizeProfile(raw, index) {
   assert(!raw.sourceDir.split(/[\\/]/).includes(".."), `${prefix}.sourceDir não pode subir diretórios.`);
   const runtimeMarker = raw.runtimeMarker ?? raw.release?.runtimeMarker;
   assertString(runtimeMarker, `${prefix}.runtimeMarker`);
+  assertString(raw.minBootstrapVersion, `${prefix}.minBootstrapVersion`);
+  assert(VERSION_PATTERN.test(raw.minBootstrapVersion), `${prefix}.minBootstrapVersion deve usar X.Y.Z.`);
 
   // The v0.2.1 registry contract is nested under `release`. During the
   // migration, accept the flat shape used by the initial multi-character
@@ -109,6 +111,11 @@ function normalizeProfile(raw, index) {
     shortName: raw.shortName ?? raw.id,
     status: raw.status,
     runtimeMarker,
+    minBootstrapVersion: raw.minBootstrapVersion,
+    savedObjectName: raw.savedObjectName ?? `${raw.displayName} Console`,
+    savedObjectNote: raw.savedObjectNote ?? `${raw.displayName} Console`,
+    savedObjectDescription: (raw.savedObjectDescription
+      ?? `Console atualizável • ${raw.displayName} v{version}`).replaceAll("{version}", version ?? ""),
     version: version ?? null,
     sourceDir: raw.sourceDir.replaceAll("\\", "/"),
     release: Object.freeze({
@@ -255,6 +262,10 @@ export function resolveRelease({ tag, profiles }) {
     shortName: profile.shortName,
     status: profile.status,
     runtimeMarker: profile.runtimeMarker,
+    minBootstrapVersion: profile.minBootstrapVersion,
+    savedObjectName: profile.savedObjectName,
+    savedObjectNote: profile.savedObjectNote,
+    savedObjectDescription: profile.savedObjectDescription,
     sourceDir: profile.sourceDir,
     version: parsedTag.version,
     tag,
@@ -302,6 +313,10 @@ async function writeGithubOutputs(path, release) {
     shortName: release.shortName,
     status: release.status,
     runtimeMarker: release.runtimeMarker,
+    minBootstrapVersion: release.minBootstrapVersion,
+    savedObjectName: release.savedObjectName,
+    savedObjectNote: release.savedObjectNote,
+    savedObjectDescription: release.savedObjectDescription,
     sourceDir: release.sourceDir,
     version: release.version,
     tag: release.tag,

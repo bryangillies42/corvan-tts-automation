@@ -240,6 +240,7 @@ const CORVAN_REQUIRED_UI_IDS = [
 
 export function validateUi(input, contract = {}) {
   const xml = normalizeText(input);
+  const uiContract = contract.uiContract || "panel-board";
   const uiRootId = contract.uiRootId || "corvanConsole";
   const panelArtId = contract.panelArtId || "panelBoardArt";
   const geometry = contract.geometry || {
@@ -248,7 +249,7 @@ export function validateUi(input, contract = {}) {
     panelWidth: 1700,
     panelHeight: 750,
   };
-  const requiredUiIds = contract.requiredUiIds || CORVAN_REQUIRED_UI_IDS;
+  const requiredUiIds = contract.requiredUiIds || (uiContract === "generic" ? [] : CORVAN_REQUIRED_UI_IDS);
   assert(xml.trim().length > 0, "src/ui.xml não pode estar vazio.");
 
   const stack = [];
@@ -316,6 +317,13 @@ export function validateUi(input, contract = {}) {
 
   assert(tagCount > 0, "src/ui.xml não contém elementos.");
   assert(stack.length === 0, `Tag XML <${stack.at(-1)}> não foi fechada.`);
+  assert(ids.has(uiRootId), `ui.xml deve declarar o painel raiz ${uiRootId}.`);
+  for (const requiredId of requiredUiIds) {
+    assert(ids.has(requiredId), `src/ui.xml não declara o ID obrigatório ${requiredId}.`);
+  }
+  if (uiContract === "generic") return xml;
+  assert(uiContract === "panel-board", `Contrato de UI desconhecido: ${uiContract}.`);
+
   const visualRoots = roots.filter((name) => name !== "Defaults");
   assert(
     roots.every((name) => name === "Defaults" || name === "Image" || name === "Panel"),
@@ -329,7 +337,6 @@ export function validateUi(input, contract = {}) {
     visualRoots.length === 2 && visualRoots[0] === "Image" && visualRoots[1] === "Panel",
     "src/ui.xml deve possuir a Image da moldura antes do Panel visual raiz.",
   );
-  assert(ids.has(uiRootId), `ui.xml deve declarar o painel raiz ${uiRootId}.`);
   const rootGeometry = (id) => {
     const tag = xml.match(new RegExp(`<(?:Image|Panel)\\b[^>]*\\bid=["']${id}["'][^>]*>`, "s"));
     assert(tag !== null, `src/ui.xml não declara a raiz ${id}.`);
@@ -358,9 +365,6 @@ export function validateUi(input, contract = {}) {
       && consoleGeometry.dimensions[1] === String(geometry.panelHeight),
     `A moldura e o painel devem preservar a geometria declarada por ${uiRootId}.`,
   );
-  for (const requiredId of requiredUiIds) {
-    assert(ids.has(requiredId), `src/ui.xml não declara o ID obrigatório ${requiredId}.`);
-  }
   return xml;
 }
 
@@ -381,17 +385,6 @@ function validatePreviousVersion(value, currentVersion) {
   return value;
 }
 
-async function loadPackage(rootDir) {
-  let parsed;
-  try {
-    parsed = JSON.parse(normalizeText(await readFile(join(rootDir, "package.json"), "utf8")));
-  } catch (error) {
-    fail(`Não foi possível ler package.json: ${error.message}`);
-  }
-  assert(isObject(parsed) && VERSION_PATTERN.test(parsed.version ?? ""), "package.json deve declarar uma versão SemVer estável X.Y.Z.");
-  return parsed;
-}
-
 async function readSource(path, label) {
   try {
     return withFinalNewline(normalizeText(await readFile(path, "utf8")));
@@ -400,242 +393,11 @@ async function readSource(path, label) {
   }
 }
 
-function createManifest(version, commitSha, runtime, previousVersion) {
-  return {
-    schemaVersion: 1,
-    characterId: "corvan",
-    releaseTag: `v${version}`,
-    version,
-    minBootstrapVersion: "1.0.2",
-    commitSha,
-    runtime: {
-      url: `${RELEASE_BASE_URL}/v${version}/corvan-runtime.lua`,
-      size: Buffer.byteLength(runtime, "utf8"),
-      sha256: sha256(runtime),
-    },
-    previousVersion,
-  };
-}
-
-function createSavedObject(bootstrap, ui, version, assetUrl, savedObjectName) {
-  return {
-    SaveName: savedObjectName,
-    GameMode: "",
-    Gravity: 0.5,
-    PlayArea: 0.5,
-    Date: "",
-    Table: "",
-    Sky: "",
-    Note: "Console de combate do Corvan Duras",
-    Rules: "",
-    XmlUI: "",
-    LuaScript: "",
-    LuaScriptState: "",
-    ObjectStates: [
-      {
-        Name: "Custom_Tile",
-        Transform: {
-          posX: 0,
-          posY: 1.1,
-          posZ: 0,
-          rotX: 0,
-          rotY: 180,
-          rotZ: 0,
-          scaleX: 1,
-          scaleY: 1,
-          scaleZ: 1,
-        },
-        Nickname: savedObjectName,
-        Description: `Console de combate atualizável • v${version}`,
-        GMNotes: stableJson({ project: "corvan-tts-automation", version, aspectRatio: "2.22:1" }).trim(),
-        ColorDiffuse: { r: 1, g: 1, b: 1 },
-        Locked: false,
-        Grid: true,
-        Snap: true,
-        IgnoreFoW: false,
-        MeasureMovement: false,
-        DragSelectable: true,
-        Autoraise: true,
-        Sticky: true,
-        Tooltip: true,
-        GridProjection: false,
-        HideWhenFaceDown: false,
-        Hands: false,
-        CustomImage: {
-          ImageURL: assetUrl,
-          ImageSecondaryURL: "",
-          ImageScalar: 1,
-          WidthScale: 0,
-          CustomTile: {
-            Type: 0,
-            Thickness: 0.2,
-            Stackable: false,
-            Stretch: true,
-          },
-        },
-        LuaScript: bootstrap,
-        LuaScriptState: "",
-        XmlUI: ui,
-        GUID: "c0a4a1",
-      },
-    ],
-    TabStates: {},
-    VersionNumber: "",
-  };
-}
-
-async function buildLegacyProject({
-  rootDir = PROJECT_ROOT,
-  outDir = join(rootDir, "dist"),
-  commitSha = process.env.CORVAN_COMMIT_SHA || DEFAULT_COMMIT_SHA,
-  previousVersion = process.env.CORVAN_PREVIOUS_VERSION || null,
-  assetUrl = null,
-  uiAssetUrl = null,
-  savedObjectAssetUrl = null,
-  savedObjectName = "Corvan Duras Console",
-} = {}) {
-  const absoluteRoot = resolve(rootDir);
-  const absoluteOut = resolve(outDir);
-  const packageJson = await loadPackage(absoluteRoot);
-  const sourceDir = join(absoluteRoot, "src");
-  const validatedCommitSha = validateCommitSha(commitSha);
-  const assetRef = validatedCommitSha === DEFAULT_COMMIT_SHA ? "main" : validatedCommitSha;
-
-  const [
-    runtimeTemplate,
-    bootstrapTemplate,
-    uiSource,
-    characterSource,
-    panelImageContents,
-    panelUiImageContents,
-  ] = await Promise.all([
-    readSource(join(sourceDir, "runtime.lua"), "src/runtime.lua"),
-    readSource(join(sourceDir, "bootstrap.lua"), "src/bootstrap.lua"),
-    readSource(join(sourceDir, "ui.xml"), "src/ui.xml"),
-    readSource(join(sourceDir, "character.json"), "src/character.json"),
-    assetUrl ? null : readFile(join(absoluteRoot, "assets", "panel-board.png")),
-    uiAssetUrl ? null : readFile(join(absoluteRoot, "assets", "panel-board-ui.jpg")),
-  ]);
-
-  // O TTS mantém um cache agressivo por URL e pode exibir uma moldura antiga
-  // mesmo depois de o arquivo em `main` mudar. O fingerprint preserva builds
-  // determinísticos e força uma nova entrada de cache somente quando a imagem
-  // realmente muda.
-  const panelImageUrl = assetUrl || fingerprintedAssetUrl(
-    `${RAW_ASSET_BASE_URL}/${assetRef}/assets/panel-board.png`,
-    panelImageContents,
-  );
-  const panelUiImageUrl = uiAssetUrl || fingerprintedAssetUrl(
-    `${RAW_ASSET_BASE_URL}/${assetRef}/assets/panel-board-ui.jpg`,
-    panelUiImageContents,
-  );
-  const savedObjectImageUrl = savedObjectAssetUrl || panelImageUrl;
-  assertString(panelImageUrl, "assetUrl");
-  assertString(panelUiImageUrl, "uiAssetUrl");
-  assertString(savedObjectImageUrl, "savedObjectAssetUrl");
-  assertString(savedObjectName, "savedObjectName");
-
-  let character;
-  try {
-    character = JSON.parse(characterSource);
-  } catch (error) {
-    fail(`src/character.json não é JSON válido: ${error.message}`);
-  }
-  validateCharacter(character, packageJson.version);
-  const uiWithAsset = replaceSinglePlaceholder(
-    uiSource,
-    PLACEHOLDERS.panelUiImageUrl,
-    escapeXmlAttribute(panelUiImageUrl),
-    PLACEHOLDERS.panelUiImageUrl,
-  );
-  const ui = withFinalNewline(validateUi(uiWithAsset));
-  const characterJson = stableJson(character);
-
-  let runtime = replaceSinglePlaceholder(
-    runtimeTemplate,
-    PLACEHOLDERS.ui,
-    luaLongString(ui),
-    PLACEHOLDERS.ui,
-  );
-  runtime = replaceSinglePlaceholder(
-    runtime,
-    PLACEHOLDERS.character,
-    luaLongString(characterJson),
-    PLACEHOLDERS.character,
-  );
-  runtime = replaceSinglePlaceholder(
-    runtime,
-    PLACEHOLDERS.panelImageUrl,
-    luaLongString(panelImageUrl),
-    PLACEHOLDERS.panelImageUrl,
-  );
-  runtime = replaceSinglePlaceholder(
-    runtime,
-    PLACEHOLDERS.panelUiImageUrlLiteral,
-    luaLongString(panelUiImageUrl),
-    PLACEHOLDERS.panelUiImageUrlLiteral,
-  );
-  runtime = withFinalNewline(runtime);
-  assert(runtime.includes("CORVAN_RUNTIME"), "O runtime gerado deve conter o marcador CORVAN_RUNTIME.");
-
-  let bootstrap = replaceSinglePlaceholder(
-    bootstrapTemplate,
-    PLACEHOLDERS.seedRuntime,
-    luaLongString(runtime),
-    PLACEHOLDERS.seedRuntime,
-  );
-  bootstrap = replaceSinglePlaceholder(
-    bootstrap,
-    PLACEHOLDERS.seedUi,
-    luaLongString(ui),
-    PLACEHOLDERS.seedUi,
-  );
-  bootstrap = withFinalNewline(bootstrap);
-
-  for (const placeholder of Object.values(PLACEHOLDERS)) {
-    assert(!runtime.includes(placeholder), `O runtime gerado ainda contém ${placeholder}.`);
-    assert(!bootstrap.includes(placeholder), `O bootstrap gerado ainda contém ${placeholder}.`);
-  }
-
-  const manifest = createManifest(
-    packageJson.version,
-    validatedCommitSha,
-    runtime,
-    validatePreviousVersion(previousVersion, packageJson.version),
-  );
-  const savedObject = createSavedObject(
-    bootstrap,
-    ui,
-    packageJson.version,
-    savedObjectImageUrl,
-    savedObjectName,
-  );
-  const files = {
-    "corvan-runtime.lua": runtime,
-    "manifest.json": stableJson(manifest),
-    "Corvan_Duras_Console.json": stableJson(savedObject),
-  };
-
-  await mkdir(absoluteOut, { recursive: true });
-  await Promise.all(
-    Object.entries(files).map(([name, contents]) => writeFile(join(absoluteOut, name), contents, "utf8")),
-  );
-
-  return {
-    outDir: absoluteOut,
-    version: packageJson.version,
-    manifest,
-    savedObject,
-    panelImageUrl,
-    panelUiImageUrl,
-    files,
-  };
-}
-
 const REGISTRY_FILE = "characters/registry.json";
 const ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const SAFE_RELATIVE_PATH = /^(?![\\/])(?:[^\\/:*?"<>|]+[\\/]?)+$/;
-const RELEASE_TAG_MODES = new Set(["legacy", "character"]);
+const RELEASE_TAG_MODES = new Set(["legacy", "namespaced"]);
+const UI_CONTRACTS = new Set(["panel-board", "generic"]);
 const DISCOVERY_MODES = new Set(["repository-latest", "character-releases"]);
 
 function assertRelativePath(value, path) {
@@ -667,9 +429,10 @@ function rawArtifactNamesDiffer(files, artifacts) {
 function normalizeBuildProfile(raw) {
   const release = isObject(raw?.release) ? raw.release : {};
   const artifacts = release.artifacts || raw?.files || {};
+  const declaredTagMode = raw?.tagMode || release.tagMode;
   return {
     ...raw,
-    tagMode: raw?.tagMode || (release.tagMode === "namespaced" ? "character" : release.tagMode),
+    tagMode: declaredTagMode === "character" ? "namespaced" : declaredTagMode,
     discovery: raw?.discovery || "character-releases",
     prerelease: raw?.prerelease ?? release.prerelease,
     globalLatest: raw?.globalLatest ?? release.globalLatest,
@@ -721,6 +484,7 @@ export function validateCharacterProfile(profile, { allowScaffold = true } = {})
   }
   assertString(profile.runtimeMarker, `${profile.id}.runtimeMarker`);
   assertString(profile.uiRootId, `${profile.id}.uiRootId`);
+  assert(UI_CONTRACTS.has(profile.uiContract), `${profile.id}.uiContract deve ser panel-board ou generic.`);
   if (profile.status === "active") {
     assert(typeof profile.guid === "string" && /^[0-9a-f]{6}$/i.test(profile.guid), `${profile.id}.guid deve ter 6 caracteres hexadecimais.`);
   }
@@ -728,6 +492,10 @@ export function validateCharacterProfile(profile, { allowScaffold = true } = {})
     if (profile[field] !== undefined) assertString(profile[field], `${profile.id}.${field}`);
   }
   if (profile.panelArtId !== undefined) assertString(profile.panelArtId, `${profile.id}.panelArtId`);
+  if (profile.uiContract === "panel-board") {
+    assertString(profile.panelArtId, `${profile.id}.panelArtId`);
+    assert(isObject(profile.geometry), `${profile.id}.geometry deve ser um objeto no contrato panel-board.`);
+  }
   if (profile.requiredUiIds !== undefined) {
     assert(Array.isArray(profile.requiredUiIds), `${profile.id}.requiredUiIds deve ser uma lista.`);
     const requiredIds = new Set();
@@ -764,10 +532,10 @@ export function validateRegistry(registry) {
     const characterRoot = `characters/${profile.id}`;
     assert(profile.sourceDir === characterRoot, `${profile.id}.sourceDir deve ser ${characterRoot}.`);
     assert(
-      profile.id === "corvan" ? profile.tagMode === "legacy" : profile.tagMode === "character",
+      profile.id === "corvan" ? profile.tagMode === "legacy" : profile.tagMode === "namespaced",
       profile.id === "corvan"
         ? "Corvan deve preservar tagMode legacy."
-        : `${profile.id}.tagMode deve ser namespaced/character.`,
+        : `${profile.id}.tagMode deve ser namespaced.`,
     );
     if (profile.assetsDir !== null && profile.assetsDir !== undefined) {
       assert(
@@ -871,20 +639,6 @@ function normalizeAssetReference(value, label) {
   return value;
 }
 
-function genericUiValidation(input, profile) {
-  const xml = normalizeText(input);
-  assert(xml.trim().length > 0, `${profile.id} ui.xml não pode estar vazio.`);
-  const ids = new Set();
-  for (const match of xml.matchAll(/\bid\s*=\s*(["'])(.*?)\1/g)) {
-    const id = match[2];
-    assert(id.length > 0 && !ids.has(id), `${profile.id} ui.xml possui ID inválido ou duplicado: ${id}.`);
-    ids.add(id);
-  }
-  assert(/<\s*(?:Image|Panel)\b/i.test(xml), `${profile.id} ui.xml deve declarar um Image ou Panel.`);
-  if (profile.uiRootId) assert(ids.has(profile.uiRootId), `${profile.id} ui.xml deve declarar ${profile.uiRootId}.`);
-  return xml;
-}
-
 function createGenericManifest(profile, version, commitSha, runtime, previousVersion, files) {
   const tag = releaseTagFor(profile, version);
   return {
@@ -978,7 +732,6 @@ async function buildRegisteredCharacter({
   const profile = profileOverride || registry.characters.find((candidate) => candidate.id === characterId);
   assert(profile, `Personagem não registrado: ${characterId}.`);
   assert(profile.status === "active", `Personagem ${characterId} não está ativo.`);
-  assert(profile.productionEnabled, `Personagem ${characterId} não está habilitado para produção.`);
   assert(profile.version, `Personagem ${characterId} não possui versão.`);
   const files = filesForProfile(profile);
   const absoluteOut = resolve(outDir || join(absoluteRoot, "dist", profile.id));
@@ -1015,12 +768,16 @@ async function buildRegisteredCharacter({
     assetUrl || assets.panelImageUrl || panelImageContents,
     `${profile.id} deve declarar assets.panelImage existente ou assets.panelImageUrl.`,
   );
-  assert(
-    uiAssetUrl || assets.panelUiImageUrl || panelUiImageContents,
-    `${profile.id} deve declarar assets.panelUiImage existente ou assets.panelUiImageUrl.`,
-  );
+  if (profile.uiContract === "panel-board") {
+    assert(
+      uiAssetUrl || assets.panelUiImageUrl || panelUiImageContents,
+      `${profile.id} deve declarar assets.panelUiImage existente ou assets.panelUiImageUrl.`,
+    );
+  }
   const panelImageUrl = normalizeAssetReference(assetUrl || assets.panelImageUrl || fingerprintedAssetUrl(`${RAW_ASSET_BASE_URL}/${assetRef}/${profile.assetsDir}/${assets.panelImage}`, panelImageContents), "assetUrl");
-  const panelUiImageUrl = normalizeAssetReference(uiAssetUrl || assets.panelUiImageUrl || fingerprintedAssetUrl(`${RAW_ASSET_BASE_URL}/${assetRef}/${profile.assetsDir}/${assets.panelUiImage}`, panelUiImageContents), "uiAssetUrl");
+  const panelUiImageUrl = profile.uiContract === "panel-board"
+    ? normalizeAssetReference(uiAssetUrl || assets.panelUiImageUrl || fingerprintedAssetUrl(`${RAW_ASSET_BASE_URL}/${assetRef}/${profile.assetsDir}/${assets.panelUiImage}`, panelUiImageContents), "uiAssetUrl")
+    : null;
   const savedImageUrl = normalizeAssetReference(savedObjectAssetUrl || panelImageUrl, "savedObjectAssetUrl");
   const uiTokens = {
     "__CHARACTER_ID__": profile.id,
@@ -1030,8 +787,13 @@ async function buildRegisteredCharacter({
   };
   let uiSource = sourceFiles.ui;
   for (const [token, value] of Object.entries(uiTokens)) uiSource = uiSource.replaceAll(token, escapeXmlAttribute(value));
-  uiSource = replaceSinglePlaceholder(uiSource, PLACEHOLDERS.panelUiImageUrl, escapeXmlAttribute(panelUiImageUrl), PLACEHOLDERS.panelUiImageUrl);
+  if (profile.uiContract === "panel-board") {
+    uiSource = replaceSinglePlaceholder(uiSource, PLACEHOLDERS.panelUiImageUrl, escapeXmlAttribute(panelUiImageUrl), PLACEHOLDERS.panelUiImageUrl);
+  } else {
+    assert(!uiSource.includes(PLACEHOLDERS.panelUiImageUrl), `${profile.id} UI generic não deve depender da moldura panel-board.`);
+  }
   const ui = withFinalNewline(validateUi(uiSource, {
+    uiContract: profile.uiContract,
     uiRootId: profile.uiRootId,
     panelArtId: profile.panelArtId,
     geometry: profile.geometry,
@@ -1054,7 +816,7 @@ async function buildRegisteredCharacter({
     runtime = replaceSinglePlaceholder(runtime, PLACEHOLDERS.panelImageUrl, luaLongString(panelImageUrl), PLACEHOLDERS.panelImageUrl);
   }
   if (runtime.includes(PLACEHOLDERS.panelUiImageUrlLiteral)) {
-    runtime = replaceSinglePlaceholder(runtime, PLACEHOLDERS.panelUiImageUrlLiteral, luaLongString(panelUiImageUrl), PLACEHOLDERS.panelUiImageUrlLiteral);
+    runtime = replaceSinglePlaceholder(runtime, PLACEHOLDERS.panelUiImageUrlLiteral, luaLongString(panelUiImageUrl || ""), PLACEHOLDERS.panelUiImageUrlLiteral);
   }
   runtime = replaceOptionalPlaceholders(runtime, profile, files.manifest, files.runtime);
   runtime = withFinalNewline(runtime);
@@ -1101,7 +863,6 @@ export async function buildAllCharacters({ rootDir = PROJECT_ROOT, outDir = null
   const registry = await loadRegistry(absoluteRoot);
   const results = [];
   for (const profile of registry.characters.filter((candidate) => candidate.status === "active")) {
-    if (!profile.productionEnabled) continue;
     results.push(await buildRegisteredCharacter({ rootDir: absoluteRoot, outDir: outDir ? join(outDir, profile.id) : join(absoluteRoot, "dist", profile.id), characterId: profile.id, ...options }));
   }
   return results;
