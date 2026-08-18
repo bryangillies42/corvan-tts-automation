@@ -38,8 +38,21 @@ jobs:
             --tag "${RELEASE_TAG}" \
             --github-output "${GITHUB_OUTPUT}"
 
+      - name: Verify tagged commit belongs to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --no-tags
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" refs/remotes/origin/main; then
+            echo "A tag deve apontar para um commit já integrado ao branch main." >&2
+            exit 1
+          fi
+
       - name: Test
         run: npm test
+
+      - name: Build divergent fixture
+        run: npm run build:fixture
 
       - name: Discover previous stable version for the same character
         id: previous

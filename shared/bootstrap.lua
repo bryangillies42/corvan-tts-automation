@@ -1486,6 +1486,28 @@ local function downloadRuntime(serial, manifest, etag)
     end)
 end
 
+local function finishIfReleaseIsNotNewer(serial, candidateVersion, etag)
+    local comparison = compareSemver(candidateVersion, state.runtimeVersion)
+    if comparison == nil then
+        finishUpdate(serial, "não foi possível comparar as versões.", true)
+        return true
+    end
+    if comparison > 0 then
+        return false
+    end
+    if comparison == 0 then
+        state.releaseEtag = etag or state.releaseEtag
+    else
+        state.releaseEtag = nil
+    end
+    finishUpdate(serial,
+        comparison == 0
+            and "já está na versão mais recente."
+            or "versão instalada é mais recente que a release estável.",
+        false)
+    return true
+end
+
 local function downloadManifest(serial, manifestUrl, releaseTag, etag)
     setRefreshFeedback("Validando release...", true)
     webGet(manifestUrl, {Accept = "application/json"}, function(request)
@@ -1503,14 +1525,7 @@ local function downloadManifest(serial, manifestUrl, releaseTag, etag)
             finishUpdate(serial, reason .. "; versão atual preservada.", true)
             return
         end
-        local comparison = compareSemver(manifest.version, state.runtimeVersion)
-        if comparison == nil then
-            finishUpdate(serial, "não foi possível comparar as versões.", true)
-            return
-        end
-        if comparison <= 0 then
-            state.releaseEtag = etag or state.releaseEtag
-            finishUpdate(serial, comparison == 0 and "já está na versão mais recente." or "downgrade recusado.", comparison < 0)
+        if finishIfReleaseIsNotNewer(serial, manifest.version, etag) then
             return
         end
         downloadRuntime(serial, manifest, etag)
@@ -1537,9 +1552,14 @@ local function beginLatestReleaseLookup(serial)
             return
         end
         local release = safeDecode(request.text)
+        local availableVersion = type(release) == "table" and releaseVersion(release.tag_name) or nil
         if release == nil or release.draft == true or release.prerelease == true
-            or releaseVersion(release.tag_name) == nil then
+            or availableVersion == nil then
             finishUpdate(serial, "resposta de release inválida.", true)
+            return
+        end
+        local etag = responseEtag(request)
+        if finishIfReleaseIsNotNewer(serial, availableVersion, etag) then
             return
         end
         local manifestUrl = findManifestUrl(release)
@@ -1547,7 +1567,7 @@ local function beginLatestReleaseLookup(serial)
             finishUpdate(serial, "release sem " .. MANIFEST_ASSET_NAME .. ".", true)
             return
         end
-        downloadManifest(serial, manifestUrl, release.tag_name, responseEtag(request))
+        downloadManifest(serial, manifestUrl, release.tag_name, etag)
     end)
 end
 
@@ -1585,6 +1605,9 @@ local function beginNamespacedReleasePage(serial, page, bestRelease, bestVersion
         end
         if bestRelease == nil then
             finishUpdate(serial, "nenhuma release estável encontrada para " .. DISPLAY_NAME .. ".", true)
+            return
+        end
+        if finishIfReleaseIsNotNewer(serial, bestVersion, nil) then
             return
         end
         downloadManifest(serial, findManifestUrl(bestRelease), bestRelease.tag_name, nil)

@@ -30,7 +30,7 @@
       "aspectRatio": "2.22:1",
       "release": {
         "tagMode": "legacy",
-        "prerelease": true,
+        "prerelease": false,
         "globalLatest": true,
         "productionEnabled": true,
         "artifacts": {

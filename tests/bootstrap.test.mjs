@@ -144,6 +144,16 @@ test('pins updates to public GitHub release assets and validates the manifest/ru
   );
   assert.match(source, /manifest\.characterId ~= CHARACTER_ID/);
   assert.match(source, /manifest\.releaseTag ~= releaseTag/);
+  assert.match(source, /local function finishIfReleaseIsNotNewer\(/);
+  assert.match(source, /versão instalada é mais recente que a release estável/);
+  const latestLookup = source.slice(
+    source.indexOf('local function beginLatestReleaseLookup'),
+    source.indexOf('local function beginNamespacedReleasePage'),
+  );
+  assert.ok(
+    latestLookup.indexOf('finishIfReleaseIsNotNewer') < latestLookup.indexOf('findManifestUrl'),
+    'a versão da tag deve impedir downgrade antes de baixar ou validar manifesto legado',
+  );
   assert.match(source, /asset\.browser_download_url == TRUSTED_RUNTIME_PREFIX/);
   assert.match(source, /local MAX_RELEASE_PAGES = 10/);
   assert.match(source, /beginNamespacedReleasePage\(serial, page \+ 1/);

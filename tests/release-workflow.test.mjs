@@ -4,6 +4,20 @@ import test from 'node:test';
 
 const workflow = readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8');
 
+test('release aceita somente commits integrados ao main e valida a fixture compartilhada', () => {
+  const mainGateIndex = workflow.indexOf('- name: Verify tagged commit belongs to main');
+  const testIndex = workflow.indexOf('- name: Test');
+  const fixtureIndex = workflow.indexOf('- name: Build divergent fixture');
+  const stageIndex = workflow.indexOf('- name: Validate and stage release assets in a draft');
+
+  assert.ok(mainGateIndex >= 0, 'gate de ancestralidade no main ausente');
+  assert.ok(testIndex > mainGateIndex, 'testes devem rodar após validar o commit tagueado');
+  assert.ok(fixtureIndex > testIndex, 'fixture deve ser construída depois dos testes');
+  assert.ok(stageIndex > fixtureIndex, 'draft não pode existir antes do build da fixture');
+  assert.match(workflow, /git merge-base --is-ancestor "\$\{GITHUB_SHA\}" refs\/remotes\/origin\/main/);
+  assert.match(workflow, /npm run build:fixture/);
+});
+
 test('release verifica integralmente a draft antes de publicar', () => {
   const stageIndex = workflow.indexOf('- name: Validate and stage release assets in a draft');
   const verifyIndex = workflow.indexOf('- name: Verify draft assets before publication');

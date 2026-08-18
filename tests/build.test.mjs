@@ -39,7 +39,7 @@ test("a v0.2.1 preserva a política de canal e Latest definida no registry", asy
   assert.equal(packageJson.version, undefined);
   assert.equal(packageJson.release, undefined);
   assert.equal(corvan.version, "0.2.1");
-  assert.equal(typeof corvan.prerelease, "boolean");
+  assert.equal(corvan.prerelease, false);
   assert.equal(corvan.globalLatest, true);
   assert.equal(corvan.tagMode, "legacy");
   assert.match(workflow, /group: release-\$\{\{ github\.ref \}\}/);
@@ -233,6 +233,26 @@ test("validadores rejeitam character e UI estruturalmente inválidos", async () 
   assert.throws(
     () => validateUi(ui.replace('<Panel id="corvanConsole" width="1700"', '<Panel id="corvanConsole" width="1800"')),
     /preservar a geometria declarada/,
+  );
+  assert.throws(
+    () => validateUi(ui.replace(' active="false"', "")),
+    /active/,
+  );
+  assert.throws(
+    () => validateUi(ui.replace(' raycastTarget="false"', "")),
+    /raycastTarget/,
+  );
+  assert.throws(
+    () => validateUi(ui.replace('color="#07090CD8"', "")),
+    /color/,
+  );
+  assert.throws(
+    () => validateUi(ui.replace('color="#07090CD8"', 'color=""')),
+    /#RRGGBB/,
+  );
+  assert.throws(
+    () => validateUi(ui.replace('color="#07090CD8"', 'color="#07090C00"')),
+    /totalmente transparente/,
   );
 
   const genericUi = '<Panel id="customRoot"><VerticalLayout><Text id="customValue" /></VerticalLayout></Panel>';
@@ -550,6 +570,9 @@ test("Corvan e fixture divergente geram produtos isolados sem colisão", async (
   assert.match(arcane.files["arcane-test-runtime.lua"], /CharacterRuntimeCore = \{\}/);
   assert.match(arcane.files["arcane-test-runtime.lua"], /ARCANE_TEST_RUNTIME/);
   assert.doesNotMatch(arcane.files["arcane-test-runtime.lua"], /CorvanRules/);
+  assert.match(arcane.savedObject.ObjectStates[0].XmlUI, /<Image id="arcaneTestArt"[^>]*active="false"[^>]*raycastTarget="false"/s);
+  assert.match(arcane.savedObject.ObjectStates[0].XmlUI, /<Panel id="arcaneTestConsole"[^>]*color="#100B20F2"/s);
+  assert.match(arcane.savedObject.ObjectStates[0].XmlUI, /<VerticalLayout\b/);
   assert.equal(
     JSON.parse(arcane.savedObject.ObjectStates[0].GMNotes).characterId,
     "arcane-test",

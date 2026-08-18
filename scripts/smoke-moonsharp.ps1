@@ -1827,6 +1827,88 @@ if ($legacyUpdateSuccess -ne $expectedUpdateSuccess) {
     throw "Bootstrap congelado v0.2.0 não instalou a transação v0.2.1: '$legacyUpdateSuccess'."
 }
 
+$legacyLatestShortCircuitHarness = @'
+local manifestDownloads = 0
+local downloadedTag = nil
+local finishMessage = nil
+local finishError = nil
+
+local release = {
+    tag_name = 'v0.2.0', draft = false, prerelease = false,
+    assets = {{
+        name = MANIFEST_ASSET_NAME,
+        browser_download_url = TRUSTED_RUNTIME_PREFIX .. 'v0.2.0/' .. MANIFEST_ASSET_NAME
+    }}
+}
+
+JSON = {
+    decode = function(text)
+        if text == 'LATEST_V020' then return release end
+        return nil
+    end,
+    encode = function(_) return '{}' end
+}
+Wait = {time = function(callback, _) callback() end}
+WebRequest = {
+    custom = function(url, _, _, _, _, complete)
+        assert(url == RELEASE_LATEST_API_URL)
+        complete({
+            is_error = false, response_code = 200, text = 'LATEST_V020',
+            getResponseHeader = function(name)
+                if name == 'ETag' then return 'legacy-v020-etag' end
+                return nil
+            end
+        })
+        return {dispose = function() end}
+    end
+}
+
+downloadManifest = function(_, _, releaseTag, _)
+    manifestDownloads = manifestDownloads + 1
+    downloadedTag = releaseTag
+end
+finishUpdate = function(_, message, isError)
+    finishMessage = message
+    finishError = isError
+end
+
+local function run(installedVersion, serial, storedEtag)
+    state = defaultState()
+    state.runtimeVersion = installedVersion
+    state.releaseEtag = storedEtag
+    update.active = true
+    update.serial = serial
+    finishMessage = nil
+    finishError = nil
+    beginLatestReleaseLookup(serial)
+    return finishMessage, finishError
+end
+
+local newerMessage, newerError = run('0.2.1', 71, 'stale-legacy-etag')
+assert(manifestDownloads == 0)
+assert(newerMessage == 'versão instalada é mais recente que a release estável.')
+assert(newerError == false and state.releaseEtag == nil)
+
+local equalMessage, equalError = run('0.2.0', 72)
+assert(manifestDownloads == 0)
+assert(equalMessage == 'já está na versão mais recente.')
+assert(equalError == false and state.releaseEtag == 'legacy-v020-etag')
+
+local oldMessage, oldError = run('0.1.9', 73)
+assert(oldMessage == nil and oldError == nil)
+assert(manifestDownloads == 1 and downloadedTag == 'v0.2.0')
+
+return manifestDownloads, downloadedTag, newerError, equalError
+'@
+
+$legacyLatestShortCircuitRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
+$legacyLatestShortCircuitResult = $legacyLatestShortCircuitRunner.DoString(
+    $bootstrap + "`n" + $legacyLatestShortCircuitHarness
+).ToString()
+if ($legacyLatestShortCircuitResult -ne '1, "v0.2.0", false, false') {
+    throw "Smoke de Latest legado retornou '$legacyLatestShortCircuitResult'."
+}
+
 $releaseDiscoveryHarness = @'
 local selectedTag = nil
 local failureReason = nil

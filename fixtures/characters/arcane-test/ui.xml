@@ -1,13 +1,48 @@
 <Defaults>
-  <Text color="#FFFFFF" fontSize="18" />
+  <Text color="#EEE9FF" fontSize="22" fontStyle="Bold" />
+  <Button color="#34255AEF" textColor="#F7F2FF" fontSize="20" fontStyle="Bold"
+          colors="#34255AEF|#513B83FF|#241A40FF|#1A142CCC"
+          outline="#8D6ED1" outlineSize="2 2" />
 </Defaults>
-<Image id="arcaneTestArt" image="__PANEL_UI_IMAGE_URL_XML__" width="1200" height="800" position="0 0 -30" rotation="0 0 180" scale="0.25 0.25 1" />
-<Panel id="arcaneTestConsole" width="1100" height="700" position="0 0 -30" rotation="0 0 180" scale="0.25 0.25 1">
-  <Text id="arcaneTitle" text="Arcane Test" />
-  <Text id="arcaneFocus" text="FOCO 12/12" />
-  <Text id="arcaneCasts" text="CONJURAÇÕES 0" />
-  <Button id="cast" onClick="dispatch" text="CONJURAR" />
-  <Button id="reset_fixture" onClick="dispatch" text="REINICIAR" />
-  <Button id="refresh" onClick="refresh" text="REFRESH" />
-  <Text id="refreshStatus" text="" />
+<Image id="arcaneTestArt" active="false" image="__PANEL_UI_IMAGE_URL_XML__"
+       width="1200" height="800" rectAlignment="MiddleCenter"
+       position="0 0 -30" rotation="0 0 180" scale="0.25 0.25 1"
+       preserveAspect="false" raycastTarget="false" />
+<Panel id="arcaneTestConsole" width="1100" height="700" rectAlignment="MiddleCenter"
+       position="0 0 -30" rotation="0 0 180" scale="0.25 0.25 1"
+       color="#100B20F2" outline="#8D6ED1" outlineSize="4 4" raycastTarget="true">
+  <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="36 30" offsetMax="-36 -30"
+                  spacing="18" childAlignment="UpperCenter"
+                  childForceExpandWidth="true" childForceExpandHeight="false">
+    <Text id="arcaneTitle" text="ARCANE TEST" color="#C7ADFF" fontSize="42"
+          alignment="MiddleCenter" preferredHeight="72" />
+    <Text text="FIXTURE TÉCNICA MULTI-PERSONAGEM" color="#8D7DAF" fontSize="18"
+          fontStyle="Normal" alignment="MiddleCenter" preferredHeight="42" />
+
+    <Panel color="#1B1233F2" outline="#5D478D" outlineSize="2 2"
+           preferredHeight="210" padding="22 22 18 18">
+      <VerticalLayout spacing="12" childAlignment="MiddleCenter"
+                      childForceExpandWidth="true" childForceExpandHeight="false">
+        <Text id="arcaneFocus" text="FOCO 12/12" color="#63DDE5" fontSize="34"
+              alignment="MiddleCenter" preferredHeight="70" />
+        <Text id="arcaneCasts" text="CONJURAÇÕES 0" color="#E0C7FF" fontSize="28"
+              alignment="MiddleCenter" preferredHeight="62" />
+      </VerticalLayout>
+    </Panel>
+
+    <HorizontalLayout preferredHeight="88" spacing="18" childAlignment="MiddleCenter"
+                      childForceExpandWidth="true" childForceExpandHeight="true">
+      <Button id="cast" onClick="dispatch" text="CONJURAR" />
+      <Button id="reset_fixture" onClick="dispatch" text="REINICIAR" />
+    </HorizontalLayout>
+
+    <HorizontalLayout preferredHeight="76" spacing="18" childAlignment="MiddleCenter"
+                      childForceExpandWidth="true" childForceExpandHeight="true">
+      <Button id="refresh" onClick="refresh" text="REFRESH" color="#193E46EF"
+              colors="#193E46EF|#245B66FF|#102A30FF|#102A30AA" outline="#54BFC8" />
+    </HorizontalLayout>
+    <Text id="refreshStatus" text="ATUALIZAÇÃO: fixture local sem release estável"
+          color="#9F94B7" fontSize="17" fontStyle="Normal"
+          alignment="MiddleCenter" preferredHeight="46" />
+  </VerticalLayout>
 </Panel>

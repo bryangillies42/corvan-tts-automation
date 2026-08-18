@@ -337,13 +337,20 @@ export function validateUi(input, contract = {}) {
     visualRoots.length === 2 && visualRoots[0] === "Image" && visualRoots[1] === "Panel",
     "src/ui.xml deve possuir a Image da moldura antes do Panel visual raiz.",
   );
-  const rootGeometry = (id) => {
+  const rootTag = (id) => {
     const tag = xml.match(new RegExp(`<(?:Image|Panel)\\b[^>]*\\bid=["']${id}["'][^>]*>`, "s"));
     assert(tag !== null, `src/ui.xml não declara a raiz ${id}.`);
+    return tag[0];
+  };
+  const rootAttribute = (tag, id, name) => {
+    const match = tag.match(new RegExp(`\\b${name}\\s*=\\s*(["'])(.*?)\\1`, "s"));
+    assert(match !== null, `A raiz ${id} não declara ${name}.`);
+    return match[2];
+  };
+  const rootGeometry = (id) => {
+    const tag = rootTag(id);
     const attribute = (name) => {
-      const match = tag[0].match(new RegExp(`\\b${name}\\s*=\\s*(["'])(.*?)\\1`, "s"));
-      assert(match !== null, `A raiz ${id} não declara ${name}.`);
-      return match[2];
+      return rootAttribute(tag, id, name);
     };
     return {
       transform: ["position", "rotation", "scale"].map(attribute),
@@ -352,6 +359,25 @@ export function validateUi(input, contract = {}) {
   };
   const panelBoardGeometry = rootGeometry(panelArtId);
   const consoleGeometry = rootGeometry(uiRootId);
+  const panelBoardTag = rootTag(panelArtId);
+  const consoleTag = rootTag(uiRootId);
+  assert(
+    rootAttribute(panelBoardTag, panelArtId, "active") === "false",
+    `A Image ${panelArtId} deve iniciar com active=false para evitar o fallback branco do TTS.`,
+  );
+  assert(
+    rootAttribute(panelBoardTag, panelArtId, "raycastTarget") === "false",
+    `A Image ${panelArtId} deve declarar raycastTarget=false.`,
+  );
+  const consoleColor = rootAttribute(consoleTag, uiRootId, "color");
+  assert(
+    /^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/i.test(consoleColor),
+    `A raiz ${uiRootId} deve declarar color em hexadecimal #RRGGBB ou #RRGGBBAA.`,
+  );
+  assert(
+    !/^#[0-9a-f]{6}00$/i.test(consoleColor),
+    `A raiz ${uiRootId} não pode ser totalmente transparente.`,
+  );
   assert(
     panelBoardGeometry.transform.every(
       (value, index) => value === consoleGeometry.transform[index],

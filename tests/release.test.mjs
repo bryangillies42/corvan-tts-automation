@@ -88,6 +88,9 @@ test("recusa perfil scaffold, produção desabilitada, versão divergente e tag 
 
 test("registry real bloqueia tecnicamente qualquer release do Spentar", async () => {
   const profiles = await loadRegistry();
+  const corvan = resolveRelease({tag: "v0.2.1", profiles});
+  assert.equal(corvan.prerelease, false);
+  assert.equal(corvan.latest, true);
   assert.throws(
     () => resolveRelease({tag: "spentar-v0.0.1", profiles}),
     /scaffold|produção/,
