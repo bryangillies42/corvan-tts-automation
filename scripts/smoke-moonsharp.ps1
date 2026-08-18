@@ -87,6 +87,11 @@ $manifest = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'dist\corvan\m
 $fixtureRuntime = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'dist\arcane-test\arcane-test-runtime.lua')
 $fixtureSavedObject = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'dist\arcane-test\Arcane_Test_Console.json') | ConvertFrom-Json
 $fixtureBootstrap = $fixtureSavedObject.ObjectStates[0].LuaScript
+$spentarRuntime = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'dist\spentar\spentar-runtime.lua')
+$spentarSavedObject = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'dist\spentar\Spentar_Console.json') | ConvertFrom-Json
+$spentarBootstrap = $spentarSavedObject.ObjectStates[0].LuaScript
+$spentarCharacterData = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'characters\spentar\character.json') | ConvertFrom-Json
+$spentarConfigLiteral = ConvertTo-LuaLiteral $spentarCharacterData
 $bootstrap = $savedObject.ObjectStates[0].LuaScript
 
 $fixturePanelAsset = Join-Path $projectRoot 'fixtures\characters\arcane-test\assets\panel-board.png'
@@ -111,6 +116,8 @@ $null = $compiler.LoadString($runtime)
 $null = $compiler.LoadString($bootstrap)
 $null = $compiler.LoadString($fixtureRuntime)
 $null = $compiler.LoadString($fixtureBootstrap)
+$null = $compiler.LoadString($spentarRuntime)
+$null = $compiler.LoadString($spentarBootstrap)
 $null = $compiler.LoadString($legacyBootstrap)
 
 $fixturePrelude = @'
@@ -156,24 +163,141 @@ if ($fixtureResult -ne '11, 1, 8') {
     throw "Smoke da fixture retornou '$fixtureResult'; esperado '11, 1, 8'."
 }
 
-# Executa os dois adaptadores em ambientes Lua isolados, como o TTS faz com
+# Exercita as regras puras do Spentar e o ciclo save/load usando o runtime
+# compilado real. O decoder distingue a configuração embutida do token salvo.
+$spentarRulesPrelude = @"
+local characterConfig = $spentarConfigLiteral
+local savedEnvelope = nil
+JSON = {
+    decode = function(text)
+        if text == 'SPENTAR_SAVED_STATE' then return savedEnvelope end
+        return characterConfig
+    end,
+    encode = function(value)
+        savedEnvelope = value
+        return 'SPENTAR_SAVED_STATE'
+    end
+}
+"@
+$spentarRulesAssertions = @'
+
+local currentState = {
+    resources = {hp = 20, mp = 48, temporaryHp = 0, temporaryMp = 0},
+    equipment = {staffTwoHanded = true},
+    scene = {profanar = true, connectionMode = 'off', connectionCircle = 1,
+        connectionPaidHp = 0, necropotencyGained = 0},
+    souls = {stored = 6},
+    summons = {undeadCount = 6, ballisticSpirits = 1,
+        corpsePartner = 'none', commandUsed = false},
+    casting = {spellId = 'inflict_wounds', upgrades = {}, upgradeLevel = 0,
+        releasedSouls = 6, targets = 1, sequence = 0, phase = 'configure',
+        failed = 0, defeated = 0, lastConfigurations = {}},
+    effects = {}, preferences = {automaticResourceSpending = true}, undo = {}
+}
+
+local undead = SpentarRules.undeadDamagePlan(characterConfig, currentState, 6)
+assert(SpentarRules.totalDamage(undead, {}) == 54, 'Spentar: 6d6+18 sob Profanar deve ser 54')
+
+currentState.casting.releasedSouls = 0
+local wounds = SpentarRules.damagePlan(characterConfig, currentState, 'inflict_wounds')
+assert(SpentarRules.totalDamage(wounds, {}) == 33, 'Spentar: 3d8+9 sob Profanar deve ser 33')
+
+currentState.casting.releasedSouls = 6
+local woundsWithSouls = SpentarRules.damagePlan(characterConfig, currentState, 'inflict_wounds')
+assert(SpentarRules.totalDamage(woundsWithSouls, {}) == 105,
+    'Spentar: Infligir Ferimentos com seis almas sob Profanar deve ser 105')
+assert(SpentarRules.totalDamage({bonus=0, groups={{id='souls', count=12, sides=6, maximized=true}}}, {}) == 72,
+    'Spentar: 12d6 sob Profanar deve ser 72')
+
+assert(SpentarRules.calculateSpellDifficulty(characterConfig, currentState, 'arcane_armor') == 25)
+currentState.equipment.staffTwoHanded = false
+assert(SpentarRules.calculateSpellDifficulty(characterConfig, currentState, 'arcane_armor') == 24)
+assert(SpentarRules.calculateSpellDifficulty(characterConfig, currentState, 'fear') == 22)
+
+assert(importState({
+    characterId = 'spentar', runtimeVersion = '0.1.0',
+    core = {page = 'necromancy', lastResult = 'PERSISTIDO'},
+    character = currentState
+}), 'Spentar: estado próprio recusado')
+local beforeSave = exportState()
+assert(beforeSave.characterId == 'spentar' and beforeSave.core.page == 'necromancy'
+    and beforeSave.character.souls.stored == 6)
+local saved = onSave()
+assert(saved == 'SPENTAR_SAVED_STATE' and savedEnvelope.characterId == 'spentar')
+onLoad(saved)
+local afterLoad = exportState()
+assert(afterLoad.characterId == 'spentar' and afterLoad.core.page == 'necromancy'
+    and afterLoad.character.souls.stored == 6)
+
+assert(importState({
+    characterId = 'spentar', runtimeVersion = '0.1.0', core = {page = 'settings'},
+    character = {
+        resources = {hp = 20, mp = 40, temporaryHp = 0, temporaryMp = 0},
+        souls = {stored = 1},
+        casting = {
+            spellId = 'inflict_wounds', phase = 'rolling', releasedSouls = 5,
+            transaction = {id = 'spentar-interrupted', snapshot = {
+                core = {page = 'casting', lastResult = 'ANTES DA ROLAGEM'},
+                character = {
+                    resources = {hp = 20, mp = 48, temporaryHp = 0, temporaryMp = 0},
+                    souls = {stored = 6},
+                    casting = {spellId = 'inflict_wounds', phase = 'configure',
+                        releasedSouls = 5, targets = 1, sequence = 3}
+                }
+            }}
+        }
+    }
+}), 'Spentar recusou estado com transação interrompida recuperável')
+local recovered = exportState()
+assert(recovered.character.resources.mp == 48 and recovered.character.souls.stored == 6
+    and recovered.character.casting.phase == 'configure'
+    and recovered.character.casting.transaction == nil
+    and recovered.core.page == 'casting',
+    'Spentar não restaurou snapshot de transação interrompida')
+assert(not importState({characterId = 'corvan', character = {}, core = {}}),
+    'Spentar aceitou estado do Corvan')
+assert(not importState({characterId = 'arcane-test', character = {}, core = {}}),
+    'Spentar aceitou estado da fixture')
+
+return SpentarRules.totalDamage(undead, {}), SpentarRules.totalDamage(wounds, {}),
+    SpentarRules.totalDamage(woundsWithSouls, {}), afterLoad.character.souls.stored
+'@
+$spentarRulesRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
+$spentarRulesResult = $spentarRulesRunner.DoString(
+    $spentarRulesPrelude + "`n" + $spentarRuntime + "`n" + $spentarRulesAssertions
+).ToString()
+if ($spentarRulesResult -ne '54, 33, 105, 6') {
+    throw "Smoke de regras/estado do Spentar retornou '$spentarRulesResult'; esperado '54, 33, 105, 6'."
+}
+
+# Executa os três adaptadores em ambientes Lua isolados, como o TTS faz com
 # objetos diferentes, mas sobre o mesmo mundo fake de painéis, helpers e dados.
 # Isso torna observável qualquer travessia acidental de GUID ou characterId.
 $corvanRuntimeLiteral = ConvertTo-LuaLongString $runtime
 $fixtureRuntimeLiteral = ConvertTo-LuaLongString $fixtureRuntime
+$spentarRuntimeLiteral = ConvertTo-LuaLongString $spentarRuntime
 $sharedWorldHarness = @"
 local corvanSource = $corvanRuntimeLiteral
 local fixtureSource = $fixtureRuntimeLiteral
+local spentarSource = $spentarRuntimeLiteral
 local corvanConfig = $characterConfigLiteral
 local fixtureConfig = {
     id = 'arcane-test', version = '0.1.0', name = 'Arcane Test', shortName = 'Arcane',
     resources = {focus = {max = 12}}, actions = {cast = {formula = '1d6+2'}}
 }
+local spentarConfig = $spentarConfigLiteral
 
-local world = {crossCalls = 0, panels = {}, dice = {}}
+local world = {crossCalls = 0, panels = {}, dice = {}, json = {}, jsonSerial = 0, nextDie = 0}
+
+local function jsonEncode(value)
+    world.jsonSerial = world.jsonSerial + 1
+    local token = 'WORLD_JSON:' .. tostring(world.jsonSerial)
+    world.json[token] = value
+    return token
+end
 
 local function panel(guid, characterId)
-    local value = {guid = guid, characterId = characterId, calls = 0, cache = nil}
+    local value = {guid = guid, characterId = characterId, calls = 0, cache = nil, ui = nil}
     value.call = function(name, payload)
         value.calls = value.calls + 1
         if type(payload) == 'table' and payload.characterId ~= nil
@@ -182,6 +306,7 @@ local function panel(guid, characterId)
             return false
         end
         if name == 'cacheRuntimeState' then value.cache = payload.state end
+        if name == 'applyRuntimeUi' then value.ui = payload.xml end
         return true
     end
     value.positionToWorld = function(position) return position end
@@ -192,11 +317,18 @@ end
 
 local corvanPanel = panel('corvan-panel', 'corvan')
 local arcanePanel = panel('arcane-panel', 'arcane-test')
+local spentarPanel = panel('spentar-panel', 'spentar')
 
-local function die(guid, metadata)
-    local value = {guid = guid, metadata = metadata, destroyed = false}
+local function die(guid, metadata, rotationValue)
+    local value = {guid = guid, metadata = metadata, notes = nil, destroyed = false,
+        resting = true, rotationValue = rotationValue or 4}
     value.getGUID = function() return guid end
-    value.getGMNotes = function() return 'DIE:' .. guid end
+    value.getGMNotes = function() return value.notes or ('DIE:' .. guid) end
+    value.setGMNotes = function(notes) value.notes = notes end
+    value.setName = function(_) return true end
+    value.setVelocity = function(_) value.resting = false end
+    value.setAngularVelocity = function(_) return true end
+    value.getRotationValue = function() return value.rotationValue end
     world.dice[guid] = value
     return value
 end
@@ -209,6 +341,10 @@ local arcaneDie = die('arcane-die', {
     project = 'corvan-tts-automation', characterId = 'arcane-test',
     kind = 'owned-die', ownerPanelGuid = 'arcane-panel'
 })
+local spentarForeignDie = die('spentar-foreign-die', {
+    project = 'corvan-tts-automation', characterId = 'spentar',
+    kind = 'owned-die', ownerPanelGuid = 'another-spentar-panel'
+})
 
 local function runtimeEnvironment(source, label, helperGuid, config)
     local env = {}
@@ -220,9 +356,10 @@ local function runtimeEnvironment(source, label, helperGuid, config)
             if dieGuid ~= nil and world.dice[dieGuid] ~= nil then
                 return world.dice[dieGuid].metadata
             end
+            if world.json[text] ~= nil then return world.json[text] end
             return config
         end,
-        encode = function(_) return '{}' end
+        encode = jsonEncode
     }
     env.self = {
         getGUID = function() return helperGuid end,
@@ -233,15 +370,35 @@ local function runtimeEnvironment(source, label, helperGuid, config)
         return world.panels[guid] or world.dice[guid]
     end
     env.getAllObjects = function()
-        return {corvanDie, arcaneDie}
+        local values = {}
+        for _, object in pairs(world.dice) do
+            if not object.destroyed then table.insert(values, object) end
+        end
+        return values
     end
     env.destroyObject = function(object)
         object.destroyed = true
     end
     env.Wait = {
         frames = function(callback, _) callback() end,
-        time = function(callback, _) callback() end
+        time = function(callback, _) callback() end,
+        condition = function(callback, condition, _, timeout)
+            for cycle = 1, 4 do
+                for _, object in pairs(world.dice) do
+                    if object.spawned and not object.destroyed then object.resting = cycle > 1 end
+                end
+                if condition() then callback() return end
+            end
+            if timeout then timeout() end
+        end
     }
+    env.spawnObject = function(params)
+        world.nextDie = world.nextDie + 1
+        local object = die('spentar-die-' .. tostring(world.nextDie), nil, 4)
+        object.spawned = true
+        object.resting = true
+        params.callback_function(object)
+    end
     env.Player = {getPlayers = function() return {} end}
     env.printToAll = function(_, _) return true end
     env.printToColor = function(_, _, _) return true end
@@ -255,6 +412,7 @@ end
 
 local corvan = runtimeEnvironment(corvanSource, 'corvan-runtime', 'corvan-helper', corvanConfig)
 local arcane = runtimeEnvironment(fixtureSource, 'arcane-runtime', 'arcane-helper', fixtureConfig)
+local spentar = runtimeEnvironment(spentarSource, 'spentar-runtime', 'spentar-helper', spentarConfig)
 
 assert(corvan.registerParent({
     characterId = 'corvan', parentGuid = 'corvan-panel',
@@ -270,16 +428,27 @@ assert(corvan.registerParent({
 }), 'shared world: Corvan registerParent failed')
 assert(arcane.registerParent({characterId = 'arcane-test', parentGuid = 'arcane-panel'}),
     'shared world: Arcane registerParent failed')
+assert(spentar.registerParent({characterId = 'spentar', parentGuid = 'spentar-panel'}),
+    'shared world: Spentar registerParent failed')
 
 local corvanBefore = corvan.exportState()
 local arcaneBefore = arcane.exportState()
+local spentarBefore = spentar.exportState()
 assert(corvanBefore.characterId == 'corvan' and corvanBefore.helperGuid == 'corvan-helper',
     'shared world: Corvan identity/helper mismatch')
 assert(arcaneBefore.characterId == 'arcane-test'
     and arcane.healthCheck({}).parentGuid == 'arcane-panel',
     'shared world: Arcane identity/helper mismatch')
+assert(spentarBefore.characterId == 'spentar'
+    and spentar.healthCheck({}).parentGuid == 'spentar-panel',
+    'shared world: Spentar identity/helper mismatch')
 assert(corvanPanel.cache.characterId == 'corvan', 'shared world: Corvan cache mismatch')
 assert(arcanePanel.cache.characterId == 'arcane-test', 'shared world: Arcane cache mismatch')
+assert(spentarPanel.cache.characterId == 'spentar', 'shared world: Spentar cache mismatch')
+assert(type(corvanPanel.ui) == 'string' and type(arcanePanel.ui) == 'string'
+    and type(spentarPanel.ui) == 'string', 'shared world: runtime UI missing')
+assert(corvanPanel.ui ~= arcanePanel.ui and corvanPanel.ui ~= spentarPanel.ui
+    and arcanePanel.ui ~= spentarPanel.ui, 'shared world: runtime UI crossed characters')
 
 assert(not corvan.handleUiEvent({
     characterId = 'arcane-test', parentGuid = 'corvan-panel', id = 'clear_dice'
@@ -287,8 +456,13 @@ assert(not corvan.handleUiEvent({
 assert(not arcane.handleUiEvent({
     characterId = 'corvan', parentGuid = 'arcane-panel', id = 'cast'
 }), 'shared world: Arcane accepted Corvan event')
+assert(not spentar.handleUiEvent({
+    characterId = 'arcane-test', parentGuid = 'spentar-panel', id = 'nav_necromancy'
+}), 'shared world: Spentar accepted Arcane event')
 assert(not corvan.importState(arcaneBefore), 'shared world: Corvan accepted Arcane state')
 assert(not arcane.importState(corvanBefore), 'shared world: Arcane accepted Corvan state')
+assert(not spentar.importState(corvanBefore), 'shared world: Spentar accepted Corvan state')
+assert(not spentar.importState(arcaneBefore), 'shared world: Spentar accepted Arcane state')
 
 assert(arcane.handleUiEvent({
     characterId = 'arcane-test', parentGuid = 'arcane-panel', id = 'cast', playerColor = 'White'
@@ -297,37 +471,66 @@ local arcaneAfterCast = arcane.exportState()
 assert(arcaneAfterCast.character.focus == 11 and arcaneAfterCast.character.casts == 1,
     'shared world: Arcane state did not mutate locally')
 
+assert(spentar.handleUiEvent({
+    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'quick_inflict_wounds',
+    playerColor = 'White', eventId = 'spentar-roll-1'
+}), 'shared world: Spentar physical roll failed')
+local spentarAfterRoll = spentar.exportState()
+assert(spentarAfterRoll.character.resources.mp == 47
+    and spentarAfterRoll.character.casting.phase == 'resolution',
+    'shared world: Spentar roll state did not complete locally')
+assert(#spentarAfterRoll.core.ownedDice == 3, 'shared world: Spentar did not own three d8')
+
 assert(corvan.handleUiEvent({
     characterId = 'corvan', parentGuid = 'corvan-panel', id = 'clear_dice', playerColor = 'White'
 }), 'shared world: Corvan clear failed')
 assert(corvanDie.destroyed == true, 'shared world: Corvan die survived own clear')
 assert(arcaneDie.destroyed == false, 'shared world: Arcane die was destroyed by Corvan')
+for _, guid in ipairs(spentarAfterRoll.core.ownedDice) do
+    assert(world.dice[guid] and not world.dice[guid].destroyed,
+        'shared world: Corvan destroyed Spentar physical die')
+end
 local arcaneAfterCorvanClear = arcane.exportState()
 assert(arcaneAfterCorvanClear.character.focus == 11 and arcaneAfterCorvanClear.character.casts == 1,
     'shared world: Corvan clear changed Arcane state')
 assert(arcanePanel.cache.characterId == 'arcane-test', 'shared world: Arcane cache was replaced')
+
+assert(spentar.handleUiEvent({
+    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'clear_dice',
+    playerColor = 'White', eventId = 'spentar-clear-1'
+}), 'shared world: Spentar clear failed')
+for _, guid in ipairs(spentarAfterRoll.core.ownedDice) do
+    assert(world.dice[guid].destroyed == true, 'shared world: Spentar die survived own clear')
+end
+assert(arcaneDie.destroyed == false, 'shared world: Spentar destroyed Arcane die')
+assert(spentarForeignDie.destroyed == false, 'shared world: Spentar destroyed die from another panel')
+assert(corvanPanel.cache.characterId == 'corvan' and arcanePanel.cache.characterId == 'arcane-test'
+    and spentarPanel.cache.characterId == 'spentar', 'shared world: cache crossed characters')
 assert(world.crossCalls == 0, 'shared world: parent received cross-character callback')
 
-return corvanPanel.cache.characterId, arcanePanel.cache.characterId,
+return corvanPanel.cache.characterId, arcanePanel.cache.characterId, spentarPanel.cache.characterId,
     corvanDie.destroyed, arcaneDie.destroyed,
-    arcaneAfterCorvanClear.character.focus, world.crossCalls
+    spentarForeignDie.destroyed, arcaneAfterCorvanClear.character.focus,
+    spentarAfterRoll.character.resources.mp, world.crossCalls
 "@
 
 $sharedWorldRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $sharedWorldResult = $sharedWorldRunner.DoString($sharedWorldHarness).ToString()
-$expectedSharedWorld = '"corvan", "arcane-test", true, false, 11, 0'
+$expectedSharedWorld = '"corvan", "arcane-test", "spentar", true, false, false, 11, 47, 0'
 if ($sharedWorldResult -ne $expectedSharedWorld) {
     throw "Smoke multi-personagem compartilhado retornou '$sharedWorldResult'; esperado '$expectedSharedWorld'."
 }
 
-# O segundo mundo compartilhado executa os dois bootstraps completos. O Arcane
-# enxerga o helper Corvan já existente em getAllObjects e precisa ignorá-lo,
-# criando e mantendo seu próprio helper com GM Notes e binding independentes.
+# O segundo mundo compartilhado executa os três bootstraps completos. Cada
+# painel enxerga os helpers anteriores e precisa manter identidade, GM Notes e
+# binding independentes.
 $corvanBootstrapLiteral = ConvertTo-LuaLongString $bootstrap
 $fixtureBootstrapLiteral = ConvertTo-LuaLongString $fixtureBootstrap
+$spentarBootstrapLiteral = ConvertTo-LuaLongString $spentarBootstrap
 $sharedBootstrapHarness = @"
 local corvanBootstrapSource = $corvanBootstrapLiteral
 local arcaneBootstrapSource = $fixtureBootstrapLiteral
+local spentarBootstrapSource = $spentarBootstrapLiteral
 local world = {helpers = {}, json = {}, jsonSerial = 0, crossBindings = 0}
 
 local function jsonEncode(value)
@@ -441,6 +644,8 @@ local corvan = bootstrapEnvironment(
     corvanBootstrapSource, 'corvan-bootstrap', 'corvan', 'corvan-panel', '0.2.1', 'CORVAN_RUNTIME')
 local arcane = bootstrapEnvironment(
     arcaneBootstrapSource, 'arcane-bootstrap', 'arcane-test', 'arcane-panel', '0.1.0', 'ARCANE_TEST_RUNTIME')
+local spentar = bootstrapEnvironment(
+    spentarBootstrapSource, 'spentar-bootstrap', 'spentar', 'spentar-panel', '0.1.0', 'SPENTAR_RUNTIME')
 
 corvan.onLoad('')
 assert(#world.helpers == 1, 'shared bootstrap: Corvan did not create exactly one helper')
@@ -448,34 +653,45 @@ local corvanHelper = world.helpers[1]
 arcane.onLoad('')
 assert(#world.helpers == 2, 'shared bootstrap: Arcane adopted Corvan helper or spawned more than one')
 local arcaneHelper = world.helpers[2]
+spentar.onLoad('')
+assert(#world.helpers == 3, 'shared bootstrap: Spentar adopted another helper or spawned more than one')
+local spentarHelper = world.helpers[3]
 
 local corvanInfo = corvan.getBootstrapInfo()
 local arcaneInfo = arcane.getBootstrapInfo()
+local spentarInfo = spentar.getBootstrapInfo()
 assert(corvanInfo.characterId == 'corvan' and corvanInfo.helperGuid == corvanHelper.getGUID(),
     'shared bootstrap: Corvan helper binding mismatch')
 assert(arcaneInfo.characterId == 'arcane-test' and arcaneInfo.helperGuid == arcaneHelper.getGUID(),
     'shared bootstrap: Arcane helper binding mismatch')
+assert(spentarInfo.characterId == 'spentar' and spentarInfo.helperGuid == spentarHelper.getGUID(),
+    'shared bootstrap: Spentar helper binding mismatch')
 assert(corvanHelper.boundCharacterId == 'corvan' and corvanHelper.boundParentGuid == 'corvan-panel')
 assert(arcaneHelper.boundCharacterId == 'arcane-test' and arcaneHelper.boundParentGuid == 'arcane-panel')
+assert(spentarHelper.boundCharacterId == 'spentar' and spentarHelper.boundParentGuid == 'spentar-panel')
 
 local corvanNotes = jsonDecode(corvanHelper.getGMNotes())
 local arcaneNotes = jsonDecode(arcaneHelper.getGMNotes())
+local spentarNotes = jsonDecode(spentarHelper.getGMNotes())
 assert(corvanNotes.characterId == 'corvan' and corvanNotes.parentGuid == 'corvan-panel')
 assert(arcaneNotes.characterId == 'arcane-test' and arcaneNotes.parentGuid == 'arcane-panel')
+assert(spentarNotes.characterId == 'spentar' and spentarNotes.parentGuid == 'spentar-panel')
 assert(world.crossBindings == 0, 'shared bootstrap: cross-character registerParent occurred')
 
 corvan.onDestroy()
 assert(corvanHelper.destroyed == true, 'shared bootstrap: Corvan helper survived panel destruction')
 assert(arcaneHelper.destroyed == false, 'shared bootstrap: Corvan destroyed Arcane helper')
+assert(spentarHelper.destroyed == false, 'shared bootstrap: Corvan destroyed Spentar helper')
 assert(arcane.getBootstrapInfo().helperGuid == arcaneHelper.getGUID())
+assert(spentar.getBootstrapInfo().helperGuid == spentarHelper.getGUID())
 
-return corvanInfo.characterId, arcaneInfo.characterId,
-    corvanHelper.destroyed, arcaneHelper.destroyed, world.crossBindings
+return corvanInfo.characterId, arcaneInfo.characterId, spentarInfo.characterId,
+    corvanHelper.destroyed, arcaneHelper.destroyed, spentarHelper.destroyed, world.crossBindings
 "@
 
 $sharedBootstrapRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $sharedBootstrapResult = $sharedBootstrapRunner.DoString($sharedBootstrapHarness).ToString()
-$expectedSharedBootstrap = '"corvan", "arcane-test", true, false, 0'
+$expectedSharedBootstrap = '"corvan", "arcane-test", "spentar", true, false, false, 0'
 if ($sharedBootstrapResult -ne $expectedSharedBootstrap) {
     throw "Smoke de bootstraps compartilhados retornou '$sharedBootstrapResult'; esperado '$expectedSharedBootstrap'."
 }
@@ -2010,4 +2226,4 @@ if ($releaseDiscoveryResult -ne '"arcane-test-v2.0.0", true') {
     throw "Smoke de descoberta retornou '$releaseDiscoveryResult'."
 }
 
-Write-Output "MoonSharp OK: runtime/bootstrap compilam; runtimes e helpers Corvan+Arcane isolados; combate $runtimeFlowResult; SHA-256 em $integrityFrames frames; onLoad, cópia persistente, watchdog, update e rollback seguros"
+Write-Output "MoonSharp OK: runtimes/bootstraps Corvan+Arcane+Spentar compilam; regras, estado, UI, helpers, cache e dados dos 3 personagens isolados; combate $runtimeFlowResult; SHA-256 em $integrityFrames frames; onLoad, cópia persistente, watchdog, update e rollback seguros"

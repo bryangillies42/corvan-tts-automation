@@ -1,0 +1,309 @@
+{
+  "schemaVersion": 1,
+  "id": "spentar",
+  "version": "0.1.0",
+  "name": "Spentar (Ahriman)",
+  "shortName": "Spentar",
+  "player": "Fuku",
+  "ancestry": "Humano",
+  "origin": "Herdeiro",
+  "class": "Necromante",
+  "level": 7,
+  "deity": "Kallyadranoch",
+  "stateSchemaVersion": 1,
+  "attributes": {
+    "strength": 0,
+    "dexterity": 3,
+    "constitution": 0,
+    "intelligence": 6,
+    "wisdom": 0,
+    "charisma": 2
+  },
+  "resources": {
+    "hp": { "label": "PV", "max": 20 },
+    "mp": { "label": "PM", "max": 48 },
+    "souls": { "label": "Almas", "max": 6 },
+    "necropotency": { "label": "PM temporários por cena", "max": 7 }
+  },
+  "defenses": {
+    "defense": 17,
+    "fortitude": 7,
+    "reflex": 10,
+    "will": 8
+  },
+  "spellcasting": {
+    "keyAttribute": "intelligence",
+    "baseDifficulty": 22,
+    "necromancyDifficultyBonus": 2,
+    "staffDifficultyBonus": 1,
+    "maximumCircle": 2
+  },
+  "houseRules": {
+    "spellDifficulty": {
+      "enabled": true,
+      "summary": "A mesa fixou CD 22 geral e 24 de Necromancia; o cajado em duas mãos eleva ambas em 1."
+    },
+    "staffTemporaryHpStacks": {
+      "enabled": true,
+      "expires": "scene",
+      "summary": "Os 10 PV temporários do Cajado Sanguessuga acumulam a cada magia em que ao menos um inimigo falha na resistência."
+    }
+  },
+  "skills": {
+    "acrobatics": { "name": "Acrobacia", "modifier": 6 },
+    "athletics": { "name": "Atletismo", "modifier": 3 },
+    "performance": { "name": "Atuação", "modifier": 5 },
+    "riding": { "name": "Cavalgar", "modifier": 10 },
+    "knowledge": { "name": "Conhecimento", "modifier": 13 },
+    "healing": { "name": "Cura", "modifier": 9 },
+    "diplomacy": { "name": "Diplomacia", "modifier": 5 },
+    "deception": { "name": "Enganação", "modifier": 5 },
+    "fortitude": { "name": "Fortitude", "modifier": 7, "resistance": true },
+    "stealth": { "name": "Furtividade", "modifier": 6 },
+    "initiative": { "name": "Iniciativa", "modifier": 6 },
+    "intimidation": { "name": "Intimidação", "modifier": 5 },
+    "insight": { "name": "Intuição", "modifier": 3 },
+    "investigation": { "name": "Investigação", "modifier": 9 },
+    "fight": { "name": "Luta", "modifier": 6 },
+    "mysticism": { "name": "Misticismo", "modifier": 14 },
+    "perception": { "name": "Percepção", "modifier": 3 },
+    "aim": { "name": "Pontaria", "modifier": 6 },
+    "reflex": { "name": "Reflexos", "modifier": 10, "resistance": true },
+    "survival": { "name": "Sobrevivência", "modifier": 3 },
+    "will": { "name": "Vontade", "modifier": 8, "resistance": true }
+  },
+  "equipment": {
+    "staff": {
+      "name": "Cajado Arcano Sanguessuga",
+      "twoHandedByDefault": true,
+      "spellLimitBonus": 1,
+      "spellDifficultyBonus": 1,
+      "temporaryHpOnAnyFailedResistance": 10,
+      "temporaryHpStacks": true,
+      "summary": "Em duas mãos, aumenta limite de PM e CD de magia em 1. Se ao menos um inimigo falhar na resistência de uma magia, concede 10 PV temporários."
+    }
+  },
+  "powers": {
+    "battleArcanist": {
+      "name": "Arcano de Batalha",
+      "damageBonus": 6,
+      "summary": "Soma Inteligência ao dano das magias."
+    },
+    "necrology": {
+      "name": "Necrologia",
+      "necromancyDifficultyBonus": 2,
+      "summary": "+2 em Cura, Fortitude e na CD de magias de Necromancia."
+    },
+    "chainFallen": {
+      "name": "Agrilhoar os Caídos",
+      "maximumSouls": 6,
+      "defensePerSoul": 2,
+      "resistancePerSoul": 2,
+      "releasedSoulDamage": { "count": 2, "sides": 6, "type": "trevas" },
+      "summary": "Armazena espíritos de inimigos vivos derrotados por Necromancia. Cada alma concede +2 Defesa e resistências; ao ser liberada, acrescenta 2d6 de trevas."
+    },
+    "deathConnection": {
+      "name": "Caminho do Necromante",
+      "normalHpPerCircle": 1,
+      "doubledHpPerCircle": 2,
+      "summary": "Estabelece conexão gastando PV igual ao círculo máximo pretendido; pode dobrar esse gasto para habilitar Necropotência."
+    },
+    "necropotency": {
+      "name": "Necropotência",
+      "temporaryMpPerDefeatedEnemy": 2,
+      "maximumTemporaryMpPerScene": 7,
+      "summary": "Com conexão dobrada, derrotar inimigo vivo com Necromancia concede 2 PM temporários, até 7 por cena."
+    },
+    "animateCorpse": {
+      "name": "Animar Cadáver",
+      "noviceCost": 3,
+      "veteranCost": 6,
+      "summary": "Ação completa para criar parceiro cadáver; no nível 7 pode criar parceiro veterano por 6 PM. Pode sacrificá-lo para reduzir à metade um dano recebido."
+    },
+    "necroticDistortion": {
+      "name": "Distorção Necrótica",
+      "spellId": "arcane_armor",
+      "summary": "Armadura Arcana é tratada como magia de Necromancia."
+    },
+    "summoningSpecialist": {
+      "name": "Especialista em Invocações",
+      "summonDefenseBonus": 6,
+      "summary": "Soma Inteligência à Defesa de criaturas e parceiros invocados e reduz em um passo a ação para comandá-los, uma vez por rodada."
+    }
+  },
+  "spells": {
+    "arcane_armor": {
+      "name": "Armadura Arcana",
+      "circle": 1,
+      "baseCost": 1,
+      "school": "necromancia",
+      "action": "padrao",
+      "range": "pessoal",
+      "target": "voce",
+      "duration": "scene",
+      "resistance": null,
+      "damageType": null,
+      "automation": "effect",
+      "defenseBonus": 4,
+      "upgrades": { "mode": "reference", "summary": "Aprimoramentos defensivos e de reação são confirmados pela mesa antes do gasto." },
+      "consequences": { "effect": "arcaneArmor", "expires": "scene" },
+      "summary": "Concede +4 Defesa até o fim da cena e é tratada como Necromancia por Distorção Necrótica."
+    },
+    "fear": {
+      "name": "Amedrontar",
+      "circle": 1,
+      "baseCost": 1,
+      "school": "encantamento",
+      "action": "padrao",
+      "range": "curto",
+      "target": "animal_ou_humanoide",
+      "duration": "scene",
+      "resistance": "vontade",
+      "damageType": null,
+      "automation": "reference",
+      "upgrades": { "mode": "reference", "summary": "Duração, quantidade de alvos e área são escolhidas conforme o círculo e a mesa." },
+      "consequences": { "failure": "apavorado_depois_abalado", "partial": true },
+      "summary": "Impõe medo conforme o resultado da resistência. Informe manualmente os alvos que falharam."
+    },
+    "ballistic_spirit": {
+      "name": "Espírito Balístico",
+      "circle": 1,
+      "baseCost": 1,
+      "school": "necromancia",
+      "action": "padrao",
+      "range": "curto",
+      "target": "espaco_desocupado",
+      "duration": "sustentada",
+      "resistance": null,
+      "damageType": "perfuracao",
+      "damage": { "count": 1, "sides": 6, "bonus": 1 },
+      "automation": "damage",
+      "upgrades": {
+        "damageDie": { "cost": 2, "additionalDice": 1, "repeatable": true, "limitedByCircle": true },
+        "secondSpirit": { "cost": 2, "minimumCircle": 2, "spirits": 2 },
+        "thirdSpirit": { "cost": 5, "minimumCircle": 3, "spirits": 3 }
+      },
+      "consequences": { "summon": "espirito_fixo", "defense": "igual_ao_conjurador", "hp": 20 },
+      "summary": "Espírito sustentado ataca o alvo mais próximo no início do turno. Defesa igual à do conjurador e 20 PV."
+    },
+    "inflict_wounds": {
+      "name": "Infligir Ferimentos",
+      "circle": 1,
+      "baseCost": 1,
+      "school": "necromancia",
+      "action": "padrao",
+      "damageType": "trevas",
+      "damage": { "count": 3, "sides": 8, "bonus": 9 },
+      "resistance": "fortitude",
+      "range": "toque",
+      "target": "uma_criatura",
+      "duration": "instantanea",
+      "automation": "damage",
+      "upgrades": {
+        "damage": { "cost": 2, "additionalDice": 1, "sides": 8, "additionalBonus": 1 },
+        "weaken": { "cost": 1, "condition": "fraco", "requiresFailedResistance": true }
+      },
+      "consequences": { "resistanceSuccess": "metade_do_dano" },
+      "summary": "Causa 3d8+9 de trevas em alcance de toque; a resistência é informada depois da resolução."
+    },
+    "phantom_vitality": {
+      "name": "Vitalidade Fantasma",
+      "circle": 1,
+      "baseCost": 1,
+      "school": "necromancia",
+      "action": "padrao",
+      "range": "pessoal",
+      "target": "voce",
+      "duration": "scene",
+      "resistance": null,
+      "damageType": null,
+      "automation": "reference",
+      "upgrades": { "temporaryHpDice": { "cost": 2, "additionalDice": 1, "sides": 8 }, "areaMode": { "minimumCircle": 2, "mode": "reference" } },
+      "consequences": { "temporaryHpBase": { "count": 2, "sides": 8 }, "expires": "scene" },
+      "summary": "Concede vitalidade temporária conforme os aprimoramentos escolhidos na mesa."
+    },
+    "profane": {
+      "name": "Profanar",
+      "circle": 1,
+      "baseCost": 1,
+      "school": "necromancia",
+      "action": "padrao",
+      "range": "curto",
+      "target": "area",
+      "duration": "scene",
+      "resistance": null,
+      "damageType": null,
+      "automation": "toggle",
+      "upgrades": {},
+      "consequences": { "maximize": "dano_de_trevas_ou_energia_negativa" },
+      "summary": "Na área profanada, grupos de dano de trevas têm seus dados maximizados; bônus fixos não mudam."
+    },
+    "animate_dead": {
+      "name": "Conjurar Mortos Vivos",
+      "circle": 2,
+      "baseCost": 3,
+      "school": "necromancia",
+      "action": "completa",
+      "range": "curto",
+      "target": "espacos_desocupados",
+      "duration": "sustentada",
+      "resistance": null,
+      "damageType": "trevas",
+      "automation": "undead",
+      "upgrades": { "additionalUndead": { "cost": 2, "mode": "reference", "limitedBySpellLimit": true } },
+      "consequences": { "baseCount": 6, "command": "uma_vez_por_rodada" },
+      "summary": "O ataque agregado dos mortos-vivos usa Nd6 + 2N + Inteligência uma vez."
+    },
+    "dimensional_step": {
+      "name": "Salto Dimensional",
+      "circle": 2,
+      "baseCost": 3,
+      "school": "convocacao",
+      "action": "padrao",
+      "range": "pessoal",
+      "target": "voce",
+      "duration": "instantanea",
+      "resistance": null,
+      "damageType": null,
+      "automation": "reference",
+      "upgrades": { "mode": "reference", "summary": "Alcance, aliados e reação defensiva são configurados manualmente." },
+      "consequences": { "movement": "teleporte" },
+      "summary": "Teleporte de curta distância. Configure aprimoramentos e alvos conforme a mesa."
+    },
+    "curse": {
+      "name": "Rogar Maldição",
+      "circle": 2,
+      "baseCost": 3,
+      "school": "necromancia",
+      "action": "padrao",
+      "range": "toque",
+      "target": "uma_criatura",
+      "duration": "permanente",
+      "resistance": "fortitude",
+      "damageType": null,
+      "automation": "reference",
+      "upgrades": { "mode": "reference", "summary": "Efeito adicional e duração são escolhidos conforme a mesa." },
+      "consequences": { "options": ["debilidade", "doenca", "fraqueza", "isolamento"], "resistanceSuccess": "anula" },
+      "summary": "Aplica uma maldição escolhida; registre manualmente o efeito após a resistência."
+    },
+    "arcane_bolt": {
+      "name": "Raio Arcano Dividido",
+      "circle": 0,
+      "baseCost": 0,
+      "school": "poder",
+      "action": "padrao",
+      "range": "medio",
+      "target": "ate_inteligencia_alvos",
+      "duration": "instantanea",
+      "damageType": "essencia",
+      "damage": { "count": 3, "sides": 8, "bonus": 6 },
+      "resistance": "reflexos",
+      "maximumTargets": 6,
+      "automation": "damage",
+      "upgrades": {},
+      "consequences": { "resistanceSuccess": "conforme_regra_da_mesa" },
+      "summary": "Poder separado: 3d8+6 de essência, com alvos limitados pela Inteligência."
+    }
+  },
+  "diceOffset": { "x": 0, "y": 3.2, "z": 0 }
+}

@@ -48,6 +48,7 @@ test("mapeia tags legacy e namespaced para o perfil correto", () => {
     characters: [
       profile({ id: "corvan", version: "0.2.1", tagMode: "legacy", globalLatest: true }),
       profile({ id: "arcane-test", version: "1.4.0", tagMode: "namespaced" }),
+      profile({ id: "spentar", version: "0.1.0", tagMode: "namespaced", prerelease: true }),
     ],
   });
 
@@ -66,18 +67,26 @@ test("mapeia tags legacy e namespaced para o perfil correto", () => {
   assert.equal(fixture.id, "arcane-test");
   assert.equal(fixture.latest, false);
   assert.equal(fixture.tagMode, "namespaced");
+
+  const spentar = resolveRelease({ tag: "spentar-v0.1.0", profiles });
+  assert.equal(spentar.id, "spentar");
+  assert.equal(spentar.tagMode, "namespaced");
+  assert.equal(spentar.prerelease, true);
+  assert.equal(spentar.globalLatest, false);
+  assert.equal(spentar.latest, false);
+  assert.equal(spentar.artifactPaths.runtime, "dist/spentar/spentar-runtime.lua");
 });
 
-test("recusa perfil scaffold, produção desabilitada, versão divergente e tag incompatível", () => {
+test("recusa produção desabilitada, versão divergente e tag incompatível", () => {
   const profiles = loadRegistryValue({
     characters: [
       profile({ id: "corvan", version: "0.2.1", tagMode: "legacy", globalLatest: true }),
-      profile({ id: "spentar", version: null, status: "scaffold", tagMode: "namespaced", productionEnabled: false, prerelease: true }),
+      profile({ id: "spentar", version: "0.1.0", status: "active", tagMode: "namespaced", productionEnabled: false, prerelease: true }),
       profile({ id: "disabled", version: "1.0.0", status: "disabled", tagMode: "namespaced", productionEnabled: false }),
     ],
   });
 
-  assert.throws(() => resolveRelease({ tag: "spentar-v0.2.1", profiles }), /scaffold/);
+  assert.throws(() => resolveRelease({ tag: "spentar-v0.1.0", profiles }), /produção/);
   assert.throws(() => resolveRelease({ tag: "disabled-v1.0.0", profiles }), /desabilitado|produção/);
   assert.throws(() => resolveRelease({ tag: "v0.2.0", profiles }), /diverge/);
   assert.throws(() => resolveRelease({ tag: "corvan-v0.2.1", profiles }), /incompatível|legacy/);
@@ -86,14 +95,21 @@ test("recusa perfil scaffold, produção desabilitada, versão divergente e tag 
   assert.throws(() => parseReleaseTag("arcane-test-1.0.0"), /não usa/);
 });
 
-test("registry real bloqueia tecnicamente qualquer release do Spentar", async () => {
+test("registry real mantém o Spentar namespaced em pré-release e bloqueado para produção", async () => {
   const profiles = await loadRegistry();
   const corvan = resolveRelease({tag: "v0.2.1", profiles});
   assert.equal(corvan.prerelease, false);
   assert.equal(corvan.latest, true);
+  const spentar = profiles.get("spentar");
+  assert.equal(spentar.status, "active");
+  assert.equal(spentar.version, "0.1.0");
+  assert.equal(spentar.release.tagMode, "namespaced");
+  assert.equal(spentar.release.prerelease, true);
+  assert.equal(spentar.release.globalLatest, false);
+  assert.equal(spentar.release.productionEnabled, false);
   assert.throws(
-    () => resolveRelease({tag: "spentar-v0.0.1", profiles}),
-    /scaffold|produção/,
+    () => resolveRelease({tag: "spentar-v0.1.0", profiles}),
+    /produção/,
   );
 });
 

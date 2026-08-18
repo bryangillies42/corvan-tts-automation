@@ -2,7 +2,7 @@
 
 Este repositório contém os Saved Objects, runtimes e ferramentas de desenvolvimento para painéis de personagens no **Tabletop Simulator**. A fundação da v0.2.1 separa identidade, estado, interface, regras, artefatos e releases por personagem, permitindo que vários objetos coexistam na mesma mesa e no mesmo repositório sem compartilharem atualização ou estado por acidente.
 
-O primeiro produto é o [Console do Corvan](characters/corvan/README.md). O próximo personagem planejado é o [Spentar](characters/spentar/README.md), que permanece apenas como scaffold até que sua ficha e referências sejam fornecidas.
+O primeiro produto é o [Console do Corvan](characters/corvan/README.md). O [Grimório do Spentar](characters/spentar/README.md) está ativo para desenvolvimento e testes na versão `0.1.0`, mas continua tecnicamente bloqueado para publicação até concluir o aceite no TTS.
 
 ## Requisitos
 
@@ -19,7 +19,7 @@ O repositório não possui dependências npm de produção. PDFs de fichas e ima
 characters/
   registry.json          identidade, versão, canais e política de publicação
   corvan/                fontes do Corvan e documentação específica
-  spentar/               scaffold não publicável
+  spentar/               Grimório em desenvolvimento, ainda não publicável
 assets/                  espelho imutável das URLs legadas do Corvan v0.2.0
 shared/                  bootstrap, core e contratos comuns
 templates/character/     ponto de partida para um novo personagem
@@ -53,6 +53,7 @@ npm run build:character -- --character corvan
 npm run build:fixture
 npm run character:new -- --id novo-personagem --name "Nome de Exibição"
 npm run test:lua
+npm run verify:tts-assets -- --saved-object dist/spentar/Spentar_Console.json
 ```
 
 O build conjunto compila todos os personagens ativos em `dist/<characterId>/`, inclusive enquanto `productionEnabled` estiver desligado para testes. O build individual permite validar apenas um perfil; a permissão de produção é exigida exclusivamente pelo resolvedor de release. `build:fixture` compila fixtures técnicas, mas elas não podem ser selecionadas pelo workflow. `character:new` valida o template, monta o scaffold de forma recuperável e o registra como não publicável; falha se o id ou o diretório já existirem.
@@ -60,6 +61,8 @@ O build conjunto compila todos os personagens ativos em `dist/<characterId>/`, i
 O validador comum verifica identidade, SemVer, tag, paths internos, assets, XML estrutural e colisões de nomes/URLs/GUIDs. O perfil escolhe `uiContract: panel-board` quando precisa da moldura e geometria rígidas do Corvan, ou `uiContract: generic` para layouts sem overlay e com estrutura própria. IDs e eventos continuam declarados por personagem.
 
 `test:lua` é o gate local obrigatório antes de uma release: usa no Windows o MoonSharp fornecido pelo TTS para compilar os runtimes/bootstrap, executar fórmulas, simular callbacks, persistência, Refresh, timeout de rede, integridade e rollback. Ele também executa o bootstrap congelado do Saved Object Corvan v0.2.0 contra os artefatos atuais. O CI hospedado não o executa porque a DLL vem da instalação local do TTS.
+
+`verify:tts-assets` deve ser executado no Saved Object de teste construído com o SHA real do commit. A ferramenta exige URLs imutáveis contendo um SHA Git completo de 40 caracteres, HTTP 200, MIME PNG/JPEG/WebP coerente com os magic bytes e dimensões entre 64 e 16384 pixels. Assim, uma URL de branch, uma página HTML retornada pelo GitHub ou uma imagem inválida falha antes da importação no TTS.
 
 ## Artefatos e compatibilidade
 
@@ -94,7 +97,7 @@ Um Saved Object Corvan v0.2.0 deve poder atualizar para v0.2.1 pelo **Refresh**,
 5. Rode os testes, o build individual, o build conjunto e o smoke Lua. Valide manualmente dois painéis na mesma mesa.
 6. Só depois de uma revisão real da ficha ative `productionEnabled` e publique a primeira tag do personagem.
 
-O personagem não deve copiar números, poderes, regras, nomes ou assets do Corvan como placeholders. Quando ainda não houver ficha, mantenha somente o scaffold documental do [Spentar](characters/spentar/README.md).
+O personagem não deve copiar números, poderes, regras, nomes ou assets do Corvan como placeholders. O Spentar serve como primeira implementação real dessa separação, mas não deve ser tratado como publicável enquanto `productionEnabled` permanecer desligado.
 
 ## Fixtures
 
@@ -136,8 +139,9 @@ A listagem não depende do nome visível do objeto. Ela lê `characterId` e os m
 ## Documentação específica
 
 - [Corvan — produto legado e comportamento](characters/corvan/README.md)
-- [Spentar — scaffold e checklist](characters/spentar/README.md)
+- [Spentar — grimório em desenvolvimento](characters/spentar/README.md)
 - [Roteiro manual multi-personagem da v0.2.1](docs/testing/multi-character-v0.2.1.md)
+- [Roteiro de aceite do Spentar v0.1.0](docs/testing/spentar-v0.1.0.md)
 
 ## Limitações
 
