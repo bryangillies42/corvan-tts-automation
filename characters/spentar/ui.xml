@@ -9,7 +9,7 @@
   text, colors, interactable and active on the IDs declared below.
 -->
 <Defaults>
-  <Text color="#EDE7F3" fontSize="20" fontStyle="Bold"
+  <Text color="#EDE7F3" fontSize="20" fontStyle="Bold" raycastTarget="false"
         alignment="MiddleCenter" resizeTextForBestFit="true"
         resizeTextMinSize="11" resizeTextMaxSize="25"
         horizontalOverflow="Wrap" verticalOverflow="Truncate" />
@@ -23,6 +23,7 @@
   <Text class="green" color="#8AD29A" />
   <Text class="gold" color="#E1BD68" />
 
+  <Panel raycastTarget="false" />
   <Panel class="surface" color="#100D17FF" outline="#5E496F" outlineSize="1 1" />
   <Panel class="card" color="#17121FFF" outline="#493956" outlineSize="1 1" />
   <Panel class="focusCard" color="#1C1427FF" outline="#9A6BC3" outlineSize="2 2" />
@@ -60,7 +61,7 @@
 
 <Panel id="spentarConsole" width="1600" height="1000" rectAlignment="MiddleCenter"
        position="0 0 -30" rotation="0 0 180" scale="0.25 0.25 1"
-       color="#09070DFF" outline="#8D63A8" outlineSize="4 4" raycastTarget="true">
+       color="#09070DFF" outline="#8D63A8" outlineSize="4 4" raycastTarget="false">
   <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="14 12" offsetMax="-14 -12"
                   spacing="8" childForceExpandWidth="true" childForceExpandHeight="false">
 

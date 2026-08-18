@@ -57,6 +57,9 @@ test('Spentar UI is an opaque self-contained five-page console', async () => {
 
   assert.match(ui, /<Panel id="spentarConsole"[^>]*width="1600" height="1000"/s);
   assert.match(ui, /<Panel id="spentarConsole"[^>]*color="#[0-9A-Fa-f]{8}"/s);
+  assert.match(ui, /<Panel id="spentarConsole"[^>]*raycastTarget="false"/s);
+  assert.match(ui, /<Panel raycastTarget="false"\s*\/>/);
+  assert.match(ui, /<Text[^>]*raycastTarget="false"/);
   assert.doesNotMatch(ui, /<Image\b/);
   assert.doesNotMatch(ui, /\bimage="https?:\/\//i);
 
