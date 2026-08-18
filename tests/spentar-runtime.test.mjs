@@ -138,7 +138,7 @@ test("runtime reconhece o contrato prefixado de navegação e conjuração", () 
     "nav_combat", "nav_casting", "nav_necromancy", "nav_sheet", "nav_settings",
     "resource_hp", "resource_mp", "resource_temp_hp", "resource_temp_mp",
     "toggle_staff", "toggle_profanar", "souls_add", "souls_sub",
-    "cast_configure", "cast_now", "cast_confirm", "resolution_apply",
+    "cast_review", "cast_edit", "cast_confirm", "resolution_apply",
     "connection_off", "connection_normal", "connection_doubled",
     "undead_roll", "ballistic_roll", "end_turn", "end_scene", "end_day",
     "undo", "clear_dice", "reset_state",
@@ -171,9 +171,10 @@ test("reload durante rolagem restaura o snapshot anterior ao custo", () => {
 });
 
 test("uma resolução pendente não pode ser descartada por nova seleção ou atalho", () => {
-  assert.match(runtime, /string\.match\(id, "\^cast_select_"\) then\s+if state\.casting\.phase ~= "configure" then return false end/s);
-  assert.match(runtime, /quick_animate_dead" then\s+if state\.casting\.phase ~= "configure" then return false end/s);
-  assert.match(runtime, /state\.casting\.transaction ~= nil and not NAVIGATION\[id\]/);
+  assert.match(runtime, /local function selectSpellForConfiguration\(spellId\)/);
+  assert.match(runtime, /state\.casting\.phase == "rolling" or state\.casting\.phase == "resolution"/);
+  assert.match(runtime, /quick_animate_dead/);
+  assert.match(runtime, /state\.casting\.transaction ~= nil and id ~= "nav_casting" and id ~= "clear_dice"/);
 });
 
 test("reset remove primeiro os dados físicos próprios persistidos", () => {
@@ -181,9 +182,80 @@ test("reset remove primeiro os dados físicos próprios persistidos", () => {
   assert.match(runtime, /host\.clear\(coreState\.ownedDice\)/);
 });
 
-test("atalho abre a resolução e uma rolagem presa pode ser cancelada", () => {
-  assert.match(runtime, /coreState\.page = "casting"\s+return beginSelectedCast/);
-  assert.match(runtime, /transaction\.plan\.kind ~= "check" then coreState\.page = "casting"/);
-  assert.match(runtime, /id ~= "clear_dice" and id ~= "roll_cancel"/);
-  assert.match(runtime, /return host\.cancel\("rolagem cancelada pelo jogador"\)/);
+test("jornada guiada só cobra e cria dados depois da confirmação", () => {
+  const journey = {page: "combat", phase: "configure", mp: 48, souls: 6,
+    transaction: null, spawned: 0, result: null};
+  const dispatch = (id) => {
+    if (id.startsWith("quick_")) {
+      journey.page = "casting";
+      journey.phase = "configure";
+      return true;
+    }
+    if (id === "cast_review") {
+      if (journey.phase !== "configure") return false;
+      journey.phase = "review";
+      return true;
+    }
+    if (id === "cast_edit") {
+      if (journey.phase !== "review") return false;
+      journey.phase = "configure";
+      return true;
+    }
+    if (id === "cast_confirm") {
+      if (journey.phase !== "review" || journey.transaction) return false;
+      journey.phase = "rolling";
+      journey.transaction = "spentar-1";
+      journey.mp -= 1;
+      journey.spawned += 3;
+      return true;
+    }
+    if (id === "resolution_apply") {
+      if (journey.phase !== "resolution") return false;
+      journey.phase = "configure";
+      journey.transaction = null;
+      return true;
+    }
+    return false;
+  };
+
+  assert.equal(dispatch("quick_inflict_wounds"), true);
+  assert.deepEqual(journey, {page: "casting", phase: "configure", mp: 48,
+    souls: 6, transaction: null, spawned: 0, result: null});
+  assert.equal(dispatch("cast_review"), true);
+  assert.equal(journey.phase, "review");
+  assert.equal(journey.mp, 48);
+  assert.equal(journey.spawned, 0);
+  assert.equal(dispatch("cast_edit"), true);
+  assert.equal(journey.phase, "configure");
+  assert.equal(dispatch("cast_review"), true);
+  assert.equal(dispatch("cast_confirm"), true);
+  assert.equal(journey.phase, "rolling");
+  assert.equal(journey.mp, 47);
+  assert.equal(journey.spawned, 3);
+  assert.equal(dispatch("cast_confirm"), false, "confirmation must be idempotent");
+});
+
+test("runtime contém as fases e controles da jornada guiada", () => {
+  assert.match(runtime, /phase == "review"/);
+  assert.match(runtime, /id == "cast_review"/);
+  assert.match(runtime, /id == "cast_edit"/);
+  assert.match(runtime, /id == "cast_confirm"/);
+  assert.match(runtime, /id == "resolution_apply"/);
+  assert.doesNotMatch(runtime, /id == "cast_now"/);
+  assert.doesNotMatch(runtime, /id == "cast_configure"/);
+  assert.doesNotMatch(runtime, /id == "roll_cancel"/);
+  assert.match(runtime, /id == "clear_dice"/);
+  assert.match(runtime, /selectSpellForConfiguration\("profane"\)/,
+    "Profanar must enter the guided journey instead of toggling directly");
+  assert.doesNotMatch(runtime, /state\.scene\.profanar = not state\.scene\.profanar/);
+  assert.match(runtime, /id == "undead_roll" then\s+if state\.casting\.phase ~= "configure"/s);
+  assert.match(runtime, /id == "ballistic_roll" then\s+if state\.casting\.phase ~= "configure"/s);
+  assert.match(runtime, /transaction\.plan\.kind ~= "direct"/,
+    "direct summon attacks must not enter spell resolution");
+  assert.match(runtime, /plan\.kind = "direct"/);
+  assert.match(runtime, /bonus=state\.summons\.ballisticSpirits, kind="direct"/);
+  for (const id of ["cast_config_spell_name", "cast_review_targets",
+    "cast_review_souls", "cast_spending_notice"]) {
+    assert.match(runtime, new RegExp(`safeSet\\("${id}"`));
+  }
 });

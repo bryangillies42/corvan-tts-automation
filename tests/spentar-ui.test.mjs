@@ -88,12 +88,12 @@ test('Spentar UI IDs are globally unique', async () => {
 test('Spentar guided casting and lifecycle controls remain wired', async () => {
   const ui = await readFile(UI_PATH, 'utf8');
   const actionIds = [
-    'cast_configure', 'cast_now', 'cast_confirm',
+    'cast_review', 'cast_edit', 'cast_confirm',
     'cast_upgrade_add', 'cast_upgrade_sub',
     'cast_targets_add', 'cast_targets_sub',
     'cast_souls_add', 'cast_souls_sub',
     'resolution_failed_add', 'resolution_failed_sub',
-    'resolution_defeated_add', 'resolution_defeated_sub', 'roll_cancel', 'resolution_apply',
+    'resolution_defeated_add', 'resolution_defeated_sub', 'resolution_apply',
     'connection_off', 'connection_normal', 'connection_doubled',
     'undead_roll', 'ballistic_roll',
     'end_turn', 'end_scene', 'end_day', 'undo', 'clear_dice', 'reset_state',
@@ -109,4 +109,24 @@ test('Spentar guided casting and lifecycle controls remain wired', async () => {
 
   assert.match(ui, /<Button id="refresh"[^>]*onClick="refresh"/);
   assert.match(ui, /<Text id="refreshStatus"/);
+});
+
+test('Spentar UI exposes one visible step of the guided casting journey', async () => {
+  const ui = await readFile(UI_PATH, 'utf8');
+
+  for (const id of [
+    'casting_config_panel', 'casting_review_panel', 'casting_rolling_panel',
+    'casting_resolution_panel',
+    'casting_step', 'rolling_status', 'resolution_summary', 'cast_config_spell_name',
+    'cast_review_targets', 'cast_review_souls', 'cast_spending_notice',
+  ]) {
+    assert.match(ui, new RegExp(`\\bid="${id}"`), `missing casting UX id ${id}`);
+  }
+
+  for (const id of ['cast_configure', 'cast_now', 'roll_cancel']) {
+    assert.doesNotMatch(ui, new RegExp(`\\bid="${id}"`), `obsolete UI id ${id}`);
+  }
+  assert.match(ui, /id="clear_dice"[^>]*onClick="dispatch"/s);
+  assert.match(ui, /id="quick_inflict_wounds"[^>]*text="PREPARAR INFLIGIR"/s);
+  assert.match(ui, /id="toggle_profanar"[^>]*text="PREPARAR&#10;PROFANAR"/s);
 });

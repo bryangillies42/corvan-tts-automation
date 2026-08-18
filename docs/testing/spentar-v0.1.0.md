@@ -25,6 +25,10 @@ publicação dessa tag será a estável.
 5. Importe também `dist/corvan/Corvan_Duras_Console.json` gerado ou preservado
    na v0.2.1. Registre screenshots, mensagens de chat e erros do console.
 
+O botão **LIMPAR DADOS** fica permanentemente no rodapé. Ele remove somente
+dados cujo dono é o painel Spentar. Durante uma rolagem, muda para
+**CANCELAR E LIMPAR**, restaura a transação e não toca em outro personagem.
+
 ## Interface, isolamento e persistência
 
 1. Confirme que a arte física e as cinco páginas do Spentar carregam sem área
@@ -44,25 +48,35 @@ publicação dessa tag será a estável.
 Execute os casos abaixo com gasto automático ligado e desligado. Confira o
 resumo antes da confirmação, o chat, os dados físicos e o estado final.
 
-1. **Cajado:** confirme CD geral 23 e CD de Necromancia 25 em duas mãos; desligue
+1. **Jornada guiada:** na tela inicial, clique em um dos botões **PREPARAR** para
+   uma magia. O painel deve abrir Conjuração em modo **Configurar**, sem lançar
+   dados, gastar PM ou consumir almas. Clique em **REVISAR CONJURAÇÃO** e
+   confirme que a revisão mostra magia, custo, almas, CD, alvos e fórmula sem
+   alterar recursos. Use **ALTERAR CONFIGURAÇÃO** para voltar, ajuste algo e
+   revise novamente. Só **CONFIRMAR E ROLAR** inicia a transação, muda para
+   Rolando e cobra os recursos uma única vez. Depois dos dados, a tela de
+   Resolução deve mostrar o resultado e oferecer a aplicação das consequências.
+   Durante Rolando, **CANCELAR E LIMPAR** deve cancelar e restaurar PM,
+   almas e estado, sem afetar o Corvan.
+2. **Cajado:** confirme CD geral 23 e CD de Necromancia 25 em duas mãos; desligue
    o cajado e confirme 22 e 24.
-2. **Profanar:** valide separadamente `6d6+18 = 54`, `3d8+9 = 33` e `12d6 = 72`.
+3. **Profanar:** valide separadamente `6d6+18 = 54`, `3d8+9 = 33` e `12d6 = 72`.
    O sistema não deve criar dados para grupos maximizados. Dano que não seja de
    trevas continua sendo rolado normalmente.
-3. **Infligir Ferimentos:** com Profanar e seis almas liberadas, confirme
+4. **Infligir Ferimentos:** com Profanar e seis almas liberadas, confirme
    `24 + 9 + 72 = 105`; sem Profanar, confira os grupos físicos `3d8+9` e
    `12d6`. As seis almas só são consumidas após confirmar.
-4. **Mortos-vivos:** teste de um a seis mortos. Para seis, confirme `6d6+18` e
+5. **Mortos-vivos:** teste de um a seis mortos. Para seis, confirme `6d6+18` e
    o detalhamento de cada ataque; sob Profanar, confirme 54.
-5. **Resistência e cajado:** informe zero, um e vários alvos que falharam. Dez
+6. **Resistência e cajado:** informe zero, um e vários alvos que falharam. Dez
    PV temporários devem ser concedidos por ao menos uma falha e acumular segundo
    a regra da mesa, sem serem concedidos por sucesso de todos os alvos.
-6. **Almas:** teste captura até 6, tentativa acima do limite, liberação parcial,
+7. **Almas:** teste captura até 6, tentativa acima do limite, liberação parcial,
    liberação total e tentativa de liberar mais do que existe. Confira +2 de
    Defesa e resistências por alma armazenada.
-7. **Necropotência:** consuma primeiro PM temporários, obtenha +2 após derrotar
+8. **Necropotência:** consuma primeiro PM temporários, obtenha +2 após derrotar
    alvo válido e confirme o teto de 7 PM temporários ganhos na cena.
-8. Percorra Armadura Arcana, Amedrontar, Espírito Balístico, Vitalidade
+9. Percorra Armadura Arcana, Amedrontar, Espírito Balístico, Vitalidade
    Fantasma, Profanar, Salto Dimensional, Rogar Maldição, Raio Arcano e Raio
    Dividido, incluindo aprimoramentos nos limites do círculo.
 

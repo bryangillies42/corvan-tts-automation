@@ -145,7 +145,7 @@
           <Panel class="card"><Text text="CD GERAL" class="label" alignment="UpperCenter" /><Text id="general_dc" text="23" class="cyan" fontSize="26" alignment="LowerCenter" /></Panel>
           <Panel class="focusCard"><Text text="CD NECROMANCIA" class="label violet" alignment="UpperCenter" /><Text id="necro_dc" text="25" class="violet" fontSize="26" alignment="LowerCenter" /></Panel>
           <Button id="toggle_staff" class="baseButton" text="CAJADO&#10;2 MÃOS: SIM" onClick="dispatch" />
-          <Button id="toggle_profanar" class="baseButton" text="PROFANAR&#10;ATIVAR" onClick="dispatch" />
+          <Button id="toggle_profanar" class="baseButton" text="PREPARAR&#10;PROFANAR" onClick="dispatch" />
         </HorizontalLayout>
       </VerticalLayout>
     </Panel>
@@ -172,21 +172,21 @@
                 <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="8 5" offsetMax="-8 -5" spacing="2">
                   <Text text="RAIO ARCANO DIVIDIDO" class="violet" fontSize="22" preferredHeight="31" />
                   <Text text="3d8+6 • ESSÊNCIA • REFLEXOS • CD ATUAL" class="muted" preferredHeight="25" />
-                  <Button id="quick_arcane_bolt" class="primaryButton" text="CONFIGURAR E ROLAR" onClick="dispatch" preferredHeight="30" />
+                  <Button id="quick_arcane_bolt" class="primaryButton" text="PREPARAR RAIO ARCANO" onClick="dispatch" preferredHeight="30" />
                 </VerticalLayout>
               </Panel>
               <Panel class="card" preferredHeight="95">
                 <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="8 5" offsetMax="-8 -5" spacing="2">
                   <Text text="INFLIGIR FERIMENTOS" class="red" fontSize="22" preferredHeight="31" />
                   <Text text="3d8+9 • TREVAS • TOQUE • CD NECROMANCIA" class="muted" preferredHeight="25" />
-                  <Button id="quick_inflict_wounds" class="primaryButton" text="CONFIGURAR E ROLAR" onClick="dispatch" preferredHeight="30" />
+                  <Button id="quick_inflict_wounds" class="primaryButton" text="PREPARAR INFLIGIR" onClick="dispatch" preferredHeight="30" />
                 </VerticalLayout>
               </Panel>
               <Panel class="card" preferredHeight="95">
                 <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="8 5" offsetMax="-8 -5" spacing="2">
                   <Text text="CONJURAR MORTOS VIVOS" class="violet" fontSize="22" preferredHeight="31" />
                   <Text text="Nd6 + 2N + INT 6 • TREVAS" class="muted" preferredHeight="25" />
-                  <Button id="quick_animate_dead" class="primaryButton" text="CONFIGURAR E ROLAR" onClick="dispatch" preferredHeight="30" />
+                  <Button id="quick_animate_dead" class="primaryButton" text="PREPARAR MORTOS-VIVOS" onClick="dispatch" preferredHeight="30" />
                 </VerticalLayout>
               </Panel>
               <Text text="O resolvedor aplica Profanar somente aos grupos de dano de trevas e mostra o cálculo antes da confirmação." class="muted" preferredHeight="55" />
@@ -213,59 +213,81 @@
 
       <Panel id="page_casting" active="false" anchorMin="0 0" anchorMax="1 1" class="surface">
         <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="10 9" offsetMax="-10 -9"
-                        spacing="7" childForceExpandWidth="true" childForceExpandHeight="false">
-          <Text text="1. ESCOLHA A MAGIA OU PODER" class="label violet" preferredHeight="22" />
-          <HorizontalLayout preferredHeight="58" spacing="5">
+                        spacing="6" childForceExpandWidth="true" childForceExpandHeight="false">
+          <HorizontalLayout preferredHeight="36" spacing="8" childForceExpandWidth="false">
+            <Text text="CONJURAÇÃO GUIADA" class="label violet" preferredWidth="260" />
+            <Text id="casting_step" text="ETAPA 1 DE 4 • CONFIGURAR" class="gold" alignment="MiddleLeft" flexibleWidth="1" />
+            <Text text="Nada será gasto antes da confirmação." class="muted" alignment="MiddleRight" preferredWidth="420" />
+          </HorizontalLayout>
+          <Text text="ESCOLHA A MAGIA OU PODER" class="label" preferredHeight="20" />
+          <HorizontalLayout preferredHeight="49" spacing="5">
             <Button id="cast_select_arcane_armor" class="spellButton" text="ARMADURA&#10;ARCANA" onClick="dispatch" />
             <Button id="cast_select_fear" class="spellButton" text="AMEDRONTAR" onClick="dispatch" />
             <Button id="cast_select_ballistic_spirit" class="spellButton" text="ESPÍRITO&#10;BALÍSTICO" onClick="dispatch" />
             <Button id="cast_select_inflict_wounds" class="spellButton" text="INFLIGIR&#10;FERIMENTOS" onClick="dispatch" />
             <Button id="cast_select_phantom_vitality" class="spellButton" text="VITALIDADE&#10;FANTASMA" onClick="dispatch" />
           </HorizontalLayout>
-          <HorizontalLayout preferredHeight="58" spacing="5">
+          <HorizontalLayout preferredHeight="49" spacing="5">
             <Button id="cast_select_profane" class="spellButton" text="PROFANAR" onClick="dispatch" />
             <Button id="cast_select_animate_dead" class="spellButton" text="CONJURAR&#10;MORTOS VIVOS" onClick="dispatch" />
             <Button id="cast_select_dimensional_step" class="spellButton" text="SALTO&#10;DIMENSIONAL" onClick="dispatch" />
             <Button id="cast_select_curse" class="spellButton" text="ROGAR&#10;MALDIÇÃO" onClick="dispatch" />
             <Button id="cast_select_arcane_bolt" class="spellButton" text="RAIO ARCANO&#10;DIVIDIDO" onClick="dispatch" />
           </HorizontalLayout>
-
-          <HorizontalLayout preferredHeight="265" spacing="8" childForceExpandHeight="true">
-            <Panel class="focusCard" flexibleWidth="56">
-              <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="10 7" offsetMax="-10 -7" spacing="4">
-                <Text text="2. CONFIGURAÇÃO" class="label violet" preferredHeight="23" />
-                <Text id="cast_spell_name" text="INFLIGIR FERIMENTOS" class="violet" fontSize="26" preferredHeight="36" />
-                <HorizontalLayout preferredHeight="42" spacing="5"><Text text="APRIMORAMENTO" class="label" flexibleWidth="1" /><Button id="cast_upgrade_sub" class="miniButton" text="-" onClick="dispatch" preferredWidth="50" /><Text id="cast_upgrade_value" text="0" preferredWidth="70" /><Button id="cast_upgrade_add" class="miniButton" text="+" onClick="dispatch" preferredWidth="50" /></HorizontalLayout>
-                <HorizontalLayout preferredHeight="42" spacing="5"><Text text="ALVOS" class="label" flexibleWidth="1" /><Button id="cast_targets_sub" class="miniButton" text="-" onClick="dispatch" preferredWidth="50" /><Text id="cast_targets_value" text="1" preferredWidth="70" /><Button id="cast_targets_add" class="miniButton" text="+" onClick="dispatch" preferredWidth="50" /></HorizontalLayout>
-                <HorizontalLayout preferredHeight="42" spacing="5"><Text text="ALMAS A LIBERAR" class="label" flexibleWidth="1" /><Button id="cast_souls_sub" class="miniButton" text="-" onClick="dispatch" preferredWidth="50" /><Text id="cast_souls_value" text="0" preferredWidth="70" /><Button id="cast_souls_add" class="miniButton" text="+" onClick="dispatch" preferredWidth="50" /></HorizontalLayout>
-                <Button id="cast_configure" class="baseButton" text="REVISAR CONFIGURAÇÃO" onClick="dispatch" preferredHeight="43" />
+          <!-- Runtime activates exactly one stage panel. -->
+          <Panel preferredHeight="424" color="#08060B00">
+            <Panel id="casting_config_panel" active="true" anchorMin="0 0" anchorMax="1 1" class="focusCard">
+              <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="18 14" offsetMax="-18 -14" spacing="7" childForceExpandWidth="true" childForceExpandHeight="false">
+                <HorizontalLayout preferredHeight="36" spacing="8"><Text text="CONFIGURANDO" class="label violet" preferredWidth="170" /><Text id="cast_config_spell_name" text="INFLIGIR FERIMENTOS" class="violet" fontSize="27" alignment="MiddleLeft" flexibleWidth="1" /></HorizontalLayout>
+                <Text text="Ajuste as opções. Você conferirá custo, fórmula, CD e resistência antes de gastar recursos." class="muted" preferredHeight="38" />
+                <HorizontalLayout preferredHeight="55" spacing="10">
+                  <Panel class="card"><HorizontalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="10 7" offsetMax="-10 -7" spacing="5"><Text text="APRIMORAMENTOS" class="label" flexibleWidth="1" /><Button id="cast_upgrade_sub" class="miniButton" text="-" onClick="dispatch" preferredWidth="54" /><Text id="cast_upgrade_value" text="0" preferredWidth="70" /><Button id="cast_upgrade_add" class="miniButton" text="+" onClick="dispatch" preferredWidth="54" /></HorizontalLayout></Panel>
+                  <Panel class="card"><HorizontalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="10 7" offsetMax="-10 -7" spacing="5"><Text text="ALVOS" class="label" flexibleWidth="1" /><Button id="cast_targets_sub" class="miniButton" text="-" onClick="dispatch" preferredWidth="54" /><Text id="cast_targets_value" text="1" preferredWidth="70" /><Button id="cast_targets_add" class="miniButton" text="+" onClick="dispatch" preferredWidth="54" /></HorizontalLayout></Panel>
+                </HorizontalLayout>
+                <Panel class="card" preferredHeight="55"><HorizontalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="10 7" offsetMax="-10 -7" spacing="5"><Text text="ALMAS A LIBERAR" class="label" flexibleWidth="1" /><Text text="Cada alma adiciona 2d6 de trevas" class="muted" preferredWidth="390" /><Button id="cast_souls_sub" class="miniButton" text="-" onClick="dispatch" preferredWidth="54" /><Text id="cast_souls_value" text="0" preferredWidth="70" /><Button id="cast_souls_add" class="miniButton" text="+" onClick="dispatch" preferredWidth="54" /></HorizontalLayout></Panel>
+                <Panel class="card" preferredHeight="48"><Text text="PROFANAR e CAJADO usam os estados da barra superior. Fichas inimigas nunca serão alteradas automaticamente." class="muted" alignment="MiddleLeft" /></Panel>
+                <Text text="PRÓXIMO PASSO: confira exatamente o que será consumido e rolado." class="gold" preferredHeight="24" />
+                <Button id="cast_review" class="primaryButton" text="REVISAR CONJURAÇÃO" onClick="dispatch" preferredHeight="52" />
               </VerticalLayout>
             </Panel>
-            <Panel class="card" flexibleWidth="44">
-              <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="10 7" offsetMax="-10 -7" spacing="4">
-                <Text text="3. REVISÃO" class="label gold" preferredHeight="23" />
-                <Text id="cast_cost" text="CUSTO: 1 PM" class="cyan" fontSize="23" preferredHeight="32" />
-                <Text id="cast_damage" text="DANO: 3d8+9 TREVAS" class="red" fontSize="23" preferredHeight="32" />
-                <Text id="cast_details" text="CD 25 • FORTITUDE REDUZ À METADE • PROFANAR INATIVO" class="muted" preferredHeight="70" />
-                <HorizontalLayout preferredHeight="54" spacing="6"><Button id="cast_now" class="primaryButton" text="ROLAR AGORA" onClick="dispatch" /><Button id="cast_confirm" class="primaryButton" text="CONFIRMAR" onClick="dispatch" /></HorizontalLayout>
+
+            <Panel id="casting_review_panel" active="false" anchorMin="0 0" anchorMax="1 1" class="focusCard">
+              <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="18 14" offsetMax="-18 -14" spacing="6" childForceExpandWidth="true" childForceExpandHeight="false">
+                <Text text="CONFIRA ANTES DE CONFIRMAR" class="label gold" preferredHeight="22" />
+                <Text id="cast_spell_name" text="INFLIGIR FERIMENTOS" class="violet" fontSize="29" alignment="MiddleLeft" preferredHeight="36" />
+                <HorizontalLayout preferredHeight="58" spacing="8">
+                  <Panel class="card"><Text id="cast_cost" text="CUSTO: 1 PM" class="cyan" fontSize="24" alignment="MiddleLeft" /></Panel>
+                  <Panel class="card"><Text id="cast_damage" text="DANO: 3d8+9 TREVAS" class="red" fontSize="24" alignment="MiddleLeft" /></Panel>
+                </HorizontalLayout>
+                <HorizontalLayout preferredHeight="54" spacing="8"><Panel class="card"><Text id="cast_review_targets" text="ALVOS: 1" class="gold" fontSize="22" alignment="MiddleLeft" /></Panel><Panel class="card"><Text id="cast_review_souls" text="ALMAS: 0 DE 6" class="violet" fontSize="22" alignment="MiddleLeft" /></Panel></HorizontalLayout>
+                <Panel class="card" preferredHeight="72"><Text id="cast_details" text="CD 25 • FORTITUDE REDUZ À METADE • PROFANAR INATIVO" class="muted" alignment="MiddleLeft" /></Panel>
+                <Text id="cast_spending_notice" text="Ao confirmar, PM e almas serão consumidos em uma única transação. Uma falha restaura tudo." class="muted" preferredHeight="38" />
+                <HorizontalLayout preferredHeight="54" spacing="8"><Button id="cast_edit" class="baseButton" text="ALTERAR CONFIGURAÇÃO" onClick="dispatch" flexibleWidth="1" /><Button id="cast_confirm" class="primaryButton" text="CONFIRMAR E ROLAR" onClick="dispatch" flexibleWidth="2" /></HorizontalLayout>
               </VerticalLayout>
             </Panel>
-          </HorizontalLayout>
 
-          <Panel class="dangerCard" preferredHeight="135">
-            <HorizontalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="10 7" offsetMax="-10 -7" spacing="8">
-              <Text text="4. RESOLUÇÃO" class="label red" preferredWidth="140" />
-              <Text text="ALVOS QUE FALHARAM" class="label" preferredWidth="165" />
-              <Button id="resolution_failed_sub" class="miniButton" text="-" onClick="dispatch" preferredWidth="46" />
-              <Text id="resolution_failed_value" text="0" preferredWidth="55" />
-              <Button id="resolution_failed_add" class="miniButton" text="+" onClick="dispatch" preferredWidth="46" />
-              <Text text="DERROTADOS" class="label" preferredWidth="120" />
-              <Button id="resolution_defeated_sub" class="miniButton" text="-" onClick="dispatch" preferredWidth="46" />
-              <Text id="resolution_defeated_value" text="0" preferredWidth="55" />
-              <Button id="resolution_defeated_add" class="miniButton" text="+" onClick="dispatch" preferredWidth="46" />
-              <Button id="roll_cancel" class="baseButton" text="CANCELAR ROLAGEM" onClick="dispatch" preferredWidth="165" interactable="false" />
-              <Button id="resolution_apply" class="dangerButton" text="APLICAR CONSEQUÊNCIAS" onClick="dispatch" flexibleWidth="1" />
-            </HorizontalLayout>
+            <Panel id="casting_rolling_panel" active="false" anchorMin="0 0" anchorMax="1 1" class="focusCard">
+              <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="40 34" offsetMax="-40 -34" spacing="16" childForceExpandWidth="true" childForceExpandHeight="false">
+                <Text text="ROLAGEM EM ANDAMENTO" class="label violet" alignment="MiddleCenter" preferredHeight="30" />
+                <Text id="rolling_status" text="Criando os dados físicos…" class="violet" fontSize="32" preferredHeight="70" />
+                <Panel class="card" preferredHeight="105"><Text text="Aguarde os dados estabilizarem. O resultado aparecerá automaticamente; você não precisa clicar novamente." class="muted" fontSize="20" /></Panel>
+                <Text text="Se precisar interromper, use CANCELAR E LIMPAR no rodapé. Recursos e almas serão restaurados." class="gold" preferredHeight="62" />
+              </VerticalLayout>
+            </Panel>
+
+            <Panel id="casting_resolution_panel" active="false" anchorMin="0 0" anchorMax="1 1" class="dangerCard">
+              <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="18 14" offsetMax="-18 -14" spacing="8" childForceExpandWidth="true" childForceExpandHeight="false">
+                <Text text="RESOLVA AS CONSEQUÊNCIAS" class="label red" preferredHeight="24" />
+                <Text id="resolution_summary" text="RESULTADO: aguardando rolagem" class="red" fontSize="29" alignment="MiddleLeft" preferredHeight="44" />
+                <Text text="Informe o que aconteceu com os alvos. O objeto aplica somente consequências do Spentar; resistências são decididas na mesa." class="muted" preferredHeight="52" />
+                <HorizontalLayout preferredHeight="76" spacing="10">
+                  <Panel class="card"><HorizontalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="10 8" offsetMax="-10 -8" spacing="5"><Text text="ALVOS QUE FALHARAM" class="label" flexibleWidth="1" /><Button id="resolution_failed_sub" class="miniButton" text="-" onClick="dispatch" preferredWidth="54" /><Text id="resolution_failed_value" text="0" preferredWidth="70" /><Button id="resolution_failed_add" class="miniButton" text="+" onClick="dispatch" preferredWidth="54" /></HorizontalLayout></Panel>
+                  <Panel class="card"><HorizontalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="10 8" offsetMax="-10 -8" spacing="5"><Text text="DERROTADOS" class="label" flexibleWidth="1" /><Button id="resolution_defeated_sub" class="miniButton" text="-" onClick="dispatch" preferredWidth="54" /><Text id="resolution_defeated_value" text="0" preferredWidth="70" /><Button id="resolution_defeated_add" class="miniButton" text="+" onClick="dispatch" preferredWidth="54" /></HorizontalLayout></Panel>
+                </HorizontalLayout>
+                <Panel class="card" preferredHeight="55"><Text text="Revise os valores e conclua para registrar PV temporários, almas capturadas e demais efeitos aplicáveis." class="muted" alignment="MiddleLeft" /></Panel>
+                <Button id="resolution_apply" class="dangerButton" text="APLICAR E CONCLUIR" onClick="dispatch" preferredHeight="62" />
+              </VerticalLayout>
+            </Panel>
           </Panel>
         </VerticalLayout>
       </Panel>
@@ -309,7 +331,7 @@
 
       <Panel id="page_settings" active="false" anchorMin="0 0" anchorMax="1 1" class="surface">
         <HorizontalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="10 10" offsetMax="-10 -10" spacing="10">
-          <Panel class="card"><VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="10 8" offsetMax="-10 -8" spacing="8"><Text text="DADOS FÍSICOS" class="label violet" preferredHeight="27" /><Text text="Deslocamento do ponto de lançamento" class="muted" preferredHeight="35" /><HorizontalLayout preferredHeight="50" spacing="5"><Text text="X" class="label" preferredWidth="25" /><Button id="offset_x_sub" class="miniButton" text="-" onClick="dispatch" /><Text id="offset_x_value" text="0.0" /><Button id="offset_x_add" class="miniButton" text="+" onClick="dispatch" /></HorizontalLayout><HorizontalLayout preferredHeight="50" spacing="5"><Text text="Y" class="label" preferredWidth="25" /><Button id="offset_y_sub" class="miniButton" text="-" onClick="dispatch" /><Text id="offset_y_value" text="2.0" /><Button id="offset_y_add" class="miniButton" text="+" onClick="dispatch" /></HorizontalLayout><HorizontalLayout preferredHeight="50" spacing="5"><Text text="Z" class="label" preferredWidth="25" /><Button id="offset_z_sub" class="miniButton" text="-" onClick="dispatch" /><Text id="offset_z_value" text="0.0" /><Button id="offset_z_add" class="miniButton" text="+" onClick="dispatch" /></HorizontalLayout><Button id="calibrate_roll" class="primaryButton" text="ROLAGEM DE CALIBRAÇÃO" onClick="dispatch" preferredHeight="55" /><Button id="clear_dice" class="baseButton" text="LIMPAR DADOS DO SPENTAR" onClick="dispatch" preferredHeight="50" /></VerticalLayout></Panel>
+          <Panel class="card"><VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="10 8" offsetMax="-10 -8" spacing="8"><Text text="DADOS FÍSICOS" class="label violet" preferredHeight="27" /><Text text="Deslocamento do ponto de lançamento. O comando para limpar fica sempre disponível no rodapé." class="muted" preferredHeight="55" /><HorizontalLayout preferredHeight="50" spacing="5"><Text text="X" class="label" preferredWidth="25" /><Button id="offset_x_sub" class="miniButton" text="-" onClick="dispatch" /><Text id="offset_x_value" text="0.0" /><Button id="offset_x_add" class="miniButton" text="+" onClick="dispatch" /></HorizontalLayout><HorizontalLayout preferredHeight="50" spacing="5"><Text text="Y" class="label" preferredWidth="25" /><Button id="offset_y_sub" class="miniButton" text="-" onClick="dispatch" /><Text id="offset_y_value" text="2.0" /><Button id="offset_y_add" class="miniButton" text="+" onClick="dispatch" /></HorizontalLayout><HorizontalLayout preferredHeight="50" spacing="5"><Text text="Z" class="label" preferredWidth="25" /><Button id="offset_z_sub" class="miniButton" text="-" onClick="dispatch" /><Text id="offset_z_value" text="0.0" /><Button id="offset_z_add" class="miniButton" text="+" onClick="dispatch" /></HorizontalLayout><Button id="calibrate_roll" class="primaryButton" text="ROLAGEM DE CALIBRAÇÃO" onClick="dispatch" preferredHeight="55" /></VerticalLayout></Panel>
           <Panel class="card"><VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="10 8" offsetMax="-10 -8" spacing="8"><Text text="PREFERÊNCIAS" class="label gold" preferredHeight="27" /><Button id="toggle_auto_spend" class="baseButton" text="GASTO AUTOMÁTICO: SIM" onClick="dispatch" preferredHeight="52" /><Button id="toggle_physical_dice" class="baseButton" text="DADOS FÍSICOS: SIM" onClick="dispatch" preferredHeight="52" /><Button id="toggle_detailed_chat" class="baseButton" text="DETALHAMENTO NO CHAT: SIM" onClick="dispatch" preferredHeight="52" /><Text id="settings_status" text="IDENTIDADE: SPENTAR • HELPER ISOLADO" class="muted" preferredHeight="55" /><Button id="refresh" class="primaryButton" text="PROCURAR ATUALIZAÇÃO" onClick="refresh" preferredHeight="58" /><Text id="refreshStatus" text="ATUALIZAÇÃO: canal de desenvolvimento" class="muted" preferredHeight="52" /></VerticalLayout></Panel>
           <Panel class="dangerCard"><VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="10 8" offsetMax="-10 -8" spacing="8"><Text text="SEGURANÇA E DIAGNÓSTICO" class="label red" preferredHeight="27" /><Text text="O reset apaga recursos, estados, preferências e a conjuração pendente deste painel. Dados e estado de outros personagens não são alterados." class="muted" preferredHeight="95" /><Button id="health_check" class="baseButton" text="VERIFICAR RUNTIME" onClick="dispatch" preferredHeight="52" /><Text id="health_status" text="RUNTIME: AGUARDANDO" class="muted" preferredHeight="50" /><Button id="reset_state" class="dangerButton" text="REINICIAR ESTADO" onClick="dispatch" preferredHeight="58" /></VerticalLayout></Panel>
         </HorizontalLayout>
@@ -320,10 +342,11 @@
     <Panel class="surface" preferredHeight="72">
       <HorizontalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="7 6" offsetMax="-7 -6"
                         spacing="5" childForceExpandHeight="true">
-        <Button id="end_turn" class="baseButton" text="FIM DO TURNO" onClick="dispatch" preferredWidth="150" />
-        <Button id="end_scene" class="baseButton" text="FIM DA CENA" onClick="dispatch" preferredWidth="150" />
-        <Button id="end_day" class="dangerButton" text="FIM DO DIA" onClick="dispatch" preferredWidth="145" />
-        <Button id="undo" class="baseButton" text="DESFAZER" onClick="dispatch" preferredWidth="125" />
+        <Button id="end_turn" class="baseButton" text="FIM TURNO" onClick="dispatch" preferredWidth="130" />
+        <Button id="end_scene" class="baseButton" text="FIM CENA" onClick="dispatch" preferredWidth="130" />
+        <Button id="end_day" class="dangerButton" text="FIM DIA" onClick="dispatch" preferredWidth="125" />
+        <Button id="undo" class="baseButton" text="DESFAZER ÚLTIMA AÇÃO" onClick="dispatch" preferredWidth="205" />
+        <Button id="clear_dice" class="baseButton" text="LIMPAR DADOS" onClick="dispatch" preferredWidth="175" />
         <Panel class="focusCard" flexibleWidth="1"><Text id="last_result" text="PRONTO PARA CONJURAR" class="violet" alignment="MiddleLeft" /></Panel>
       </HorizontalLayout>
     </Panel>

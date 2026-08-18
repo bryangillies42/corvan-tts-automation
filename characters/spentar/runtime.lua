@@ -268,7 +268,8 @@ local function normalizeCharacterState(candidate)
         and deepCopy(casting.lastConfigurations) or {}
     -- Transações em voo não sobrevivem a reload: nenhum custo é confirmado sem resultado.
     normalized.casting.transaction = nil
-    normalized.casting.phase = casting.phase == "resolution" and "resolution" or "configure"
+    local persistentPhases = {configure=true, review=true, resolution=true}
+    normalized.casting.phase = persistentPhases[casting.phase] and casting.phase or "configure"
     normalized.effects = type(candidate.effects) == "table" and deepCopy(candidate.effects) or {}
     normalized.preferences.automaticResourceSpending = not (candidate.preferences
         and candidate.preferences.automaticResourceSpending == false)
@@ -276,6 +277,8 @@ local function normalizeCharacterState(candidate)
         and candidate.preferences.physicalDice == false)
     normalized.preferences.detailedChat = not (candidate.preferences
         and candidate.preferences.detailedChat == false)
+    normalized.undo = type(candidate.undo) == "table" and deepCopy(candidate.undo) or {}
+    while #normalized.undo > 20 do table.remove(normalized.undo, 1) end
     normalized.lastHandledEventId = candidate.lastHandledEventId
     return normalized
 end
@@ -353,6 +356,27 @@ end
 
 local formatPlan
 
+local function tableHasEntries(candidate)
+    if type(candidate) ~= "table" then return false end
+    for _ in pairs(candidate) do return true end
+    return false
+end
+
+local function formatPlanPreview(plan)
+    if type(plan) ~= "table" then return "RESOLUÇÃO GUIADA SEM DADOS" end
+    local parts = {}
+    for _, group in ipairs(plan.groups or {}) do
+        local part = tostring(integer(group.count, 0)) .. "d" .. tostring(integer(group.sides, 0))
+        if group.maximized then part = part .. " MAX" end
+        table.insert(parts, part)
+    end
+    local bonus = integer(plan.bonus, 0)
+    local formula = table.concat(parts, " + ")
+    if bonus > 0 then formula = formula .. (#parts > 0 and " + " or "") .. tostring(bonus) end
+    if bonus < 0 then formula = formula .. (#parts > 0 and " - " or "-") .. tostring(math.abs(bonus)) end
+    return formula ~= "" and formula or "RESOLUÇÃO GUIADA SEM DADOS"
+end
+
 local function render()
     if not CHARACTER or not state then return end
     local defenses = SpentarRules.calculateDefenses(CHARACTER, state)
@@ -372,7 +396,7 @@ local function render()
     safeSet("toggle_staff", "text", state.equipment.staffTwoHanded
         and "CAJADO\n2 MÃOS: SIM" or "CAJADO\n2 MÃOS: NÃO")
     safeSet("toggle_profanar", "text", state.scene.profanar
-        and "PROFANAR\nATIVO" or "PROFANAR\nATIVAR")
+        and "PROFANAR\nATIVO" or "PREPARAR\nPROFANAR")
     safeSet("undead_value", "text", state.summons.undeadCount)
     safeSet("ballistic_value", "text", state.summons.ballisticSpirits)
     safeSet("connection_value", "text", string.upper(state.scene.connectionMode)
@@ -393,18 +417,94 @@ local function render()
     local selectedCost = integer(selectedSpell.baseCost, 0)
         + (state.casting.spellId == "ballistic_spirit" and state.casting.upgradeLevel * 2 or 0)
     local selectedPlan = SpentarRules.damagePlan(CHARACTER, state, state.casting.spellId)
+    safeSet("cast_config_spell_name", "text", selectedSpell.name)
     safeSet("cast_spell_name", "text", selectedSpell.name)
-    safeSet("cast_cost", "text", tostring(selectedCost) .. " PM")
-    safeSet("cast_damage", "text", selectedPlan and formatPlan(selectedPlan, nil, 0) or "RESOLUÇÃO MANUAL")
+    safeSet("cast_cost", "text", "CUSTO: " .. tostring(selectedCost) .. " PM")
+    safeSet("cast_damage", "text", "EFEITO: " .. formatPlanPreview(selectedPlan))
     safeSet("cast_details", "text", "CD "
         .. tostring(SpentarRules.calculateSpellDifficulty(CHARACTER, state, state.casting.spellId))
-        .. " • " .. tostring(selectedSpell.summary or ""))
+        .. " • " .. tostring(selectedSpell.resistance or "SEM RESISTÊNCIA")
+        .. " • PROFANAR " .. (state.scene.profanar and "ATIVO" or "INATIVO")
+        .. "\n" .. tostring(selectedSpell.summary or ""))
     safeSet("cast_upgrade_value", "text", state.casting.upgradeLevel)
     safeSet("cast_targets_value", "text", state.casting.targets)
     safeSet("cast_souls_value", "text", state.casting.releasedSouls)
+    safeSet("cast_review_targets", "text", "ALVOS: " .. tostring(state.casting.targets))
+    safeSet("cast_review_souls", "text", "ALMAS: "
+        .. tostring(state.casting.releasedSouls) .. " DE " .. tostring(state.souls.stored))
+    safeSet("cast_spending_notice", "text", state.preferences.automaticResourceSpending
+        and "Ao confirmar, PM e almas serão consumidos em uma única transação. Uma falha restaura tudo."
+        or "Gasto automático desligado: o objeto não descontará PM. Almas liberadas continuam transacionais.")
     safeSet("resolution_failed_value", "text", state.casting.failed)
     safeSet("resolution_defeated_value", "text", state.casting.defeated)
-    safeSet("roll_cancel", "interactable", state.casting.transaction ~= nil and "true" or "false")
+    local phase = state.casting.phase
+    local phaseLabels = {
+        configure="ETAPA 1 DE 4 • CONFIGURE A CONJURAÇÃO",
+        review="ETAPA 2 DE 4 • REVISE CUSTO, ALMAS E EFEITOS",
+        rolling="ETAPA 3 DE 4 • AGUARDANDO OS DADOS",
+        resolution="ETAPA 4 DE 4 • RESOLVA AS CONSEQUÊNCIAS"
+    }
+    local rollingDiceCount = 0
+    if type(state.casting.transaction) == "table"
+        and type(state.casting.transaction.plan) == "table" then
+        for _, group in ipairs(state.casting.transaction.plan.groups or {}) do
+            if not group.maximized then
+                rollingDiceCount = rollingDiceCount + math.max(0, integer(group.count, 0))
+            end
+        end
+    end
+    safeSet("casting_step", "text", phaseLabels[phase] or phaseLabels.configure)
+    safeSet("rolling_status", "text", phase == "rolling"
+        and coreState.lastResult .. "\n" .. tostring(rollingDiceCount)
+            .. " DADOS FÍSICOS • AGUARDANDO ESTABILIZAÇÃO"
+            .. "\nRecursos serão restaurados se a rolagem falhar."
+        or "")
+    safeSet("resolution_summary", "text", phase == "resolution"
+        and selectedSpell.name .. "\n" .. coreState.lastResult
+            .. "\nInforme as consequências e conclua a resolução."
+        or "")
+    for _, candidate in ipairs({"configure", "review", "rolling", "resolution"}) do
+        safeSet("casting_" .. candidate .. "_panel", "active",
+            phase == candidate and "true" or "false")
+    end
+    safeSet("cast_review", "interactable", phase == "configure" and "true" or "false")
+    safeSet("cast_edit", "interactable", phase == "review" and "true" or "false")
+    safeSet("cast_confirm", "interactable", phase == "review" and "true" or "false")
+    local confirmText = selectedPlan and "CONFIRMAR E ROLAR"
+        or (type(selectedSpell.resistance) == "string" and "CONFIRMAR CONJURAÇÃO"
+            or "CONFIRMAR E APLICAR")
+    safeSet("cast_confirm", "text", confirmText)
+    safeSet("resolution_apply", "interactable", phase == "resolution" and "true" or "false")
+    safeSet("resolution_apply", "text", "APLICAR E CONCLUIR")
+    local configuring = phase == "configure"
+    for _, id in ipairs({"cast_upgrade_sub", "cast_upgrade_add", "cast_targets_sub",
+        "cast_targets_add", "cast_souls_sub", "cast_souls_add"}) do
+        safeSet(id, "interactable", configuring and "true" or "false")
+    end
+    local canSelectSpell = phase == "configure" or phase == "review"
+    for spellId in pairs(CHARACTER.spells) do
+        safeSet("cast_select_" .. spellId, "interactable", canSelectSpell and "true" or "false")
+    end
+    local rolling = state.casting.transaction ~= nil or phase == "rolling"
+    local canClearDice = rolling or tableHasEntries(coreState.ownedDice)
+    local mutableOutsideCasting = phase == "configure"
+    for _, id in ipairs({"resource_hp_sub", "resource_hp_add", "resource_mp_sub",
+        "resource_mp_add", "resource_temp_hp_sub", "resource_temp_hp_add",
+        "resource_temp_mp_sub", "resource_temp_mp_add", "toggle_staff",
+        "end_turn", "end_scene", "end_day"}) do
+        safeSet(id, "interactable", mutableOutsideCasting and "true" or "false")
+    end
+    safeSet("toggle_profanar", "interactable",
+        (mutableOutsideCasting and not state.scene.profanar) and "true" or "false")
+    safeSet("undead_roll", "interactable",
+        (mutableOutsideCasting and not state.summons.commandUsed) and "true" or "false")
+    safeSet("ballistic_roll", "interactable",
+        (mutableOutsideCasting and not state.summons.commandUsed) and "true" or "false")
+    safeSet("clear_dice", "text", rolling and "CANCELAR E LIMPAR" or "LIMPAR DADOS")
+    safeSet("clear_dice", "interactable", canClearDice and "true" or "false")
+    safeSet("undo", "text", "DESFAZER ÚLTIMA AÇÃO")
+    safeSet("undo", "interactable",
+        (mutableOutsideCasting and #state.undo > 0) and "true" or "false")
     safeSet("last_result", "text", coreState.lastResult)
     safeSet("offset_x_value", "text", string.format("%.1f", coreState.diceOffset.x))
     safeSet("offset_y_value", "text", string.format("%.1f", coreState.diceOffset.y))
@@ -418,6 +518,8 @@ local function render()
     safeSet("health_status", "text", coreState.healthStatus)
     for _, page in ipairs({"combat","casting","necromancy","sheet","settings"}) do
         safeSet("page_" .. page, "active", page == coreState.page and "true" or "false")
+        safeSet("nav_" .. page, "interactable",
+            (phase == "configure" and page ~= coreState.page) and "true" or "false")
     end
 end
 
@@ -480,8 +582,10 @@ local function finishRoll(transaction, result)
     while #state.undo > 20 do table.remove(state.undo, 1) end
     coreState.lastResult = transaction.plan.label .. ": " .. total
     state.casting.transaction = nil
-    state.casting.phase = transaction.plan.kind == "check" and "configure" or "resolution"
-    if transaction.plan.kind ~= "check" then coreState.page = "casting" end
+    local requiresResolution = transaction.plan.kind ~= "check"
+        and transaction.plan.kind ~= "direct"
+    state.casting.phase = requiresResolution and "resolution" or "configure"
+    if requiresResolution then coreState.page = "casting" end
     state.casting.failed = 0
     state.casting.defeated = 0
     local rich = "[FF6464]" .. RuntimeCore.chatSafeText(CHARACTER.shortName) .. "[-] • "
@@ -495,7 +599,11 @@ local function finishRoll(transaction, result)
 end
 
 local function rollbackRoll(transaction, reason)
-    if transaction and transaction.snapshot then restoreSnapshot(transaction.snapshot) end
+    if transaction and transaction.snapshot then
+        local previousUndo = state.undo
+        restoreSnapshot(transaction.snapshot)
+        state.undo = previousUndo
+    end
     coreState.lastResult = "ROLAGEM CANCELADA"
     privateError("Rolagem cancelada; recursos e almas foram restaurados. " .. tostring(reason or ""),
         transaction and transaction.playerColor or "White")
@@ -523,6 +631,9 @@ local function beginDamageRoll(plan, cost, playerColor)
     state.casting.transaction = transaction
     state.casting.phase = "rolling"
     coreState.lastResult = "ROLANDO • " .. tostring(plan.label)
+    -- A página e o estado de rolagem precisam aparecer antes de qualquer dado
+    -- ser criado; a transação persistida também permite rollback em save/load.
+    cacheAndRender()
     if state.preferences.physicalDice == false then
         local result = {groups={}, ownedGuids=coreState.ownedDice}
         for _, group in ipairs(plan.groups or {}) do
@@ -575,21 +686,58 @@ local function selectedSpellCost()
     return cost
 end
 
+local function validateSelectedCast(playerColor)
+    local spell = CHARACTER.spells[state.casting.spellId]
+    if not spell then
+        privateError("Selecione uma magia válida antes de continuar.", playerColor)
+        return false
+    end
+    if state.casting.releasedSouls > state.souls.stored then
+        privateError("A quantidade de almas liberadas não está mais disponível.", playerColor)
+        return false
+    end
+    local cost = selectedSpellCost()
+    if state.preferences.automaticResourceSpending
+        and state.resources.mp + state.resources.temporaryMp < cost then
+        privateError("PM insuficientes para esta configuração.", playerColor)
+        return false
+    end
+    local plan = SpentarRules.damagePlan(CHARACTER, state, state.casting.spellId)
+    if plan then
+        local diceCount = 0
+        for _, group in ipairs(plan.groups or {}) do
+            diceCount = diceCount + math.max(0, integer(group.count, 0))
+        end
+        if diceCount < 1 then
+            privateError("Esta configuração não possui dados para rolar.", playerColor)
+            return false
+        end
+    end
+    return true
+end
+
 local function beginSelectedCast(playerColor)
     local spell = CHARACTER.spells[state.casting.spellId]
     if not spell then return false end
-    if state.casting.phase ~= "configure" or state.casting.transaction ~= nil then
-        privateError("Conclua ou cancele a resolução atual antes de conjurar novamente.", playerColor)
+    if state.casting.phase ~= "review" or state.casting.transaction ~= nil then
+        privateError("Revise a configuração antes de confirmar a conjuração.", playerColor)
         return false
     end
+    if not validateSelectedCast(playerColor) then return false end
     if spell.automation == "toggle" and state.casting.spellId == "profane" then
-        if state.scene.profanar then return false end
+        if state.scene.profanar then
+            privateError("Profanar já está ativo nesta cena.", playerColor)
+            return false
+        end
         pushUndo()
         if state.preferences.automaticResourceSpending then
             local paid = SpentarRules.spendMp(state, selectedSpellCost())
             if not paid then table.remove(state.undo) privateError("PM insuficientes.", playerColor) return false end
         end
         state.scene.profanar = true
+        state.casting.phase = "configure"
+        state.casting.failed = 0
+        state.casting.defeated = 0
         coreState.lastResult = "PROFANAR ATIVO"
         cacheAndRender()
         return true
@@ -603,7 +751,7 @@ local function beginSelectedCast(playerColor)
         table.insert(state.undo, before)
         while #state.undo > 20 do table.remove(state.undo, 1) end
         state.effects.arcaneArmor = integer(spell.defenseBonus, 4)
-        state.casting.phase = "resolution"
+        state.casting.phase = "configure"
         state.casting.failed = 0
         state.casting.defeated = 0
         coreState.lastResult = spell.name .. ": +" .. state.effects.arcaneArmor .. " DEFESA"
@@ -623,7 +771,7 @@ local function beginSelectedCast(playerColor)
     table.insert(state.undo, before)
     while #state.undo > 20 do table.remove(state.undo, 1) end
     state.casting.sequence = state.casting.sequence + 1
-    state.casting.phase = "resolution"
+    state.casting.phase = type(spell.resistance) == "string" and "resolution" or "configure"
     state.casting.failed = 0
     state.casting.defeated = 0
     coreState.lastResult = spell.name .. ": RESOLUÇÃO MANUAL"
@@ -709,7 +857,10 @@ local function acceptState(payload)
         and characterState.casting.transaction or nil
     if type(pending) == "table" and type(pending.snapshot) == "table"
         and type(pending.snapshot.character) == "table" then
+        local previousUndo = type(characterState.undo) == "table"
+            and deepCopy(characterState.undo) or {}
         characterState = pending.snapshot.character
+        characterState.undo = previousUndo
         if type(pending.snapshot.core) == "table" then nextCore = pending.snapshot.core end
     end
     state = normalizeCharacterState(characterState)
@@ -739,6 +890,29 @@ local SKILL_IDS = {
     skill_survival="survival", skill_fight="fight", skill_archery="aim"
 }
 
+local function selectSpellForConfiguration(spellId)
+    if not CHARACTER.spells[spellId] then return false end
+    if state.casting.phase == "rolling" or state.casting.phase == "resolution"
+        or state.casting.transaction ~= nil then return false end
+    state.casting.spellId = spellId
+    local remembered = state.casting.lastConfigurations[spellId]
+    if type(remembered) == "table" then
+        state.casting.releasedSouls = boundedInteger(remembered.releasedSouls,
+            0, state.souls.stored, 0)
+        state.casting.targets = boundedInteger(remembered.targets, 1, 99, 1)
+        state.casting.upgrades = deepCopy(remembered.upgrades or {})
+        state.casting.upgradeLevel = boundedInteger(remembered.upgradeLevel, 0, 2, 0)
+    else
+        state.casting.releasedSouls = 0
+        state.casting.targets = 1
+        state.casting.upgrades = {}
+        state.casting.upgradeLevel = 0
+    end
+    state.casting.phase = "configure"
+    coreState.page = "casting"
+    return true
+end
+
 local function beginSkillCheck(skillId, playerColor)
     if state.casting.phase ~= "configure" or state.casting.transaction ~= nil then return false end
     local skill = CHARACTER.skills[skillId]
@@ -757,21 +931,39 @@ function handleUiEvent(payload)
         or payload.parentGuid ~= parentGuid or configurationError ~= nil then return false end
     local id = payload.id
     if type(id) ~= "string" then return false end
-    if state.casting.transaction ~= nil and not NAVIGATION[id]
-        and id ~= "clear_dice" and id ~= "roll_cancel" then
+    if state.casting.transaction ~= nil and id ~= "nav_casting" and id ~= "clear_dice" then
         privateError("Aguarde a conclusão dos dados antes de alterar o estado.", payload.playerColor)
+        return false
+    end
+    local phase = state.casting.phase
+    local selectingSpell = string.match(id, "^cast_select_") ~= nil
+    if phase == "review" and not selectingSpell and id ~= "cast_edit"
+        and id ~= "cast_confirm" and id ~= "clear_dice" then
+        privateError("Confirme ou altere a conjuração revisada antes de usar outra ação.",
+            payload.playerColor)
+        return false
+    end
+    if phase == "resolution" and not string.match(id, "^resolution_")
+        and id ~= "clear_dice" then
+        privateError("Conclua a resolução atual antes de usar outra ação.",
+            payload.playerColor)
         return false
     end
     if payload.eventId ~= nil and state.lastHandledEventId == payload.eventId then return false end
     if payload.eventId ~= nil then state.lastHandledEventId = payload.eventId end
     if NAVIGATION[id] then
+        if state.casting.phase == "rolling" and NAVIGATION[id] ~= "casting" then
+            privateError("A rolagem está em andamento. Cancele antes de sair da Conjuração.",
+                payload.playerColor)
+            return false
+        end
         coreState.page = NAVIGATION[id]
     elseif SKILL_IDS[id] then
         return beginSkillCheck(SKILL_IDS[id], payload.playerColor)
     elseif id == "toggle_staff" then
         pushUndo(); state.equipment.staffTwoHanded = not state.equipment.staffTwoHanded
     elseif id == "toggle_profanar" then
-        pushUndo(); state.scene.profanar = not state.scene.profanar
+        if state.scene.profanar or not selectSpellForConfiguration("profane") then return false end
     elseif id == "souls_add" or id == "souls_sub" then
         pushUndo(); state.souls.stored = boundedInteger(state.souls.stored
             + (id == "souls_add" and 1 or -1), 0, CHARACTER.resources.souls.max, 0)
@@ -785,25 +977,17 @@ function handleUiEvent(payload)
         local amount = boundedInteger(payload.value, 1, 999, 1)
         if not key or not adjustResource(key, operation == "add" and amount or -amount) then return false end
     elseif string.match(id, "^cast_select_") then
-        if state.casting.phase ~= "configure" then return false end
         local spellId = string.sub(id, #"cast_select_" + 1)
-        if not CHARACTER.spells[spellId] then return false end
-        state.casting.spellId = spellId
-        local remembered = state.casting.lastConfigurations[spellId]
-        if type(remembered) == "table" then
-            state.casting.releasedSouls = boundedInteger(remembered.releasedSouls, 0, state.souls.stored, 0)
-            state.casting.targets = boundedInteger(remembered.targets, 1, 99, 1)
-            state.casting.upgrades = deepCopy(remembered.upgrades or {})
-            state.casting.upgradeLevel = boundedInteger(remembered.upgradeLevel, 0, 2, 0)
-        end
-        state.casting.phase = "configure"
+        if not selectSpellForConfiguration(spellId) then return false end
     elseif id == "cast_upgrade_add" or id == "cast_upgrade_sub" then
+        if state.casting.phase ~= "configure" then return false end
         if state.casting.spellId ~= "ballistic_spirit" then return false end
         local nextLevel = boundedInteger(state.casting.upgradeLevel
             + (id == "cast_upgrade_add" and 1 or -1), 0, 2, 0)
         if nextLevel == state.casting.upgradeLevel then return false end
         state.casting.upgradeLevel = nextLevel
     elseif id == "cast_targets_add" or id == "cast_targets_sub" then
+        if state.casting.phase ~= "configure" then return false end
         local spell = CHARACTER.spells[state.casting.spellId]
         local maximum = integer(spell.maximumTargets, 20)
         local nextTargets = boundedInteger(state.casting.targets
@@ -813,32 +997,32 @@ function handleUiEvent(payload)
         state.casting.failed = math.min(state.casting.failed, nextTargets)
         state.casting.defeated = math.min(state.casting.defeated, nextTargets)
     elseif id == "cast_souls_add" or id == "cast_souls_sub" then
+        if state.casting.phase ~= "configure" then return false end
         local nextSouls = boundedInteger(state.casting.releasedSouls
             + (id == "cast_souls_add" and 1 or -1), 0, state.souls.stored, 0)
         if nextSouls == state.casting.releasedSouls then return false end
         state.casting.releasedSouls = nextSouls
-    elseif id == "cast_configure" then
-        if state.casting.phase ~= "configure" then return false end
+    elseif id == "cast_review" then
+        if state.casting.phase ~= "configure" or not validateSelectedCast(payload.playerColor) then
+            return false
+        end
+        state.casting.phase = "review"
+    elseif id == "cast_edit" then
+        if state.casting.phase ~= "review" then return false end
         state.casting.phase = "configure"
     elseif id == "quick_arcane_bolt" or id == "quick_inflict_wounds"
         or id == "quick_animate_dead" then
-        if state.casting.phase ~= "configure" then return false end
         local quickSpells = {quick_arcane_bolt="arcane_bolt",
             quick_inflict_wounds="inflict_wounds", quick_animate_dead="animate_dead"}
-        state.casting.spellId = quickSpells[id]
-        state.casting.phase = "configure"
-        coreState.page = "casting"
+        if not selectSpellForConfiguration(quickSpells[id]) then return false end
+    elseif id == "cast_confirm" then
         return beginSelectedCast(payload.playerColor)
-    elseif id == "cast_now" or id == "cast_confirm" then
-        return beginSelectedCast(payload.playerColor)
-    elseif id == "roll_cancel" then
-        local host = createDiceHost()
-        if state.casting.transaction == nil or not host or type(host.cancel) ~= "function" then return false end
-        return host.cancel("rolagem cancelada pelo jogador")
     elseif id == "resolution_failed_add" or id == "resolution_failed_sub" then
+        if state.casting.phase ~= "resolution" then return false end
         state.casting.failed = boundedInteger(state.casting.failed
             + (id == "resolution_failed_add" and 1 or -1), 0, state.casting.targets, 0)
     elseif id == "resolution_defeated_add" or id == "resolution_defeated_sub" then
+        if state.casting.phase ~= "resolution" then return false end
         state.casting.defeated = boundedInteger(state.casting.defeated
             + (id == "resolution_defeated_add" and 1 or -1), 0, state.casting.targets, 0)
     elseif id == "resolution_apply" then
@@ -868,25 +1052,29 @@ function handleUiEvent(payload)
         pushUndo(); state.summons.undeadCount = boundedInteger(state.summons.undeadCount
             + (id == "undead_add" and 1 or -1), 0, 6, 0)
     elseif id == "undead_roll" then
+        if state.casting.phase ~= "configure" then return false end
         if state.summons.commandUsed then
             privateError("O comando de invocação já foi usado nesta rodada.", payload.playerColor)
             return false
         end
-        local started = beginDamageRoll(SpentarRules.undeadDamagePlan(CHARACTER, state,
-            state.summons.undeadCount), 0, payload.playerColor)
+        local plan = SpentarRules.undeadDamagePlan(CHARACTER, state,
+            state.summons.undeadCount)
+        plan.kind = "direct"
+        local started = beginDamageRoll(plan, 0, payload.playerColor)
         if started then state.summons.commandUsed = true; cacheAndRender() end
         return started
     elseif id == "ballistic_add" or id == "ballistic_sub" then
         pushUndo(); state.summons.ballisticSpirits = boundedInteger(state.summons.ballisticSpirits
             + (id == "ballistic_add" and 1 or -1), 1, 3, 1)
     elseif id == "ballistic_roll" then
+        if state.casting.phase ~= "configure" then return false end
         if state.summons.commandUsed then
             privateError("O comando de invocação já foi usado nesta rodada.", payload.playerColor)
             return false
         end
         local plan = {label="Espíritos Balísticos", groups={{id="ballistic",
             count=state.summons.ballisticSpirits, sides=6, maximized=false}},
-            bonus=state.summons.ballisticSpirits}
+            bonus=state.summons.ballisticSpirits, kind="direct"}
         local started = beginDamageRoll(plan, 0, payload.playerColor)
         if started then state.summons.commandUsed = true; cacheAndRender() end
         return started
@@ -945,6 +1133,7 @@ function handleUiEvent(payload)
             or "RUNTIME: ERRO • " .. tostring(health.error or "desconhecido")
         coreState.lastResult = coreState.healthStatus
     elseif id == "undo" then
+        if state.casting.phase == "rolling" or state.casting.transaction ~= nil then return false end
         local saved = table.remove(state.undo)
         if not saved then return false end
         local remaining = state.undo
