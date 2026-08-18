@@ -1,71 +1,149 @@
-# Console de Combate do Corvan
+# Saved Objects multi-personagem para Tabletop Simulator
 
-Painel físico para o Tabletop Simulator que automatiza os ataques, danos, recursos, poderes e perícias de **Corvan Duras** em Tormenta 20. O objeto é importado uma vez e permanece movível e escalável na mesa; novas versões da lógica e da interface podem ser aplicadas pelo botão **Refresh** sem reimportar o painel.
+Este repositório contém os Saved Objects, runtimes e ferramentas de desenvolvimento para painéis de personagens no **Tabletop Simulator**. A fundação da v0.2.1 separa identidade, estado, interface, regras, artefatos e releases por personagem, permitindo que vários objetos coexistam na mesma mesa e no mesmo repositório sem compartilharem atualização ou estado por acidente.
+
+O primeiro produto é o [Console do Corvan](characters/corvan/README.md). O próximo personagem planejado é o [Spentar](characters/spentar/README.md), que permanece apenas como scaffold até que sua ficha e referências sejam fornecidas.
 
 ## Requisitos
 
 - Tabletop Simulator com scripting habilitado.
-- Node.js 20 ou mais recente apenas para desenvolver e gerar os artefatos.
-- Acesso do host ao GitHub para baixar assets e usar o Refresh. O runtime incluído no objeto continua funcionando offline.
+- Node.js 20 ou mais recente para desenvolvimento e geração dos artefatos.
+- PowerShell 7 para o smoke opcional do MoonSharp e para a API local do TTS.
+- Acesso do host ao GitHub para usar **Refresh**. O Saved Object leva um runtime seed para continuar funcionando sem rede.
 
-O projeto não possui dependências npm. O PDF da ficha e as imagens de referência não fazem parte do repositório.
+O repositório não possui dependências npm de produção. PDFs de fichas e imagens de referência não são incluídos até serem aprovados para o personagem correspondente.
+
+## Organização
+
+```text
+characters/
+  registry.json          identidade, versão, canais e política de publicação
+  corvan/                fontes do Corvan e documentação específica
+  spentar/               scaffold não publicável
+assets/                  espelho imutável das URLs legadas do Corvan v0.2.0
+shared/                  bootstrap, core e contratos comuns
+templates/character/     ponto de partida para um novo personagem
+fixtures/characters/     personagens técnicos usados somente nos testes
+scripts/                 build, smoke e ferramentas de desenvolvimento
+tests/                   testes de contrato, build e compatibilidade
+dist/<characterId>/      artefatos gerados; não é fonte manual
+```
+
+`characters/registry.json` é a fonte de identidade do monorepo. Cada personagem tem um `id` slug imutável em kebab-case, nome de exibição, versão SemVer, status, diretórios, nomes de artefato, dimensões de UI, marker, versão mínima do bootstrap e políticas de release. O `package.json` descreve as ferramentas do monorepo; ele não decide a versão ou o canal de um produto.
+
+Um runtime final é estático: não usa `load`, `require` nem código Lua dinâmico. O bootstrap e o core compartilhados coordenam ciclo de vida, identidade, handshake, chat seguro, posse por GUID, cache, persistência, health check e rollback. O core expõe ao adaptador APIs fechadas para UI, chat, dados físicos, estado, undo e renderização; cada adaptador implementa seu schema, migrações, eventos, regras e a mecânica específica que usa essas APIs.
+
+O estado persistido é identificado pelo personagem:
+
+```text
+characterId
+runtimeVersion
+core
+character
+```
+
+Um estado de outro personagem é recusado. Estados legados sem `characterId` só podem passar pelo migrador explícito do Corvan. A identidade também aparece no manifesto, no health check, no `runtimeReady`, nas GM Notes do painel/helper e nos metadados usados para rastrear os dados físicos.
 
 ## Desenvolvimento
 
 ```powershell
 npm test
 npm run build
+npm run build:character -- --character corvan
+npm run build:fixture
+npm run character:new -- --id novo-personagem --name "Nome de Exibição"
 npm run test:lua
 ```
 
-`test:lua` é o smoke opcional de Windows (PowerShell 7): usa o MoonSharp instalado junto do próprio TTS para compilar runtime/bootstrap, executar as fórmulas centrais e simular `onLoad`, persistência de cópias, timeout de rede, update e rollback.
+O build conjunto compila todos os personagens ativos em `dist/<characterId>/`, inclusive enquanto `productionEnabled` estiver desligado para testes. O build individual permite validar apenas um perfil; a permissão de produção é exigida exclusivamente pelo resolvedor de release. `build:fixture` compila fixtures técnicas, mas elas não podem ser selecionadas pelo workflow. `character:new` valida o template, monta o scaffold de forma recuperável e o registra como não publicável; falha se o id ou o diretório já existirem.
 
-O build valida `src/character.json` e `src/ui.xml`, incorpora ambos ao runtime Lua e inclui uma cópia offline do runtime no bootstrap. Os três artefatos determinísticos são escritos em `dist/`:
+O validador comum verifica identidade, SemVer, tag, paths internos, assets, XML estrutural e colisões de nomes/URLs/GUIDs. O perfil escolhe `uiContract: panel-board` quando precisa da moldura e geometria rígidas do Corvan, ou `uiContract: generic` para layouts sem overlay e com estrutura própria. IDs e eventos continuam declarados por personagem.
 
-- `corvan-runtime.lua`: lógica, interface e dados atualizáveis;
-- `manifest.json`: metadados, URL, tamanho e SHA-256 do runtime;
-- `Corvan_Duras_Console.json`: Saved Object pronto para importar no TTS.
+`test:lua` é o gate local obrigatório antes de uma release: usa no Windows o MoonSharp fornecido pelo TTS para compilar os runtimes/bootstrap, executar fórmulas, simular callbacks, persistência, Refresh, timeout de rede, integridade e rollback. Ele também executa o bootstrap congelado do Saved Object Corvan v0.2.0 contra os artefatos atuais. O CI hospedado não o executa porque a DLL vem da instalação local do TTS.
 
-Para identificar uma compilação sem alterar os fontes, defina `CORVAN_COMMIT_SHA` antes do build. Sem essa variável, o manifesto usa um SHA nulo de 40 caracteres como marcador determinístico; releases recebem automaticamente o SHA real da tag.
-O workflow de release também descobre a tag estável anterior e a registra em `previousVersion` (na primeira release, o valor é `null`).
+## Artefatos e compatibilidade
 
-Com uma mesa aberta e a API de editor externo do TTS disponível, `scripts/tts-dev-api.ps1` permite listar os objetos do Corvan ou executar uma inspeção Lua por GUID. O script é apenas uma ferramenta de desenvolvimento e não integra o Saved Object publicado.
+O Corvan mantém os nomes legados para não quebrar URLs e instalações existentes:
 
-## Importar uma única vez
+```text
+dist/corvan/corvan-runtime.lua
+dist/corvan/manifest.json
+dist/corvan/Corvan_Duras_Console.json
+```
 
-1. Baixe `Corvan_Duras_Console.json` na [release mais recente](https://github.com/bryangillies42/corvan-tts-automation/releases/latest).
-2. Coloque o arquivo na pasta de Saved Objects do Tabletop Simulator (`Documents/My Games/Tabletop Simulator/Saves/Saved Objects` no Windows).
-3. Abra a mesa, acesse **Objects > Saved Objects** e posicione **Corvan Duras Console**.
-4. Mova, gire e redimensione o objeto como desejar. Para manter painel, texto e hitboxes alinhados, aplique o mesmo fator de escala aos três eixos, preservando a proporção inicial. Esse mesmo objeto será preservado nas atualizações.
+Os dois arquivos em `assets/` permanecem como espelho byte a byte das imagens em `characters/corvan/assets/`. Eles não são a fonte do build novo; existem para que as URLs raw incorporadas em Saved Objects v0.2.0 continuem válidas.
 
-O painel oferece PV/PM ajustáveis por magnitude (digite um valor e use `−` ou `+`), Defesa/RD, seleção de Espada Longa ou Escudo Pesado, rolagens físicas de ataque/dano/crítico, poderes, perícias, fim de turno/cena, desfazer e calibração da posição dos dados. Em **Configurações**, o toggle de gasto automático permite decidir se os poderes devem validar e descontar PV/PM; desligá-lo não interfere nos ajustes manuais. As mensagens de resultado aparecem de forma curta no chat. Uma nova rolagem remove automaticamente os dados anteriores do próprio painel; o botão **Limpar Dados** permite removê-los manualmente sem alterar o resultado ou o estado do personagem.
+Para novos personagens, os nomes são inequívocos:
+
+```text
+<id>-runtime.lua
+<id>-manifest.json
+<Nome>_Console.json
+```
+
+O manifesto continua em `schemaVersion: 1` e acrescenta, de forma compatível, `characterId`, `releaseTag`, `version`, `minBootstrapVersion`, `commitSha`, `runtime` e `previousVersion`. O bootstrap baixa e verifica o manifesto e o runtime antes de aplicar qualquer alteração; se uma etapa falhar, o runtime e o estado anteriores continuam ativos.
+
+Um Saved Object Corvan v0.2.0 deve poder atualizar para v0.2.1 pelo **Refresh**, sem reimportação e sem perder PV/PM gastos, efeitos, preferência, posição, rotação, escala ou GUIDs. O objetivo da v0.2.1 é preparar a separação multi-personagem; ela não muda as regras do Corvan.
+
+## Criar um personagem
+
+1. Execute `npm run character:new -- --id <id> --name "<nome>"`.
+2. Preencha o perfil e a entrada correspondente no registry, mantendo `productionEnabled: false` enquanto a ficha, layout, arte, regras e migrações não estiverem revisados.
+3. Implemente o adaptador usando somente as APIs do core e defina o schema/migrador do próprio personagem.
+4. Adicione uma fixture ou testes de contrato para layout, estado, eventos, isolamento e rollback.
+5. Rode os testes, o build individual, o build conjunto e o smoke Lua. Valide manualmente dois painéis na mesma mesa.
+6. Só depois de uma revisão real da ficha ative `productionEnabled` e publique a primeira tag do personagem.
+
+O personagem não deve copiar números, poderes, regras, nomes ou assets do Corvan como placeholders. Quando ainda não houver ficha, mantenha somente o scaffold documental do [Spentar](characters/spentar/README.md).
+
+## Fixtures
+
+`fixtures/characters/` contém personagens técnicos que exercitam um layout diferente, eventos diferentes e cálculos que não existem no Corvan. Fixtures servem para testes determinísticos, não aparecem no registry publicável e não podem gerar uma GitHub Release. Uma fixture deve provar que dois painéis não compartilham estado, helper, dados físicos, limpeza ou atualização.
 
 ## Refresh e releases
 
-O bootstrap embutido é estável. Ao acionar **Refresh**, ele consulta o manifesto da release estável mais recente, baixa todo o runtime antes de aplicá-lo e mantém o runtime anterior para rollback. A prancha visível não é recarregada, portanto GUID, posição, rotação e escala permanecem intactos.
+As tags são independentes por personagem:
 
-A partir da v0.1.7, a moldura alinhada ao painel é carregada como uma camada visual da UI. Isso permite atualizar painéis legados com o próprio **Refresh**, sem substituir o JSON nem alterar sua textura física, e evita divergências causadas pelo cache de texturas do TTS em importações novas. Se a imagem remota da camada não puder ser carregada, a textura física continua visível como fallback.
+| Produto | Tag | Descoberta do Refresh | Latest global |
+| --- | --- | --- | --- |
+| Corvan | `vX.Y.Z` | `/releases/latest`, contrato legado | sim, quando estável |
+| Outro personagem | `<id>-vX.Y.Z` | lista paginada de releases filtrada pela tag completa | não |
+| Pre-release | mesma forma, com prerelease | ignorada por instalações estáveis | não |
 
-Na v0.1.8, a ficha passa ao nível 6 com PV 69, PM 18, Defesa 22, Espada +11 (ameaça 18–20), Escudo +10 e perícias atualizadas. **Duelista Escudado** eleva a RD de 8 para 10 durante Duelo. Atacar com o escudo suspende temporariamente seus +2 de Defesa e os +2 de Solidez nas resistências até o próximo turno; por isso o antigo botão de fim de turno aparece como **Início do Turno**, deixando claro quando esses efeitos são renovados. Provocação permanece ativa até o fim da cena, e Torre Armada foi removida por não constar na ficha atual. Durante o Refresh, PV/PM que estavam no máximo anterior avançam para o novo máximo; ferimentos e PM já gastos preservam seus valores atuais.
+O workflow resolve a tag no registry antes de compilar. Tags desconhecidas, perfis desabilitados, fixtures, versões incompatíveis ou tags ambíguas falham antes da publicação. Para cada personagem, `previousVersion` considera somente a release estável anterior daquele personagem. A release é criada como draft, recebe exatamente runtime, manifesto e Saved Object, é baixada e comparada byte a byte ainda como draft, e só então é publicada. O `Latest` global continua apontando para o Corvan legado; releases estáveis de outros personagens usam `--latest=false`.
 
-Na v0.1.9, as rolagens no chat ganham uma hierarquia visual de alto contraste: Corvan em vermelho, ação em verde, resultado em azul e cálculo em amarelo. Os rótulos explícitos **RESULTADO** e **CÁLCULO** substituem o hífen ambíguo, facilitando a leitura rápida mesmo durante uma cena movimentada.
+O bootstrap novo consulta até dez páginas de 100 releases, ignora draft/prerelease e escolhe a maior versão SemVer da tag inteira do próprio personagem. Se a última página estiver cheia, a busca falha de forma segura para não escolher uma lista incompleta. Rate limit, rede, identidade, tag, URL, tamanho, SHA, marker ou health check inválidos preservam o runtime anterior.
 
-Uma tag `v*` que corresponda à versão de `package.json` executa testes, gera os artefatos com o SHA do commit, anexa tudo a um draft e só então publica a GitHub Release. A imutabilidade de releases deve estar habilitada nas configurações do repositório; uma correção exige uma nova versão SemVer.
+A imutabilidade de releases deve continuar habilitada. Uma correção de uma release publicada exige uma nova versão SemVer; não se substituem assets de uma release imutável.
 
-## Limitações do TTS
+## Ferramenta local do TTS
 
-- Scripts e `WebRequest` são executados pelo host da mesa; ele precisa permitir scripting e conseguir acessar `api.github.com`, `github.com` e `raw.githubusercontent.com`.
-- O repositório e suas releases precisam permanecer públicos para que o TTS faça os downloads sem credenciais.
-- Sem internet, o painel usa normalmente o runtime seed incluído, mas não consegue procurar atualizações nem carregar um asset ainda ausente do cache local.
-- Firewalls, proxies, indisponibilidade do GitHub ou limites da API podem fazer o Refresh falhar. Nesse caso, a versão ativa é preservada.
-- O estado e os controles são compartilhados pela mesa; esta primeira versão é específica para Corvan, não um importador genérico de fichas T20.
+Com uma mesa aberta e a API de editor externo habilitada, `scripts/tts-dev-api.ps1` preserva as ações `list` e `exec`:
 
-## Estrutura
+```powershell
+# Lista todos os Saved Objects gerenciados por GM Notes/characterId
+pwsh -File scripts/tts-dev-api.ps1 -Action list
 
-```text
-src/       bootstrap estável, runtime, XML e dados do personagem
-scripts/   build zero-dependency em Node.js
-tests/     testes do bundler e dos artefatos
-assets/    arte do painel hospedada publicamente
-dist/      artefatos gerados (não versionados)
+# Lista somente um personagem
+pwsh -File scripts/tts-dev-api.ps1 -Action list -CharacterId corvan
+
+# Executa uma inspeção Lua por GUID
+pwsh -File scripts/tts-dev-api.ps1 -Action exec -Guid ABC123 -Lua 'return getBootstrapInfo()'
 ```
+
+A listagem não depende do nome visível do objeto. Ela lê `characterId` e os metadados das GM Notes; objetos legados do projeto continuam descobríveis pelo identificador do projeto, sem filtro textual por “Corvan”. A ferramenta é somente de desenvolvimento e não é integrada ao Saved Object publicado.
+
+## Documentação específica
+
+- [Corvan — produto legado e comportamento](characters/corvan/README.md)
+- [Spentar — scaffold e checklist](characters/spentar/README.md)
+- [Roteiro manual multi-personagem da v0.2.1](docs/testing/multi-character-v0.2.1.md)
+
+## Limitações
+
+- O host do TTS executa scripts e `WebRequest`; é necessário permitir scripting e acesso a `api.github.com`, `github.com` e `raw.githubusercontent.com`.
+- O repositório e suas releases precisam ser públicos para que o Refresh baixe assets sem credenciais.
+- Sem internet, o objeto usa o runtime seed e não consegue procurar uma atualização ou baixar um asset ausente do cache.
+- Firewall, proxy, indisponibilidade do GitHub ou rate limit podem fazer o Refresh falhar; o runtime atual é preservado.
+- O TTS compartilha parte do ambiente de scripting da mesa. O isolamento por `characterId`, GUID e GM Notes é obrigatório, mas não substitui testar dois objetos reais juntos.
+- A v0.2.1 não é um importador genérico de fichas nem um motor universal de Tormenta 20. Cada personagem continua tendo regras, estado, layout e migrações próprias.

@@ -11,6 +11,8 @@ local ROLL_TIMEOUT_SECONDS = 15
 local SPAWN_TIMEOUT_SECONDS = 4
 local DICE_STABLE_FRAMES = 12
 local DICE_LAUNCH_DELAY_FRAMES = 3
+local DICE_VERTICAL_SPEED_MIN = 13.5
+local DICE_VERTICAL_SPEED_MAX = 18.5
 local LEGACY_DICE_OFFSET = {x = 0, y = 2.5, z = -5}
 local function chatColor()
     -- Use the positional Color table required by the TTS message API. Named
@@ -22,84 +24,84 @@ local function errorColor()
     return {0.95, 0.36, 0.30}
 end
 
-local function deepCopy(value, seen)
-    if type(value) ~= "table" then return value end
-    seen = seen or {}
-    if seen[value] then return seen[value] end
-    local result = {}
-    seen[value] = result
-    for key, item in pairs(value) do
-        result[deepCopy(key, seen)] = deepCopy(item, seen)
-    end
-    return result
-end
-
-local function finiteNumber(value, fallback)
-    local number = tonumber(value)
-    if number == nil or number ~= number or number == math.huge or number == -math.huge then
-        return fallback
-    end
-    return number
-end
-
-local function clamp(value, minimum, maximum)
-    value = finiteNumber(value, minimum)
-    if value < minimum then return minimum end
-    if value > maximum then return maximum end
-    return value
-end
+local RuntimeCore = CharacterRuntimeCore
+local deepCopy = RuntimeCore.deepCopy
+local finiteNumber = RuntimeCore.finiteNumber
+local clamp = RuntimeCore.clamp
 
 local DEFAULT_CHARACTER = {
     schemaVersion = 1,
-    version = "0.1.9",
+    id = "corvan",
+    version = "0.2.1",
     name = "Corvan Duras",
     shortName = "Corvan",
-    resources = {hp = {max = 69}, mp = {max = 18}},
-    defense = 22,
+    resources = {hp = {max = 78}, mp = {max = 21}},
+    defense = 24,
     damageReduction = 8,
     weapons = {
         sword = {
-            name = "Espada Longa", chatName = "Espada", attack = 11,
+            name = "Espada Longa", chatName = "Espada", attack = 13,
             damage = {count = 1, sides = 8, bonus = 5},
             critical = {min = 18, multiplier = 2}
         },
         shield = {
-            name = "Escudo Pesado", chatName = "Escudo", attack = 10, defenseModifier = 2,
+            name = "Escudo Pesado", chatName = "Escudo", attack = 12, defenseModifier = 4,
             damage = {count = 1, sides = 6, bonus = 5},
             critical = {min = 20, multiplier = 2}
         }
     },
     skills = {
         initiative = {name = "Iniciativa", modifier = 3},
-        fight = {name = "Luta", modifier = 10},
+        fight = {name = "Luta", modifier = 12},
         intimidation = {name = "Intimidação", modifier = 6},
-        perception = {name = "Percepção", modifier = 6},
-        fortitude = {name = "Fortitude", modifier = 11, resistance = true},
-        reflex = {name = "Reflexos", modifier = 5, resistance = true},
-        will = {name = "Vontade", modifier = 6, resistance = true}
+        perception = {name = "Percepção", modifier = 8},
+        fortitude = {name = "Fortitude", modifier = 15, resistance = true},
+        reflex = {name = "Reflexos", modifier = 7, resistance = true},
+        will = {name = "Vontade", modifier = 8, resistance = true},
+        riding = {name = "Cavalgar", modifier = 7},
+        diplomacy = {name = "Diplomacia", modifier = 10},
+        warfare = {name = "Guerra", modifier = 8},
+        aim = {name = "Pontaria", modifier = 7}
     },
     powers = {
         combatDefensive = {cost = 0, attackModifier = -2, defenseModifier = 5},
-        duel = {cost = 2, attackModifier = 2, damageModifier = 2},
+        duel = {
+            cost = 2, upgradeCost = 1,
+            attackModifier = 2, damageModifier = 2,
+            upgradedAttackModifier = 3, upgradedDamageModifier = 3
+        },
         baluarte = {
-            cost = 1, upgradeCost = 1,
+            cost = 1, upgradeCost = 1, sharedCost = 2,
             defenseModifier = 2, resistanceModifier = 2,
             upgradedDefenseModifier = 4, upgradedResistanceModifier = 4
         },
         provocation = {cost = 2, willDifficulty = 16},
-        solidity = {resistanceModifier = 2},
-        duelistShielded = {damageReduction = 2}
+        solidity = {resistanceModifier = 4},
+        duelistShielded = {damageReduction = 2, upgradedDamageReduction = 3},
+        weaponAndShieldStyle = {shieldDefenseModifier = 4}
     },
     diceOffset = {x = 0, y = 3.2, z = 0}
 }
 
+local EXPECTED_CHARACTER_ID = "corvan"
+local EXPECTED_RUNTIME_VERSION = "0.2.1"
 local characterLoaded = false
+local configurationError = nil
 local function decodeCharacter()
     if type(JSON) ~= "table" or type(JSON.decode) ~= "function" then
+        configurationError = "JSON.decode indisponível ao carregar a configuração do Corvan."
         return deepCopy(DEFAULT_CHARACTER)
     end
     local ok, decoded = pcall(function() return JSON.decode(CHARACTER_JSON) end)
-    if not ok or type(decoded) ~= "table" or type(decoded.weapons) ~= "table" then
+    if not ok or type(decoded) ~= "table" then
+        configurationError = "character.json do Corvan é inválido."
+        return deepCopy(DEFAULT_CHARACTER)
+    end
+    if decoded.id ~= EXPECTED_CHARACTER_ID
+        or type(decoded.weapons) ~= "table"
+        or type(decoded.resources) ~= "table"
+        or type(decoded.powers) ~= "table" then
+        configurationError = "character.json não corresponde ao contrato do Corvan."
         return deepCopy(DEFAULT_CHARACTER)
     end
     characterLoaded = true
@@ -107,20 +109,48 @@ local function decodeCharacter()
 end
 
 local CHARACTER = decodeCharacter()
+local CHARACTER_ID = EXPECTED_CHARACTER_ID
+local CHARACTER_NAME = tostring(CHARACTER.shortName or CHARACTER.name or CHARACTER_ID)
+local CORE_CONFIG = {
+    characterId = CHARACTER_ID,
+    runtimeVersion = CHARACTER.version,
+    allowLegacyIdentity = CHARACTER_ID == "corvan",
+    project = "corvan-tts-automation",
+    legacyProject = CHARACTER_ID == "corvan" and "corvan-tts-automation" or nil
+}
+local AdapterApi = RuntimeCore.createRuntimeApi(CORE_CONFIG)
 local parentGuid = nil
+local legacyParentBinding = false
 
 -- Funções puras expostas para um harness Lua sem depender das APIs do TTS.
 CorvanRules = {}
 CorvanRules.clamp = clamp
+
+local function duelModifier(character, currentState, upgradedField, baseField, powerKey)
+    local active = currentState.effects and currentState.effects.duel
+    local power = character.powers[powerKey or "duel"] or {}
+    if active == true then return finiteNumber(power[baseField], 0) end
+    local value = finiteNumber(active, 0)
+    local upgraded = finiteNumber(power[upgradedField], 3)
+    local base = finiteNumber(power[baseField], 2)
+    if value >= upgraded then return upgraded end
+    if value >= base then return base end
+    return 0
+end
+
+local function randomRange(minimum, maximum, sample)
+    sample = finiteNumber(sample, nil)
+    if sample == nil then sample = math.random() end
+    return minimum + (maximum - minimum) * clamp(sample, 0, 1)
+end
 
 function CorvanRules.calculateAttackModifier(character, currentState, weaponKey)
     local weapon = character.weapons[weaponKey]
     if not weapon then return 0 end
     local result = finiteNumber(weapon.attack, 0)
     local effects = currentState.effects or {}
-    if effects.duel then
-        result = result + finiteNumber(character.powers.duel.attackModifier, 0)
-    end
+    result = result + duelModifier(character, currentState,
+        "upgradedAttackModifier", "attackModifier")
     if effects.combatDefensiveArmed then
         result = result + finiteNumber(character.powers.combatDefensive.attackModifier, 0)
     end
@@ -168,9 +198,8 @@ end
 
 function CorvanRules.calculateDamageReduction(character, currentState)
     local result = finiteNumber(character.damageReduction, 0)
-    if currentState.effects and currentState.effects.duel then
-        result = result + finiteNumber(character.powers.duelistShielded.damageReduction, 0)
-    end
+    result = result + duelModifier(character, currentState,
+        "upgradedDamageReduction", "damageReduction", "duelistShielded")
     return result
 end
 
@@ -184,9 +213,8 @@ function CorvanRules.calculateDamageSpec(character, currentState, weaponKey, cri
     end
     local bonus = finiteNumber(weapon.damage.bonus, 0)
     local effects = currentState.effects or {}
-    if effects.duel then
-        bonus = bonus + finiteNumber(character.powers.duel.damageModifier, 0)
-    end
+    bonus = bonus + duelModifier(character, currentState,
+        "upgradedDamageModifier", "damageModifier")
     return {count = count, sides = finiteNumber(weapon.damage.sides, 6), bonus = bonus}
 end
 
@@ -202,6 +230,7 @@ local function defaultEffects()
         combatDefensiveDefense = false,
         duel = false,
         baluarte = false,
+        baluarteShared = false,
         shieldGuardSuppressed = false,
         provocation = false
     }
@@ -211,8 +240,8 @@ local function defaultState()
     return {
         schemaVersion = STATE_SCHEMA_VERSION,
         runtimeVersion = CHARACTER.version,
-        hp = finiteNumber(CHARACTER.resources.hp.max, 69),
-        mp = finiteNumber(CHARACTER.resources.mp.max, 18),
+        hp = finiteNumber(CHARACTER.resources.hp.max, 78),
+        mp = finiteNumber(CHARACTER.resources.mp.max, 21),
         activeWeapon = "sword",
         effects = defaultEffects(),
         pendingThreat = nil,
@@ -234,7 +263,14 @@ local function normalizeSnapshot(source)
     if CHARACTER.weapons[source.activeWeapon] then normalized.activeWeapon = source.activeWeapon end
     if type(source.effects) == "table" then
         for key in pairs(normalized.effects) do
-            if key == "baluarte" then
+            if key == "duel" then
+                local saved = source.effects.duel
+                local base = finiteNumber(CHARACTER.powers.duel.attackModifier, 2)
+                local upgraded = finiteNumber(CHARACTER.powers.duel.upgradedAttackModifier, 3)
+                if saved == true then normalized.effects.duel = base
+                elseif finiteNumber(saved, 0) >= upgraded then normalized.effects.duel = upgraded
+                elseif finiteNumber(saved, 0) >= base then normalized.effects.duel = base end
+            elseif key == "baluarte" then
                 local saved = source.effects.baluarte
                 local base = finiteNumber(CHARACTER.powers.baluarte.defenseModifier, 2)
                 local upgraded = finiteNumber(CHARACTER.powers.baluarte.upgradedDefenseModifier, 4)
@@ -249,21 +285,33 @@ local function normalizeSnapshot(source)
     -- Nas mudanças de nível, somente recursos que estavam cheios recebem o
     -- novo máximo. Valores gastos ou ferimentos são preservados para não
     -- curar nem restaurar PM silenciosamente. A ordem permite atualizar
-    -- diretamente da v0.1.5 (nível 4) para versões posteriores ao nível 6.
+    -- diretamente da v0.1.5 (nível 4) até o nível 7.
     if (CHARACTER.version == "0.1.6" or CHARACTER.version == "0.1.7"
-            or CHARACTER.version == "0.1.8" or CHARACTER.version == "0.1.9")
+            or CHARACTER.version == "0.1.8" or CHARACTER.version == "0.1.9"
+            or CHARACTER.version == "0.2.0" or CHARACTER.version == "0.2.1")
         and source.runtimeVersion ~= "0.1.6"
         and source.runtimeVersion ~= "0.1.7"
         and source.runtimeVersion ~= "0.1.8"
-        and source.runtimeVersion ~= "0.1.9" then
+        and source.runtimeVersion ~= "0.1.9"
+        and source.runtimeVersion ~= "0.2.0"
+        and source.runtimeVersion ~= "0.2.1" then
         if finiteNumber(source.hp or source.pv, 0) == 47 then normalized.hp = 55 end
         if finiteNumber(source.mp or source.pm, 0) == 12 then normalized.mp = 15 end
     end
-    if (CHARACTER.version == "0.1.8" or CHARACTER.version == "0.1.9")
+    if (CHARACTER.version == "0.1.8" or CHARACTER.version == "0.1.9"
+            or CHARACTER.version == "0.2.0" or CHARACTER.version == "0.2.1")
         and source.runtimeVersion ~= "0.1.8"
-        and source.runtimeVersion ~= "0.1.9" then
+        and source.runtimeVersion ~= "0.1.9"
+        and source.runtimeVersion ~= "0.2.0"
+        and source.runtimeVersion ~= "0.2.1" then
         if normalized.hp == 55 then normalized.hp = 69 end
         if normalized.mp == 15 then normalized.mp = 18 end
+    end
+    if (CHARACTER.version == "0.2.0" or CHARACTER.version == "0.2.1")
+        and source.runtimeVersion ~= "0.2.0"
+        and source.runtimeVersion ~= "0.2.1" then
+        if normalized.hp == 69 then normalized.hp = 78 end
+        if normalized.mp == 18 then normalized.mp = 21 end
     end
     if type(source.pendingThreat) == "table" and CHARACTER.weapons[source.pendingThreat.weaponKey] then
         normalized.pendingThreat = {
@@ -366,6 +414,7 @@ end
 
 local function safeSetAttribute(id, attribute, value)
     local ok, accepted = safeParentCall("setRuntimeUiAttribute", {
+        characterId = CHARACTER_ID,
         id = id,
         attribute = attribute,
         value = tostring(value)
@@ -399,10 +448,46 @@ local function chatSafeText(value)
     return tostring(value):gsub("%[", "［"):gsub("%]", "］")
 end
 
-local function chatSegment(hex, value, bold)
-    local text = chatSafeText(value)
-    if bold then text = "[b]" .. text .. "[/b]" end
-    return "[" .. hex .. "]" .. text .. "[-]"
+local function formatChatDice(count, sides, values)
+    local prefix = count == 1 and "" or tostring(count)
+    local strings = {}
+    for _, value in ipairs(values) do table.insert(strings, tostring(value)) end
+    return prefix .. "d" .. tostring(sides) .. "(" .. table.concat(strings, ",") .. ")"
+end
+
+local function chatColorSegment(hex, value)
+    return "[" .. hex .. "]" .. chatSafeText(value) .. "[-]"
+end
+
+-- Apenas as duas cores abaixo podem atravessar o relay. Qualquer outro
+-- colchete continua sendo convertido antes de chegar ao parser do TTS.
+local function chatSafeRichText(value)
+    local text = tostring(value)
+    local position = 1
+    local colorOpen = false
+    while position <= #text do
+        local openAt = string.find(text, "[", position, true)
+        local strayCloseAt = string.find(text, "]", position, true)
+        if strayCloseAt and (not openAt or strayCloseAt < openAt) then
+            return chatSafeText(text)
+        end
+        if not openAt then break end
+        local closeAt = string.find(text, "]", openAt + 1, true)
+        if not closeAt then return chatSafeText(text) end
+        local tag = string.sub(text, openAt, closeAt)
+        if tag == "[FF6464]" or tag == "[62B8FF]" then
+            if colorOpen then return chatSafeText(text) end
+            colorOpen = true
+        elseif tag == "[-]" then
+            if not colorOpen then return chatSafeText(text) end
+            colorOpen = false
+        else
+            return chatSafeText(text)
+        end
+        position = closeAt + 1
+    end
+    if colorOpen then return chatSafeText(text) end
+    return text
 end
 
 function CorvanRules.formatRollResult(label, total, count, sides, values, modifier, suffix)
@@ -415,19 +500,8 @@ function CorvanRules.formatRollResult(label, total, count, sides, values, modifi
 end
 
 function CorvanRules.formatChatRollResult(shortName, label, total, count, sides, values, modifier, suffix)
-    local formula = formatDice(count, sides, values) .. formatModifier(modifier)
-    local neutral = "E8EDF2"
-    local result = chatSegment("FF6464", shortName, true)
-        .. " " .. chatSegment(neutral, "•", false) .. " "
-        .. chatSegment("63E6A5", label, true)
-        .. "  " .. chatSegment(neutral, "│ RESULTADO:", true) .. " "
-        .. chatSegment("62B8FF", total, true)
-        .. "  " .. chatSegment(neutral, "│ CÁLCULO:", true) .. " "
-        .. chatSegment("FFD166", formula, true)
-    if type(suffix) == "string" and suffix ~= "" then
-        result = result .. "  " .. chatSegment("FF9F43", "⚠ " .. suffix, true)
-    end
-    return result
+    return AdapterApi.chat.formatRoll(
+        shortName, label, total, count, sides, values, modifier, suffix)
 end
 
 local function damageFormula(spec)
@@ -450,11 +524,17 @@ local function effectsLabel()
     elseif state.effects.combatDefensiveDefense then
         table.insert(labels, "Combate Defensivo: +5 DEF")
     end
-    if state.effects.duel then table.insert(labels, "Duelo: +2 ataque/dano, +2 RD") end
+    local duel = duelModifier(CHARACTER, state, "upgradedAttackModifier", "attackModifier")
+    if duel > 0 then
+        table.insert(labels, "Duelo: +" .. tostring(duel) .. " ataque/dano e RD")
+    end
     local baluarte = finiteNumber(state.effects.baluarte, state.effects.baluarte == true and 2 or 0)
-    if baluarte > 0 then table.insert(labels, "Baluarte +" .. tostring(baluarte)) end
+    if baluarte > 0 then
+        local shared = state.effects.baluarteShared and " (aliados)" or ""
+        table.insert(labels, "Baluarte +" .. tostring(baluarte) .. shared)
+    end
     if state.effects.shieldGuardSuppressed then
-        table.insert(labels, "Escudo: −2 DEF e resistências")
+        table.insert(labels, "Escudo: −4 DEF e resistências")
     end
     if state.effects.provocation then table.insert(labels, "Provocação") end
     if #labels == 0 then return "Nenhum efeito ativo" end
@@ -498,6 +578,7 @@ local function preparePanelBoardArt()
 end
 
 local function renderNow()
+    if not characterLoaded then return end
     if not parent then return end
     local weapon = CHARACTER.weapons[state.activeWeapon]
     local attack = CorvanRules.calculateAttackModifier(CHARACTER, state, state.activeWeapon)
@@ -538,12 +619,29 @@ local function renderNow()
         baluarteText = "BALUARTE +4  •  ATIVO\nDEF e resistências\naté o próximo turno"
     end
     safeSetAttribute("power_baluarte", "text", baluarteText)
+    local sharedText = "ALIADOS  •  +2 PM\ncompartilha o Baluarte\ncom adjacentes"
+    if state.effects.baluarteShared then
+        sharedText = "ALIADOS  •  ATIVO\nBaluarte +" .. tostring(baluarte) .. " compartilhado\naté o próximo turno"
+    elseif baluarte <= 0 then
+        sharedText = "ALIADOS  •  +2 PM\native Baluarte primeiro\npara compartilhar"
+    end
+    safeSetAttribute("power_baluarte_allies", "text", sharedText)
+    safeSetAttribute("power_baluarte_allies", "interactable", baluarte > 0 and "true" or "false")
+    local duel = duelModifier(CHARACTER, state, "upgradedAttackModifier", "attackModifier")
+    local duelText = "DUELO  •  2/3 PM\n+2 ou +3 ataque, dano e RD\naté o fim da cena"
+    if duel == 2 then
+        duelText = "DUELO +2  •  ATIVO\nclique novamente: +3 (+1 PM)\naté o fim da cena"
+    elseif duel >= 3 then
+        duelText = "DUELO +3  •  ATIVO\nataque, dano e RD\naté o fim da cena"
+    end
+    safeSetAttribute("power_duel", "text", duelText)
     safeSetAttribute("weapon_sword", "colors", state.activeWeapon == "sword" and "#75591D|#98752B|#4F3B13|#22222288" or "#22282E|#303A43|#151A1F|#22222288")
     safeSetAttribute("weapon_shield", "colors", state.activeWeapon == "shield" and "#75591D|#98752B|#4F3B13|#22222288" or "#22282E|#303A43|#151A1F|#22222288")
     local powerColors = {
         power_combat_defensive = state.effects.combatDefensiveArmed or state.effects.combatDefensiveDefense,
         power_duel = state.effects.duel,
         power_baluarte = state.effects.baluarte,
+        power_baluarte_allies = state.effects.baluarteShared,
         power_provocacao = state.effects.provocation
     }
     for id, active in pairs(powerColors) do
@@ -560,6 +658,7 @@ local function scheduleRender()
 end
 
 local function applyUi()
+    if not characterLoaded then return false end
     if not parent then return false end
     -- O XML completo também carrega o valor atual do toggle. Isso mantém a
     -- preferência sincronizada até em painéis importados com um bootstrap
@@ -574,7 +673,11 @@ local function applyUi()
     renderedXml = renderedXml:gsub(
         'id="panelBoardArt" active="[^"]*"',
         'id="panelBoardArt" active="' .. overlayValue .. '"', 1)
-    local ok, accepted = safeParentCall("applyRuntimeUi", {xml = renderedXml, version = CHARACTER.version})
+    local ok, accepted = safeParentCall("applyRuntimeUi", {
+        xml = renderedXml,
+        characterId = CHARACTER_ID,
+        version = CHARACTER.version
+    })
     preparePanelBoardArt()
     scheduleRender()
     return ok and accepted ~= false
@@ -591,22 +694,23 @@ local function pushUndo()
 end
 
 local function cacheAndRender()
-    safeParentCall("cacheRuntimeState", {state = exportState()})
+    safeParentCall("cacheRuntimeState", {characterId = CHARACTER_ID, state = exportState()})
     scheduleRender()
 end
 
 local function chatDiagnostic(message)
     if type(log) == "function" then
-        pcall(function() log(message, "Corvan chat") end)
+        pcall(function() log(message, CHARACTER_NAME .. " chat") end)
     elseif type(print) == "function" then
-        pcall(function() print("Corvan chat: " .. message) end)
+        pcall(function() print(CHARACTER_NAME .. " chat: " .. message) end)
     end
 end
 
 -- O chat do TTS interpreta [HEX] como BBCode de cor. Resultados como d20[18]
 -- abrem uma tag e podem tornar o restante desta e das próximas mensagens
 -- invisível. Os colchetes fullwidth preservam a leitura sem acionar o parser.
-local function chatSafeMessage(message)
+local function chatSafeMessage(message, richText)
+    if richText == true then return chatSafeRichText(message) end
     return chatSafeText(message)
 end
 
@@ -678,29 +782,33 @@ local function recipientColors(preferredColor)
     return colors, managerAvailable
 end
 
-local function printToPlayerColor(color, message)
+local function printToPlayerColor(color, message, tint)
     -- No TTS real, tanto printToAll quanto Player.print podem retornar sem erro
     -- e ainda assim não inserir a linha depois de várias rolagens. A função
     -- global direcionada é a rota que efetivamente chega ao chat do cliente.
     if type(printToColor) == "function" and type(color) == "string" and color ~= "" then
-        local ok = pcall(function() printToColor(message, color, chatColor()) end)
+        local ok = pcall(function() printToColor(message, color, tint) end)
         if ok then return true, "printToColor:" .. color end
     end
     if Player ~= nil and type(color) == "string" and color ~= "" then
-        local ok = pcall(function() Player[color].print(message, chatColor()) end)
+        local ok = pcall(function() Player[color].print(message, tint) end)
         if ok then return true, "player-print:" .. color end
     end
     return false, "none"
 end
 
-local function publicMessage(message, preferredColor, richText)
-    message = richText == true and tostring(message) or chatSafeMessage(message)
+local function publicMessage(message, preferredColor, messageTint, richText)
+    message = chatSafeMessage(message, richText)
+    local tint = type(messageTint) == "table" and messageTint or chatColor()
     -- A rota primária passa pelo bootstrap do painel visível. O TTS pode
     -- aceitar silenciosamente chamadas de chat feitas pelo helper invisível
     -- sem inseri-las no cliente, enquanto o mesmo envio pelo painel funciona.
     local relayOk, relayAccepted = safeParentCall("relayRuntimeChat", {
+        characterId = CHARACTER_ID,
         message = message,
-        playerColor = preferredColor
+        playerColor = preferredColor,
+        tint = tint,
+        richText = richText == true
     })
     if relayOk and relayAccepted == true then
         recordChatAudit(message, "parent-relay", true)
@@ -712,7 +820,7 @@ local function publicMessage(message, preferredColor, richText)
         local delivered = 0
         local routes = {}
         for _, color in ipairs(colors) do
-            local ok, route = printToPlayerColor(color, message)
+            local ok, route = printToPlayerColor(color, message, tint)
             table.insert(routes, route)
             if ok then delivered = delivered + 1 end
         end
@@ -727,7 +835,7 @@ local function publicMessage(message, preferredColor, richText)
     -- Compatibility fallback for builds/harnesses where Player manager cannot
     -- enumerate clients. This remains chat-only.
     if type(printToAll) == "function" then
-        local ok, failure = pcall(function() printToAll(message, chatColor()) end)
+        local ok, failure = pcall(function() printToAll(message, tint) end)
         recordChatAudit(message, ok and "printToAll" or ("printToAll-error:" .. tostring(failure)), ok)
         if ok then return true end
         chatDiagnostic("printToAll rejeitou a mensagem: " .. tostring(failure))
@@ -749,21 +857,22 @@ end
 local function publicRollResult(label, total, count, sides, values, modifier, suffix, playerColor)
     return publicMessage(CorvanRules.formatChatRollResult(
         CHARACTER.shortName, label, total, count, sides, values, modifier, suffix),
-        playerColor, true)
+        playerColor, nil, true)
 end
 
 local function privateError(playerColor, message)
     local relayed, accepted = safeParentCall("relayRuntimePrivate", {
-        message = "Corvan • " .. message,
+        characterId = CHARACTER_ID,
+        message = CHARACTER_NAME .. " • " .. message,
         playerColor = playerColor
     })
     if relayed and accepted == true then return end
     if type(playerColor) == "table" then playerColor = playerColor.color end
     if type(printToColor) == "function" and type(playerColor) == "string" and playerColor ~= "" then
-        local ok = pcall(function() printToColor("Corvan • " .. message, playerColor, errorColor()) end)
+        local ok = pcall(function() printToColor(CHARACTER_NAME .. " • " .. message, playerColor, errorColor()) end)
         if ok then return end
     end
-    if type(print) == "function" then print("Corvan • " .. message) end
+    if type(print) == "function" then print(CHARACTER_NAME .. " • " .. message) end
 end
 
 local function ownedDieMetadata(object)
@@ -778,10 +887,7 @@ end
 local function dieBelongsToParent(object)
     local metadata, hasNotes = ownedDieMetadata(object)
     if hasNotes then
-        return metadata ~= nil
-            and metadata.project == "corvan-tts-automation"
-            and metadata.kind == "owned-die"
-            and metadata.ownerPanelGuid == parentGuid
+        return AdapterApi.dice.owns(metadata, parentGuid)
     end
     -- Dados criados até a v0.1.6 não possuíam metadados próprios. Eles só são
     -- aceitos quando o owner persistido (migrado de parentGuid) ainda coincide.
@@ -791,11 +897,7 @@ end
 local function markOwnedDie(object)
     if not object or type(JSON) ~= "table" or type(JSON.encode) ~= "function" then return false end
     local encodedOk, notes = pcall(function()
-        return JSON.encode({
-            project = "corvan-tts-automation",
-            kind = "owned-die",
-            ownerPanelGuid = parentGuid
-        })
+        return JSON.encode(AdapterApi.dice.metadata(parentGuid))
     end)
     if not encodedOk or type(notes) ~= "string" then return false end
     return pcall(function() object.setGMNotes(notes) end)
@@ -909,10 +1011,10 @@ local function completeRoll(token)
         state.pendingThreat = threat and {weaponKey = roll.weaponKey, natural = natural} or nil
         state.lastResult = CorvanRules.formatRollResult(
             CHARACTER.weapons[roll.weaponKey].chatName, total,
-            roll.count, roll.sides, values, roll.modifier, threat and "ameaça" or nil)
+            roll.count, roll.sides, values, roll.modifier, threat and "crítico" or nil)
         publicRollResult(CHARACTER.weapons[roll.weaponKey].chatName, total,
             roll.count, roll.sides, values, roll.modifier,
-            threat and "AMEAÇA!" or nil, roll.playerColor)
+            threat and "CRÍTICO" or nil, roll.playerColor)
     elseif roll.kind == "skill" then
         local total = values[1] + roll.modifier
         state.lastResult = CorvanRules.formatRollResult(
@@ -1025,12 +1127,13 @@ local function launchDie(token, index)
     local up = localDirectionToWorld({x = 0, y = 1, z = 0}, 1)
     local right = localDirectionToWorld({x = 1, y = 0, z = 0}, 1)
     local forward = localDirectionToWorld({x = 0, y = 0, z = 1}, 1)
+    local verticalSpeed = randomRange(DICE_VERTICAL_SPEED_MIN, DICE_VERTICAL_SPEED_MAX)
     local horizontalRight = (math.random() * 2 - 1) * 1.4
     local horizontalForward = (math.random() * 2 - 1) * 1.4
     local worldVelocity = {
-        x = up.x * 16 + right.x * horizontalRight + forward.x * horizontalForward,
-        y = up.y * 16 + right.y * horizontalRight + forward.y * horizontalForward,
-        z = up.z * 16 + right.z * horizontalRight + forward.z * horizontalForward
+        x = up.x * verticalSpeed + right.x * horizontalRight + forward.x * horizontalForward,
+        y = up.y * verticalSpeed + right.y * horizontalRight + forward.y * horizontalForward,
+        z = up.z * verticalSpeed + right.z * horizontalRight + forward.z * horizontalForward
     }
     -- setVelocity é determinístico depois do congelamento inicial do spawn.
     -- addForce pode retornar sem erro enquanto o TTS ainda ignora o impulso.
@@ -1084,7 +1187,7 @@ local function onDieSpawned(token, index, object)
     state.ownedDiceOwnerGuid = parentGuid
     markOwnedDie(object)
     if guid then table.insert(state.ownedDiceGuids, guid) end
-    pcall(function() object.setName("Corvan • dado da ferramenta") end)
+    pcall(function() object.setName(CHARACTER_NAME .. " • dado da ferramenta") end)
     -- O TTS congela objetos recém-criados por um frame. Aplicar a força no
     -- callback imediato faz o dado nascer sem movimento em algumas sessões.
     local scheduled = pcall(function()
@@ -1264,6 +1367,54 @@ local function activateBaluarte(playerColor)
     return true
 end
 
+local function activateBaluarteAllies(playerColor)
+    local power = CHARACTER.powers.baluarte
+    local base = finiteNumber(power.defenseModifier, 2)
+    local current = finiteNumber(state.effects.baluarte, state.effects.baluarte == true and base or 0)
+    if current <= 0 then
+        privateError(playerColor, "ative Baluarte antes de compartilhar com os aliados.")
+        return false
+    end
+    if state.effects.baluarteShared then
+        privateError(playerColor, "Baluarte já está compartilhado com os aliados adjacentes.")
+        return false
+    end
+    local cost = finiteNumber(power.sharedCost, 2)
+    if not canSpendPowerResource(playerColor, power, cost) then return false end
+    pushUndo()
+    spendPowerResource(power, cost)
+    state.effects.baluarteShared = true
+    cacheAndRender()
+    publicMessage(CHARACTER.shortName .. ": Baluarte +" .. tostring(current)
+        .. " compartilhado com aliados adjacentes até o próximo turno.", playerColor)
+    return true
+end
+
+local function activateDuel(playerColor)
+    local power = CHARACTER.powers.duel
+    local base = finiteNumber(power.attackModifier, 2)
+    local upgraded = finiteNumber(power.upgradedAttackModifier, 3)
+    local current = duelModifier(CHARACTER, state, "upgradedAttackModifier", "attackModifier")
+    local cost
+    local target
+    if current <= 0 then
+        cost = finiteNumber(power.cost, 2)
+        target = base
+    elseif current < upgraded then
+        cost = finiteNumber(power.upgradeCost, 1)
+        target = upgraded
+    else
+        privateError(playerColor, "Duelo +3 já está ativo.")
+        return false
+    end
+    if not canSpendPowerResource(playerColor, power, cost) then return false end
+    pushUndo()
+    spendPowerResource(power, cost)
+    state.effects.duel = target
+    cacheAndRender()
+    return true
+end
+
 local function activateCombatDefensive(playerColor)
     if state.effects.combatDefensiveArmed or state.effects.combatDefensiveDefense then
         privateError(playerColor, "Combate Defensivo já está ativo.")
@@ -1320,12 +1471,14 @@ end
 
 local function endTurn()
     local changed = state.effects.combatDefensiveArmed or state.effects.combatDefensiveDefense or
-        state.effects.baluarte or state.effects.shieldGuardSuppressed or state.pendingThreat ~= nil
+        state.effects.baluarte or state.effects.baluarteShared or
+        state.effects.shieldGuardSuppressed or state.pendingThreat ~= nil
     if not changed then return true end
     pushUndo()
     state.effects.combatDefensiveArmed = false
     state.effects.combatDefensiveDefense = false
     state.effects.baluarte = false
+    state.effects.baluarteShared = false
     state.effects.shieldGuardSuppressed = false
     state.pendingThreat = nil
     cacheAndRender()
@@ -1334,7 +1487,7 @@ end
 
 local function endScene()
     local changed = state.effects.duel or state.effects.combatDefensiveArmed or
-        state.effects.combatDefensiveDefense or state.effects.baluarte or
+        state.effects.combatDefensiveDefense or state.effects.baluarte or state.effects.baluarteShared or
         state.effects.shieldGuardSuppressed or state.effects.provocation or state.pendingThreat ~= nil
     if not changed then return true end
     pushUndo()
@@ -1376,11 +1529,21 @@ local ID_ALIASES = {
 local SKILL_IDS = {
     skill_iniciativa = "initiative", skill_luta = "fight", skill_intimidacao = "intimidation",
     skill_percepcao = "perception", skill_fortitude = "fortitude",
-    skill_reflexos = "reflex", skill_vontade = "will"
+    skill_reflexos = "reflex", skill_vontade = "will", skill_cavalgar = "riding",
+    skill_diplomacia = "diplomacy", skill_guerra = "warfare", skill_pontaria = "aim"
 }
 
 function handleUiEvent(payload)
+    if not characterLoaded then return false end
     payload = type(payload) == "table" and payload or {}
+    local legacyEvent = legacyParentBinding
+        and payload.characterId == nil
+        and payload.parentGuid == nil
+    if not legacyEvent
+        and (payload.characterId ~= CHARACTER_ID or payload.parentGuid ~= parentGuid)
+    then
+        return false
+    end
     local id = tostring(payload.id or ""):lower():gsub("%-", "_"):gsub("%s+", "_")
     id = ID_ALIASES[id] or id
     local playerColor = payload.playerColor
@@ -1393,8 +1556,9 @@ function handleUiEvent(payload)
     if id == "roll_critical" then return rollDamage(playerColor, true) end
     if SKILL_IDS[id] then return rollSkill(playerColor, SKILL_IDS[id]) end
     if id == "power_combat_defensive" then return activateCombatDefensive(playerColor) end
-    if id == "power_duel" then return activatePower(playerColor, "duel", "duel") end
+    if id == "power_duel" then return activateDuel(playerColor) end
     if id == "power_baluarte" then return activateBaluarte(playerColor) end
+    if id == "power_baluarte_allies" then return activateBaluarteAllies(playerColor) end
     if id == "power_provocacao" then
         local cd = CHARACTER.powers.provocation.willDifficulty
         return activatePower(playerColor, "provocation", "provocation",
@@ -1414,7 +1578,7 @@ function handleUiEvent(payload)
     if id == "automatic_resource_spending" then
         local enabled = value == true or tostring(value):lower() == "true" or tostring(value) == "1"
         state.automaticResourceSpending = enabled
-        safeParentCall("cacheRuntimeState", {state = exportState()})
+        safeParentCall("cacheRuntimeState", {characterId = CHARACTER_ID, state = exportState()})
         applyUi()
         return true
     end
@@ -1471,17 +1635,47 @@ function handleUiEvent(payload)
     return false
 end
 
+local CORE_STATE_FIELDS = {
+    diceOffset = true,
+    ownedDiceGuids = true,
+    ownedDiceOwnerGuid = true,
+    lastResult = true,
+    settingsOpen = true,
+}
+
+local function unwrapStatePayload(payload)
+    if type(payload) ~= "table" then return nil end
+    if finiteNumber(payload.schemaVersion, 1) > STATE_SCHEMA_VERSION then return nil end
+    local characterState, coreState, stateError = AdapterApi.state.unwrap(payload)
+    if stateError ~= nil then return nil end
+    local flattened = characterState
+    for key in pairs(CORE_STATE_FIELDS) do
+        if coreState[key] ~= nil then flattened[key] = deepCopy(coreState[key]) end
+    end
+    flattened.runtimeVersion = payload.runtimeVersion or flattened.runtimeVersion
+    flattened.schemaVersion = payload.characterStateSchemaVersion or flattened.schemaVersion
+    return flattened
+end
+
 function exportState()
-    local exported = deepCopy(state)
-    exported.schemaVersion = STATE_SCHEMA_VERSION
-    exported.runtimeVersion = CHARACTER.version
-    exported.parentGuid = parentGuid
-    exported.rollInProgress = rollInProgress
-    exported.helperGuid = safeObjectGuid(self)
-    return exported
+    if not characterLoaded then return nil end
+    local core = {}
+    local character = {}
+    for key, value in pairs(state) do
+        if CORE_STATE_FIELDS[key] then core[key] = deepCopy(value)
+        else character[key] = deepCopy(value) end
+    end
+    local envelope = AdapterApi.state.envelope(character, core)
+    envelope.schemaVersion = 1
+    envelope.characterStateSchemaVersion = STATE_SCHEMA_VERSION
+    envelope.parentGuid = parentGuid
+    envelope.rollInProgress = rollInProgress
+    envelope.helperGuid = safeObjectGuid(self)
+    return envelope
 end
 
 function importState(payload)
+    if not characterLoaded then return false end
     if rollInProgress then return false end
     if type(payload) == "string" and type(JSON) == "table" then
         local ok, decoded = pcall(function() return JSON.decode(payload) end)
@@ -1490,8 +1684,9 @@ function importState(payload)
     end
     if type(payload) ~= "table" then return false end
     if type(payload.state) == "table" then payload = payload.state end
-    if finiteNumber(payload.schemaVersion, 1) > STATE_SCHEMA_VERSION then return false end
-    state = normalizeState(payload)
+    local unwrapped = unwrapStatePayload(payload)
+    if unwrapped == nil or finiteNumber(unwrapped.schemaVersion, 1) > STATE_SCHEMA_VERSION then return false end
+    state = normalizeState(unwrapped)
     resourceAdjustments = {hp = "", mp = ""}
     currentRoll = nil
     rollInProgress = false
@@ -1502,7 +1697,10 @@ end
 function healthCheck(_)
     return {
         ok = characterLoaded,
-        version = tostring(CHARACTER.version),
+        characterId = CHARACTER_ID,
+        runtimeMarker = "CORVAN_RUNTIME",
+        version = tostring(CHARACTER.version or EXPECTED_RUNTIME_VERSION),
+        error = configurationError,
         schemaVersion = STATE_SCHEMA_VERSION,
         parentGuid = parentGuid,
         rollInProgress = rollInProgress
@@ -1516,6 +1714,7 @@ end
 local function notifyReady()
     safeParentCall("runtimeReady", {
         parentGuid = parentGuid,
+        characterId = CHARACTER_ID,
         version = CHARACTER.version,
         health = healthCheck({})
     })
@@ -1523,13 +1722,26 @@ end
 
 local function persistParentNotes()
     if not self or type(self.setGMNotes) ~= "function" or type(JSON) ~= "table" then return end
-    pcall(function() self.setGMNotes(JSON.encode({parentGuid = parentGuid})) end)
+    pcall(function()
+        self.setGMNotes(JSON.encode({
+            project = "corvan-tts-automation",
+            characterId = CHARACTER_ID,
+            parentGuid = parentGuid
+        }))
+    end)
 end
 
 function registerParent(payload)
+    if not characterLoaded then return false end
     if type(payload) == "string" then
+        legacyParentBinding = true
         parentGuid = payload
     elseif type(payload) == "table" then
+        -- O bootstrap 1.0.2 distribuído no Saved Object v0.2.0 ainda não
+        -- enviava identidade. Somente o Corvan aceita essa ausência legada;
+        -- uma identidade explícita divergente continua sempre recusada.
+        if payload.characterId ~= nil and payload.characterId ~= CHARACTER_ID then return false end
+        legacyParentBinding = payload.characterId == nil
         parentGuid = payload.parentGuid or payload.guid or parentGuid
     end
     if type(parentGuid) ~= "string" or parentGuid == "" then return false end
@@ -1537,7 +1749,9 @@ function registerParent(payload)
     if not resolveParent() then return false end
     persistParentNotes()
     if type(payload) == "table" and type(payload.state) == "table" then
-        state = normalizeState(payload.state)
+        local unwrapped = unwrapStatePayload(payload.state)
+        if unwrapped == nil then return false end
+        state = normalizeState(unwrapped)
     end
     applyUi()
     cacheAndRender()
@@ -1550,12 +1764,16 @@ local function readParentNotes()
     local ok, notes = pcall(function() return self.getGMNotes() end)
     if not ok or type(notes) ~= "string" or notes == "" then return end
     local decodedOk, decoded = pcall(function() return JSON.decode(notes) end)
-    if decodedOk and type(decoded) == "table" and type(decoded.parentGuid) == "string" then
+    if decodedOk and type(decoded) == "table"
+        and (decoded.characterId == nil and CHARACTER_ID == "corvan"
+            or decoded.characterId == CHARACTER_ID)
+        and type(decoded.parentGuid) == "string" then
         parentGuid = decoded.parentGuid
     end
 end
 
 local function bindWithRetry(remaining)
+    if not characterLoaded then return end
     if resolveParent() then
         applyUi()
         cacheAndRender()
@@ -1570,15 +1788,20 @@ local function bindWithRetry(remaining)
 end
 
 function onLoad(savedData)
+    if not characterLoaded then return end
     readParentNotes()
     if type(savedData) == "string" and savedData ~= "" and type(JSON) == "table" then
         local ok, decoded = pcall(function() return JSON.decode(savedData) end)
-        if ok and type(decoded) == "table" then state = normalizeState(decoded.state or decoded) end
+        if ok and type(decoded) == "table" then
+            local unwrapped = unwrapStatePayload(decoded.state or decoded)
+            if unwrapped ~= nil then state = normalizeState(unwrapped) end
+        end
     end
     bindWithRetry(8)
 end
 
 function onSave()
+    if not characterLoaded then return "" end
     if type(JSON) ~= "table" or type(JSON.encode) ~= "function" then return "" end
     local ok, encoded = pcall(function() return JSON.encode(exportState()) end)
     return ok and encoded or ""

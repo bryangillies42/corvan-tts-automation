@@ -25,3 +25,6 @@ jobs:
 
       - name: Build release artifacts
         run: npm run build
+
+      - name: Build divergent fixture
+        run: npm run build:fixture

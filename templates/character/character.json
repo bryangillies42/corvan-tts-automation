@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "__CHARACTER_ID__",
+  "version": null,
+  "name": "__CHARACTER_NAME__",
+  "shortName": "__CHARACTER_SHORT_NAME__",
+  "resources": {},
+  "actions": {},
+  "stateSchemaVersion": 1
+}

@@ -2,16 +2,16 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const bootstrapUrl = new URL('../src/bootstrap.lua', import.meta.url);
+const bootstrapUrl = new URL('../shared/bootstrap.lua', import.meta.url);
 const source = await readFile(bootstrapUrl, 'utf8');
-const runtimeSource = await readFile(new URL('../src/runtime.lua', import.meta.url), 'utf8');
-const uiSource = await readFile(new URL('../src/ui.xml', import.meta.url), 'utf8');
+const runtimeSource = await readFile(new URL('../characters/corvan/runtime.lua', import.meta.url), 'utf8');
+const uiSource = await readFile(new URL('../characters/corvan/ui.xml', import.meta.url), 'utf8');
 
 test('keeps one build-time placeholder for the seed UI and runtime', () => {
   assert.equal((source.match(/__SEED_UI_LITERAL__/g) ?? []).length, 1);
   assert.equal((source.match(/__SEED_RUNTIME_LITERAL__/g) ?? []).length, 1);
   assert.match(source, /local BOOTSTRAP_VERSION = "1\.0\.2"/);
-  assert.match(source, /local SEED_RUNTIME_VERSION = "0\.1\.9"/);
+  assert.match(source, /local SEED_RUNTIME_VERSION = __CHARACTER_VERSION_LITERAL__/);
   assert.match(source, /local SEED_UI = __SEED_UI_LITERAL__/);
   assert.match(source, /local SEED_RUNTIME = __SEED_RUNTIME_LITERAL__/);
   assert.match(source, /uiXml = SEED_UI/);
@@ -140,8 +140,23 @@ test('pins updates to public GitHub release assets and validates the manifest/ru
   assert.match(source, /#runtimeSha256 ~= 64/);
   assert.match(
     source,
-    /TRUSTED_RUNTIME_PREFIX \..*"v" \..*manifest\.version \..*"\/corvan-runtime\.lua"/,
+    /local expectedRuntimeUrl = TRUSTED_RUNTIME_PREFIX \.\. releaseTag \.\. "\/" \.\. RUNTIME_ASSET_NAME/,
   );
+  assert.match(source, /manifest\.characterId ~= CHARACTER_ID/);
+  assert.match(source, /manifest\.releaseTag ~= releaseTag/);
+  assert.match(source, /local function finishIfReleaseIsNotNewer\(/);
+  assert.match(source, /versão instalada é mais recente que a release estável/);
+  const latestLookup = source.slice(
+    source.indexOf('local function beginLatestReleaseLookup'),
+    source.indexOf('local function beginNamespacedReleasePage'),
+  );
+  assert.ok(
+    latestLookup.indexOf('finishIfReleaseIsNotNewer') < latestLookup.indexOf('findManifestUrl'),
+    'a versão da tag deve impedir downgrade antes de baixar ou validar manifesto legado',
+  );
+  assert.match(source, /asset\.browser_download_url == TRUSTED_RUNTIME_PREFIX/);
+  assert.match(source, /local MAX_RELEASE_PAGES = 10/);
+  assert.match(source, /beginNamespacedReleasePage\(serial, page \+ 1/);
   assert.match(source, /local actualSha256 = sha256Digest\(job\.hash\)/);
   assert.match(source, /string\.lower\(actualSha256\) ~= string\.lower\(expectedSha256\)/);
   assert.match(source, /Wait\.frames\(/);
@@ -197,11 +212,26 @@ test('blocks refresh during duplicate requests and physical rolls', () => {
   assert.match(source, /interactable", pendingRefreshBusy and "false" or "true"/);
   assert.match(source, /pcall\(printToColor,/);
   assert.match(source, /function relayRuntimeChat\(payload\)/);
-  assert.match(source, /pcall\(printToAll, payload\.message, tint\)/);
+  assert.match(source, /CHARACTER_ID == "corvan" and payload\.characterId == nil/);
+  assert.match(source, /function setRuntimeUiAttribute\(payload\)[\s\S]*payload\.characterId ~= CHARACTER_ID/);
+  assert.match(source, /safeObjectCall\(helper, "handleUiEvent", \{\s*characterId = CHARACTER_ID,\s*parentGuid = self\.getGUID\(\),/);
+  assert.match(source, /function cacheRuntimeState\(payload\)[\s\S]*payload\.characterId ~= CHARACTER_ID/);
+  assert.match(runtimeSource, /payload\.characterId ~= CHARACTER_ID or payload\.parentGuid ~= parentGuid/);
+  assert.match(runtimeSource, /safeParentCall\("setRuntimeUiAttribute", \{\s*characterId = CHARACTER_ID,/);
+  assert.match(source, /local function chatSafeRichText\(value\)/);
+  assert.match(source, /if colorOpen then return chatSafeText\(text\) end/);
+  assert.match(source, /tag == "\[FF6464\]" or tag == "\[62B8FF\]"/);
+  assert.match(source, /payload\.richText == true[\s\S]*chatSafeRichText\(payload\.message\)/);
+  assert.match(source, /pcall\(printToAll, message, tint\)/);
+  assert.ok(source.includes('gsub("%[", "［"):gsub("%]", "］")'));
+  assert.ok(source.includes('[FF6464]'));
+  assert.ok(source.includes('[62B8FF]'));
   assert.doesNotMatch(source, /runtimeChatRecipientColors/);
-  assert.match(source, /local tint = \{0\.92, 0\.94, 0\.97\}/);
-  assert.doesNotMatch(source, /payload\.tint/);
+  assert.match(source, /local tint = type\(payload\.tint\) == "table" and payload\.tint or \{0\.92, 0\.94, 0\.97\}/);
+  assert.match(source, /payload\.tint/);
   assert.match(source, /function relayRuntimePrivate\(payload\)/);
+  assert.match(runtimeSource, /safeParentCall\("relayRuntimeChat", \{\s*characterId = CHARACTER_ID,/);
+  assert.match(runtimeSource, /safeParentCall\("relayRuntimePrivate", \{\s*characterId = CHARACTER_ID,/);
   assert.doesNotMatch(source, /\bbroadcastTo(?:All|Color)\s*\(/);
 });
 

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "version": "0.1.0",
+  "name": "Arcane Test",
+  "shortName": "Arcane",
+  "resources": {
+    "focus": { "label": "Foco", "max": 12 }
+  },
+  "actions": {
+    "cast": { "label": "Conjurar", "formula": "1d6+2" }
+  },
+  "stateSchemaVersion": 1
+}

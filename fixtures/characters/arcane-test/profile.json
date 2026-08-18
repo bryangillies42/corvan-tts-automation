@@ -1,0 +1,42 @@
+{
+  "id": "arcane-test",
+  "displayName": "Arcane Test",
+  "shortName": "Arcane",
+  "version": "0.1.0",
+  "status": "active",
+  "sourceDir": ".",
+  "sourceFiles": {
+    "runtime": "runtime.lua",
+    "ui": "ui.xml",
+    "character": "character.json"
+  },
+  "assetsDir": "assets",
+  "assets": {
+    "panelImage": "panel-board.png",
+    "panelUiImage": "panel-board.png"
+  },
+  "files": {
+    "runtime": "arcane-test-runtime.lua",
+    "manifest": "arcane-test-manifest.json",
+    "savedObject": "Arcane_Test_Console.json"
+  },
+  "savedObjectName": "Arcane Test Console",
+  "tagMode": "namespaced",
+  "discovery": "character-releases",
+  "uiContract": "panel-board",
+  "prerelease": true,
+  "globalLatest": false,
+  "productionEnabled": true,
+  "uiRootId": "arcaneTestConsole",
+  "panelArtId": "arcaneTestArt",
+  "requiredUiIds": ["arcaneTestArt", "arcaneTestConsole", "arcaneFocus", "arcaneCasts", "cast", "reset_fixture", "refresh", "refreshStatus"],
+  "runtimeMarker": "ARCANE_TEST_RUNTIME",
+  "minBootstrapVersion": "1.0.2",
+  "geometry": {
+    "canvasWidth": 1200,
+    "canvasHeight": 800,
+    "panelWidth": 1100,
+    "panelHeight": 700
+  },
+  "guid": "a7c4e1"
+}
