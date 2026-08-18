@@ -17,6 +17,9 @@ const frozenBootstrap = await readFile(
   new URL("../fixtures/legacy/corvan-v0.2.0-bootstrap.lua", import.meta.url),
   "utf8",
 );
+const normalizedFrozenBootstrap = frozenBootstrap
+  .replace(/^\uFEFF/, "")
+  .replace(/\r\n?/g, "\n");
 
 test("artefatos v0.2.1 preservam o protocolo congelado do bootstrap Corvan v0.2.0", async (t) => {
   const outDir = await mkdtemp(join(tmpdir(), "corvan-legacy-contract-"));
@@ -30,7 +33,10 @@ test("artefatos v0.2.1 preservam o protocolo congelado do bootstrap Corvan v0.2.
   const runtime = result.files[contract.runtimeAsset];
 
   assert.equal(contract.bootstrapVersion, "1.0.2");
-  assert.equal(createHash("sha256").update(frozenBootstrap).digest("hex"), contract.bootstrapSha256);
+  assert.equal(
+    createHash("sha256").update(normalizedFrozenBootstrap).digest("hex"),
+    contract.bootstrapSha256,
+  );
   assert.match(frozenBootstrap, /local BOOTSTRAP_VERSION = "1\.0\.2"/);
   assert.match(frozenBootstrap, /releases\/latest/);
   assert.match(frozenBootstrap, /TRUSTED_RUNTIME_PREFIX \.\. "v" \.\. manifest\.version \.\. "\/corvan-runtime\.lua"/);
