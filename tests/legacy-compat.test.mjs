@@ -21,7 +21,7 @@ const normalizedFrozenBootstrap = frozenBootstrap
   .replace(/^\uFEFF/, "")
   .replace(/\r\n?/g, "\n");
 
-test("artefatos v0.2.1 preservam o protocolo congelado do bootstrap Corvan v0.2.0", async (t) => {
+test("artefatos v0.2.2 preservam o protocolo congelado do bootstrap Corvan v0.2.0", async (t) => {
   const outDir = await mkdtemp(join(tmpdir(), "corvan-legacy-contract-"));
   t.after(() => rm(outDir, {recursive: true, force: true}));
   const result = await buildProject({
