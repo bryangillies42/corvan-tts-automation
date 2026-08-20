@@ -494,6 +494,18 @@ export function validateCharacterProfile(profile, { allowScaffold = true } = {})
       validateArtifactName(fileName, `${profile.id}.sourceFiles.${field}`);
     }
   }
+  if (profile.runtimeLibraries !== undefined) {
+    assert(Array.isArray(profile.runtimeLibraries), `${profile.id}.runtimeLibraries deve ser uma lista.`);
+    const runtimeLibraries = new Set();
+    for (const [index, libraryPath] of profile.runtimeLibraries.entries()) {
+      assertRelativePath(libraryPath, `${profile.id}.runtimeLibraries[${index}]`);
+      assert(libraryPath.startsWith("shared/"), `${profile.id}.runtimeLibraries[${index}] deve permanecer dentro de shared/.`);
+      assert(libraryPath.endsWith(".lua"), `${profile.id}.runtimeLibraries[${index}] deve apontar para um arquivo Lua.`);
+      assert(!["shared/bootstrap.lua", "shared/runtime-core.lua"].includes(libraryPath), `${profile.id}.runtimeLibraries[${index}] não pode repetir bootstrap ou runtime-core.`);
+      assert(!runtimeLibraries.has(libraryPath), `${profile.id}.runtimeLibraries contém caminho duplicado: ${libraryPath}.`);
+      runtimeLibraries.add(libraryPath);
+    }
+  }
   assert(RELEASE_TAG_MODES.has(profile.tagMode), `${profile.id}.tagMode inválido.`);
   assert(DISCOVERY_MODES.has(profile.discovery), `${profile.id}.discovery inválido.`);
   for (const flag of ["prerelease", "globalLatest", "productionEnabled"]) {
@@ -828,8 +840,23 @@ async function buildRegisteredCharacter({
   const characterJson = stableJson(character);
   const runtimeSharedPath = join(absoluteRoot, "shared", "runtime-core.lua");
   let runtime = sourceFiles.runtime;
-  if (await pathExists(runtimeSharedPath)) {
+  if ((profile.runtimeLibraries || []).length > 0) {
+    assert(await pathExists(runtimeSharedPath), `${profile.id}.runtimeLibraries requer shared/runtime-core.lua.`);
     const sharedRuntime = await readSource(runtimeSharedPath, "shared/runtime-core.lua");
+    const libraries = [];
+    for (const libraryPath of profile.runtimeLibraries) {
+      libraries.push(await readSource(join(absoluteRoot, libraryPath), libraryPath));
+    }
+    const sharedPrefix = [sharedRuntime, ...libraries].join("\n");
+    if (runtime.includes("__RUNTIME_CORE_LITERAL__")) {
+      runtime = replaceSinglePlaceholder(runtime, "__RUNTIME_CORE_LITERAL__", sharedPrefix, "__RUNTIME_CORE_LITERAL__");
+    } else {
+      runtime = `${sharedPrefix}\n${runtime}`;
+    }
+  } else if (await pathExists(runtimeSharedPath)) {
+    const sharedRuntime = await readSource(runtimeSharedPath, "shared/runtime-core.lua");
+    // Ramo legado intencionalmente preservado: perfis sem bibliotecas devem
+    // continuar gerando exatamente os mesmos bytes.
     if (runtime.includes("__RUNTIME_CORE_LITERAL__")) {
       runtime = replaceSinglePlaceholder(runtime, "__RUNTIME_CORE_LITERAL__", sharedRuntime, "__RUNTIME_CORE_LITERAL__");
     } else {
