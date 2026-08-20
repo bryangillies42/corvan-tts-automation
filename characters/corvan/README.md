@@ -35,7 +35,7 @@ O painel automatiza:
 
 - PV/PM ajustáveis por valor;
 - Defesa e RD calculadas;
-- Espada Longa e Escudo Pesado;
+- Espada Maculada pela Ira e Escudo Pesado;
 - rolagens físicas de ataque, dano e crítico;
 - poderes e recursos;
 - perícias e resistências;
@@ -61,6 +61,8 @@ A v0.2.0 é a referência funcional anterior à fundação multi-personagem:
 
 A v0.2.1 não deve alterar esses cálculos, poderes, textos, cores, proporções ou contratos de UI. O foco é mover o produto para a arquitetura multi-personagem, adicionar identidade e preservar o Refresh de um objeto v0.2.0 existente.
 
+Na v0.2.2, Corvan continua no nível 7 e troca sua arma ativa pela **Espada Maculada pela Ira**: ataque +13, dano `2d8+10` e crítico `18–20/x2` (`4d8+10`). O bônus de Duelo continua sendo somado após o efeito da arma, sem multiplicação no crítico. A Espada Longa permanece apenas no inventário narrativo e não ganha um botão próprio no painel.
+
 ## Histórico resumido
 
 - **v0.1.7** — moldura alinhada ao painel passou a ser camada visual da UI, mantendo fallback da textura física.
@@ -68,6 +70,7 @@ A v0.2.1 não deve alterar esses cálculos, poderes, textos, cores, proporções
 - **v0.1.9** — hierarquia visual do chat e rótulos explícitos de resultado/cálculo.
 - **v0.2.0** — ficha no nível 7, novos poderes/perícias, estado preservado no Refresh, chat reduzido a destaques seguros e força vertical dos dados mais variada.
 - **v0.2.1** — fundação multi-personagem, sem mudança intencional nas regras do Corvan.
+- **v0.2.2** — Espada Maculada pela Ira como arma ativa, com dano `2d8+10` e crítico `4d8+10`, preservando nível, recursos e estado.
 
 ## Teste e release
 

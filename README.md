@@ -1,6 +1,6 @@
 # Saved Objects multi-personagem para Tabletop Simulator
 
-Este repositório contém os Saved Objects, runtimes e ferramentas de desenvolvimento para painéis de personagens no **Tabletop Simulator**. A fundação da v0.2.1 separa identidade, estado, interface, regras, artefatos e releases por personagem, permitindo que vários objetos coexistam na mesma mesa e no mesmo repositório sem compartilharem atualização ou estado por acidente.
+Este repositório contém os Saved Objects, runtimes e ferramentas de desenvolvimento para painéis de personagens no **Tabletop Simulator**. Desde a fundação multi-personagem da v0.2.1, identidade, estado, interface, regras, artefatos e releases são separados por personagem, permitindo que vários objetos coexistam na mesma mesa e no mesmo repositório sem compartilharem atualização ou estado por acidente. O Corvan está em desenvolvimento na v0.2.2, com a nova Espada Maculada pela Ira, sem mudar essa arquitetura.
 
 O primeiro produto é o [Console do Corvan](characters/corvan/README.md). O [Grimório do Spentar](characters/spentar/README.md) está ativo para desenvolvimento e testes na versão `0.1.0`, mas continua tecnicamente bloqueado para publicação até concluir o aceite no TTS.
 
@@ -86,7 +86,7 @@ Para novos personagens, os nomes são inequívocos:
 
 O manifesto continua em `schemaVersion: 1` e acrescenta, de forma compatível, `characterId`, `releaseTag`, `version`, `minBootstrapVersion`, `commitSha`, `runtime` e `previousVersion`. O bootstrap baixa e verifica o manifesto e o runtime antes de aplicar qualquer alteração; se uma etapa falhar, o runtime e o estado anteriores continuam ativos.
 
-Um Saved Object Corvan v0.2.0 deve poder atualizar para v0.2.1 pelo **Refresh**, sem reimportação e sem perder PV/PM gastos, efeitos, preferência, posição, rotação, escala ou GUIDs. O objetivo da v0.2.1 é preparar a separação multi-personagem; ela não muda as regras do Corvan.
+Saved Objects antigos do Corvan devem poder atualizar pelo **Refresh**, sem reimportação e sem perder PV/PM gastos, efeitos, preferência, posição, rotação, escala ou GUIDs. A v0.2.1 estabeleceu a separação multi-personagem sem mudar as regras do Corvan; a v0.2.2 atualiza somente a arma ativa para a Espada Maculada pela Ira (`2d8+10`, crítico `18–20/x2`) e mantém o schema de estado `1`.
 
 ## Criar um personagem
 
@@ -142,6 +142,7 @@ A listagem não depende do nome visível do objeto. Ela lê `characterId` e os m
 - [Spentar — grimório em desenvolvimento](characters/spentar/README.md)
 - [Roteiro manual multi-personagem da v0.2.1](docs/testing/multi-character-v0.2.1.md)
 - [Roteiro de aceite do Spentar v0.1.0](docs/testing/spentar-v0.1.0.md)
+- [Roteiro manual do Corvan v0.2.2](docs/testing/corvan-v0.2.2.md)
 
 ## Limitações
 
@@ -150,4 +151,4 @@ A listagem não depende do nome visível do objeto. Ela lê `characterId` e os m
 - Sem internet, o objeto usa o runtime seed e não consegue procurar uma atualização ou baixar um asset ausente do cache.
 - Firewall, proxy, indisponibilidade do GitHub ou rate limit podem fazer o Refresh falhar; o runtime atual é preservado.
 - O TTS compartilha parte do ambiente de scripting da mesa. O isolamento por `characterId`, GUID e GM Notes é obrigatório, mas não substitui testar dois objetos reais juntos.
-- A v0.2.1 não é um importador genérico de fichas nem um motor universal de Tormenta 20. Cada personagem continua tendo regras, estado, layout e migrações próprias.
+- A fundação multi-personagem não é um importador genérico de fichas nem um motor universal de Tormenta 20. Cada personagem continua tendo regras, estado, layout e migrações próprias.

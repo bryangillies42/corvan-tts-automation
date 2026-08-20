@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "corvan",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "name": "Corvan Duras",
   "shortName": "Corvan",
   "resources": {
@@ -18,13 +18,13 @@
   "damageReduction": 8,
   "weapons": {
     "sword": {
-      "name": "Espada Longa",
+      "name": "Espada Maculada pela Ira",
       "chatName": "Espada",
       "attack": 13,
       "damage": {
-        "count": 1,
+        "count": 2,
         "sides": 8,
-        "bonus": 5
+        "bonus": 10
       },
       "critical": {
         "min": 18,

@@ -97,7 +97,7 @@ test("recusa produção desabilitada, versão divergente e tag incompatível", (
 
 test("registry real mantém o Spentar namespaced em pré-release e bloqueado para produção", async () => {
   const profiles = await loadRegistry();
-  const corvan = resolveRelease({tag: "v0.2.1", profiles});
+  const corvan = resolveRelease({tag: "v0.2.2", profiles});
   assert.equal(corvan.prerelease, false);
   assert.equal(corvan.latest, true);
   const spentar = profiles.get("spentar");

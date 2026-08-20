@@ -106,24 +106,46 @@ function activateBaluarteAllies(state) {
 }
 
 test('fórmulas de ataque, defesa e crítico seguem os números da ficha', () => {
+  assert.equal(character.version, '0.2.2');
+  assert.equal(character.weapons.sword.name, 'Espada Maculada pela Ira');
+  assert.match(runtime, /version = "0\.2\.2"/);
+  assert.match(runtime, /EXPECTED_RUNTIME_VERSION = "0\.2\.2"/);
+  assert.match(runtime, /name = "Espada Maculada pela Ira", chatName = "Espada", attack = 13/);
+  assert.match(runtime, /damage = \{count = 2, sides = 8, bonus = 10\}/);
+
   const state = initialState();
   assert.equal(attackModifier(state), 13);
+  assert.deepEqual(damageSpec(state, 'sword', false), { count: 2, sides: 8, bonus: 10 });
+  assert.deepEqual(damageSpec(state, 'sword', true), { count: 4, sides: 8, bonus: 10 });
+
+  state.effects.duel = 2;
+  assert.equal(attackModifier(state), 15);
+  assert.deepEqual(damageSpec(state, 'sword', false), { count: 2, sides: 8, bonus: 12 });
+  assert.deepEqual(damageSpec(state, 'sword', true), { count: 4, sides: 8, bonus: 12 });
+
   state.effects.duel = 3;
   assert.equal(attackModifier(state), 16);
+  assert.deepEqual(damageSpec(state, 'sword', false), { count: 2, sides: 8, bonus: 13 });
+  assert.deepEqual(damageSpec(state, 'sword', true), { count: 4, sides: 8, bonus: 13 });
   state.effects.combatDefensiveArmed = true;
   state.effects.combatDefensiveDefense = true;
   assert.equal(attackModifier(state), 14);
+  assert.deepEqual(
+    damageSpec(state, 'sword', false),
+    { count: 2, sides: 8, bonus: 13 },
+    'Combate Defensivo não altera o dano',
+  );
   assert.equal(defense(state), 29, 'Combate Defensivo concede +5 DEF imediatamente');
   state.effects.combatDefensiveArmed = false;
   assert.equal(defense(state), 29, 'o ataque consome somente a penalidade armada');
   state.effects.baluarte = 4;
   assert.equal(defense(state), 33);
 
-  assert.deepEqual(damageSpec(state, 'sword', false), { count: 1, sides: 8, bonus: 8 });
-  assert.deepEqual(damageSpec(state, 'sword', true), { count: 2, sides: 8, bonus: 8 });
   assert.deepEqual(damageSpec(state, 'shield', true), { count: 2, sides: 6, bonus: 8 });
   assert.equal(damageReduction(state), 11);
   assert.equal(character.weapons.sword.critical.min, 18);
+  assert.equal(character.weapons.sword.chatName, 'Espada');
+  assert.equal([17, 18, 19, 20].filter((natural) => natural >= character.weapons.sword.critical.min).join(','), '18,19,20');
 
   const guardState = initialState();
   guardState.effects.shieldGuardSuppressed = true;
@@ -134,6 +156,9 @@ test('fórmulas de ataque, defesa e crítico seguem os números da ficha', () =>
   guardState.effects.baluarte = 2;
   assert.equal(defense(guardState), 22);
   assert.equal(skillModifier(guardState, 'fortitude'), 13);
+
+  assert.match(runtime, /local spec = CorvanRules\.calculateDamageSpec\(CHARACTER, state, weaponKey, critical\)/);
+  assert.match(runtime, /startPhysicalRoll\(\{kind = "damage", count = spec\.count, sides = spec\.sides, bonus = spec\.bonus/);
 });
 
 test('custos, repetição, insuficiência e limites de recursos são determinísticos', () => {
@@ -226,21 +251,30 @@ test('Duelista Escudado, guarda do escudo e remoção da Torre Armada fazem part
   assert.doesNotMatch(runtime, /armedTower|power_torre_armada|Torre Armada/);
 });
 
-test('migração de nível aumenta apenas recursos cheios, inclusive no salto direto da v0.1.5', () => {
+test('migração v0.2.1 → v0.2.2 e saltos legados preservam recursos gastos', () => {
   assert.match(runtime, /CHARACTER\.version == "0\.2\.0"/);
   assert.match(runtime, /CHARACTER\.version == "0\.2\.1"/);
+  assert.match(runtime, /CHARACTER\.version == "0\.2\.2"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.1\.6"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.1\.7"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.1\.8"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.1\.9"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.2\.0"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.2\.1"/);
+  assert.match(runtime, /source\.runtimeVersion ~= "0\.2\.2"/);
   assert.match(runtime, /source\.hp or source\.pv, 0\) == 47[\s\S]*normalized\.hp = 55/);
   assert.match(runtime, /source\.mp or source\.pm, 0\) == 12[\s\S]*normalized\.mp = 15/);
   assert.match(runtime, /normalized\.hp == 55[\s\S]*normalized\.hp = 69/);
   assert.match(runtime, /normalized\.mp == 15[\s\S]*normalized\.mp = 18/);
   assert.match(runtime, /normalized\.hp == 69[\s\S]*normalized\.hp = 78/);
   assert.match(runtime, /normalized\.mp == 18[\s\S]*normalized\.mp = 21/);
+  assert.match(runtime, /normalized\.hp = math\.floor\(clamp\(source\.hp or source\.pv, 0, CHARACTER\.resources\.hp\.max\)\)/);
+  assert.match(runtime, /normalized\.mp = math\.floor\(clamp\(source\.mp or source\.pm, 0, CHARACTER\.resources\.mp\.max\)\)/);
+  assert.match(runtime, /for key in pairs\(normalized\.effects\) do[\s\S]*normalized\.effects\[key\] = source\.effects\[key\] == true/);
+  assert.match(runtime, /normalized\.pendingThreat = \{[\s\S]*weaponKey = source\.pendingThreat\.weaponKey,[\s\S]*natural = finiteNumber\(source\.pendingThreat\.natural, 0\)/);
+  assert.match(runtime, /normalized\.diceOffset\.x = finiteNumber\(source\.diceOffset\.x, normalized\.diceOffset\.x\)/);
+  assert.match(runtime, /normalized\.undo = normalizeSnapshot\(source\.undo\)/);
+  assert.match(runtime, /sourceOwner == parentGuid and type\(source\.ownedDiceGuids\) == "table"[\s\S]*table\.insert\(normalized\.ownedDiceGuids, guid\)/);
 });
 
 test('início do turno preserva Duelo e Provocação; fim da cena remove todos os efeitos', () => {

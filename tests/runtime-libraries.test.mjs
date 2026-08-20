@@ -1,20 +1,19 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { buildFixture, buildProject, validateCharacterProfile } from "../scripts/build.mjs";
+import {
+  buildFixture,
+  buildProject,
+  loadCharacterRegistry,
+  validateCharacterProfile,
+} from "../scripts/build.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const RELEASE_SHA = "c8e7cd2a35eb60e56fcc5587d09fdfdab90528c7";
-const GOLDEN = {
-  "corvan-runtime.lua": "65218ea9ffb302275d7c520628fd9cc5cf23b40c412f3dc4f33d69fa28abb91a",
-  "manifest.json": "9f11d8cc3aa599bd04eab89ccd8c90880ffddd8f3e9040d016f698abef30432c",
-  "Corvan_Duras_Console.json": "da4c280173600ad6e54bbc1b0a12cc2b5eb26d17fb8f1f73d623c325b01ed548",
-};
 
 async function temporaryProject(t) {
   const directory = await mkdtemp(join(tmpdir(), "runtime-libraries-test-"));
@@ -25,23 +24,25 @@ async function temporaryProject(t) {
   return directory;
 }
 
-function hash(contents) {
-  return createHash("sha256").update(contents, "utf8").digest("hex");
-}
+test("Corvan v0.2.2 permanece independente do host físico opcional do Spentar", async (t) => {
+  const registry = await loadCharacterRegistry(ROOT);
+  const corvan = registry.characters.find((profile) => profile.id === "corvan");
+  assert.ok(corvan);
+  assert.equal(corvan.runtimeLibraries, undefined);
 
-test("perfil sem runtimeLibraries preserva os três artefatos oficiais do Corvan v0.2.1 byte a byte", async (t) => {
-  const project = await temporaryProject(t);
-  const result = await buildProject({
-    rootDir: project,
-    outDir: join(project, "dist-corvan"),
+  const outDir = await mkdtemp(join(tmpdir(), "corvan-no-runtime-libraries-"));
+  t.after(() => rm(outDir, { recursive: true, force: true }));
+  await buildProject({
+    rootDir: ROOT,
+    outDir,
     characterId: "corvan",
-    commitSha: RELEASE_SHA,
-    previousVersion: "0.2.0",
+    commitSha: "0123456789abcdef0123456789abcdef01234567",
   });
 
-  for (const [name, expected] of Object.entries(GOLDEN)) {
-    assert.equal(hash(result.files[name]), expected, `${name} divergiu da release v0.2.1`);
-  }
+  const runtime = await readFile(join(outDir, "corvan-runtime.lua"), "utf8");
+  assert.doesNotMatch(runtime, /TtsRuntimeHost/);
+  assert.doesNotMatch(runtime, /SPENTAR_RUNTIME|SpentarRules/);
+  assert.match(runtime, /CORVAN_RUNTIME/);
 });
 
 test("runtimeLibraries entra entre o core e o adaptador na ordem declarada", async (t) => {
