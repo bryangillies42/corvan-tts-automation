@@ -190,14 +190,14 @@
                                         spacing="5" childForceExpandWidth="true" childForceExpandHeight="false">
                             <HorizontalLayout preferredHeight="25" childForceExpandWidth="false">
                                 <Text text="ARMA EM USO" class="caption gold" flexibleWidth="1" />
-                                <Text id="activeWeaponLabel" text="ESPADA LONGA ATIVA" class="gold"
+                                <Text id="activeWeaponLabel" text="ESPADA MACULADA PELA IRA ATIVA" class="gold"
                                       alignment="MiddleRight" preferredWidth="240" />
                             </HorizontalLayout>
                             <HorizontalLayout flexibleHeight="1" spacing="8" childForceExpandWidth="true">
                                 <Button id="weapon_sword" class="weaponButton" onClick="dispatch"
                                         colors="#302712|#493A18|#1D180D|#090B0D88"
                                         outline="#BE9139" outlineSize="2 2"
-                                        text="ESPADA LONGA  •  ATIVA&#10;ATAQUE +13   •   DANO 1d8+5&#10;CRÍTICO 18–20/x2   •   CORTE" />
+                                        text="ESPADA MACULADA PELA IRA  •  ATIVA&#10;ATAQUE +13   •   DANO 2d8+10&#10;CRÍTICO 18–20/x2   •   CORTE" />
                                 <Button id="weapon_shield" class="weaponButton" onClick="dispatch"
                                         text="ESCUDO PESADO&#10;ATAQUE +12   •   DANO 1d6+5&#10;DEFESA +4   •   CRÍTICO 20/x2   •   IMPACTO" />
                             </HorizontalLayout>
@@ -218,7 +218,7 @@
                                 <Panel class="card">
                                     <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="4 2" offsetMax="-4 -2">
                                         <Text text="DANO" class="caption" preferredHeight="16" alignment="MiddleCenter" />
-                                        <Text id="damageValue" text="1d8+5" class="gold" fontSize="24" />
+                                        <Text id="damageValue" text="2d8+10" class="gold" fontSize="24" />
                                     </VerticalLayout>
                                 </Panel>
                                 <Panel class="card">
@@ -350,7 +350,7 @@
                                             childForceExpandWidth="true" childForceExpandHeight="false">
                                 <HorizontalLayout preferredHeight="22" childForceExpandWidth="false">
                                     <Text text="RUNTIME" class="caption gold" preferredWidth="82" />
-                                    <Text id="versionLabel" text="v0.2.1 • offline pronto" class="muted"
+                                    <Text id="versionLabel" text="v0.2.2 • offline pronto" class="muted"
                                           alignment="MiddleRight" flexibleWidth="1" />
                                 </HorizontalLayout>
                                 <Text id="refreshStatus" text="ATUALIZAÇÃO  •  pronta"

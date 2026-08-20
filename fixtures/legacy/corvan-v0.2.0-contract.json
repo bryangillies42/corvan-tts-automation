@@ -2,7 +2,7 @@
   "bootstrapVersion": "1.0.2",
   "bootstrapSha256": "4e0c554513327ab478f9899f5b1212627076ed5f4be052d00f638b4f812629c5",
   "manifestSchemaVersion": 1,
-  "releaseTag": "v0.2.1",
+  "releaseTag": "v0.2.2",
   "manifestAsset": "manifest.json",
   "runtimeAsset": "corvan-runtime.lua",
   "runtimeMarker": "CORVAN_RUNTIME",

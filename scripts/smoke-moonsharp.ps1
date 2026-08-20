@@ -438,7 +438,7 @@ local function bootstrapEnvironment(source, label, characterId, panelGuid, versi
 end
 
 local corvan = bootstrapEnvironment(
-    corvanBootstrapSource, 'corvan-bootstrap', 'corvan', 'corvan-panel', '0.2.1', 'CORVAN_RUNTIME')
+    corvanBootstrapSource, 'corvan-bootstrap', 'corvan', 'corvan-panel', '0.2.2', 'CORVAN_RUNTIME')
 local arcane = bootstrapEnvironment(
     arcaneBootstrapSource, 'arcane-bootstrap', 'arcane-test', 'arcane-panel', '0.1.0', 'ARCANE_TEST_RUNTIME')
 
@@ -487,7 +487,7 @@ local character = {
     weapons = {
         sword = {
             attack = 13,
-            damage = {count = 1, sides = 8, bonus = 5},
+            damage = {count = 2, sides = 8, bonus = 10},
             critical = {min = 18, multiplier = 2}
         },
         shield = {defenseModifier = 4}
@@ -541,6 +541,20 @@ for _ = 1, 100 do
     end
 end
 local damage = CorvanRules.calculateDamageSpec(character, state, 'sword', true)
+local baseDamage = CorvanRules.calculateDamageSpec(character, {effects = {}}, 'sword', false)
+local duelTwoDamage = CorvanRules.calculateDamageSpec(
+    character, {effects = {duel = 2}}, 'sword', false)
+local duelTwoCritical = CorvanRules.calculateDamageSpec(
+    character, {effects = {duel = 2}}, 'sword', true)
+local duelThreeDamage = CorvanRules.calculateDamageSpec(
+    character, {effects = {duel = 3}}, 'sword', false)
+local duelThreeCritical = CorvanRules.calculateDamageSpec(
+    character, {effects = {duel = 3}}, 'sword', true)
+assert(baseDamage.count == 2 and baseDamage.sides == 8 and baseDamage.bonus == 10)
+assert(duelTwoDamage.count == 2 and duelTwoDamage.bonus == 12)
+assert(duelTwoCritical.count == 4 and duelTwoCritical.bonus == 12)
+assert(duelThreeDamage.count == 2 and duelThreeDamage.bonus == 13)
+assert(duelThreeCritical.count == 4 and duelThreeCritical.bonus == 13)
 return CorvanRules.calculateAttackModifier(character, state, 'sword'),
     CorvanRules.calculateDefense(character, state),
     CorvanRules.calculateSkillModifier(character, state, 'fortitude'),
@@ -551,7 +565,7 @@ return CorvanRules.calculateAttackModifier(character, state, 'sword'),
 
 $runner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $actual = $runner.DoString($runtimeConfigPrelude + "`n" + $runtime + "`n" + $rulesHarness).ToString()
-$expected = '14, 29, 15, 11, 2, 8, 8, true'
+$expected = '14, 29, 15, 11, 4, 8, 13, true'
 if ($actual -ne $expected) {
     throw "Smoke de regras retornou '$actual'; esperado '$expected'."
 }
@@ -858,6 +872,33 @@ assert(migrated020.diceOffset.x == 1.25 and migrated020.diceOffset.y == 4.5
 assert(migrated020.lastResult == 'resultado preservado')
 assert(#migrated020.ownedDiceGuids == 1 and migrated020.ownedDiceGuids[1] == 'legacy-020-die')
 assert(migrated020.undo ~= nil and migrated020.undo.hp == 44 and migrated020.undo.mp == 9)
+local legacy021 = deepCopy(migrated020)
+legacy021.runtimeVersion = '0.2.1'
+legacy021.hp = 29
+legacy021.mp = 4
+legacy021.effects.duel = 2
+legacy021.effects.baluarte = 4
+legacy021.effects.provocation = true
+legacy021.automaticResourceSpending = false
+legacy021.diceOffset = {x = -1.5, y = 5.25, z = 2.75}
+legacy021.lastResult = 'resultado 0.2.1 preservado'
+legacy021.ownedDiceOwnerGuid = 'panel1'
+legacy021.ownedDiceGuids = {'legacy-021-die'}
+legacy021.undo = deepCopy(legacy021)
+legacy021.undo.hp = 38
+legacy021.undo.mp = 8
+legacy021.undo.undo = nil
+assert(importState(legacy021))
+local migrated021 = exportState()
+assert(migrated021.hp == 29 and migrated021.mp == 4)
+assert(migrated021.effects.duel == 2 and migrated021.effects.baluarte == 4
+    and migrated021.effects.provocation)
+assert(not migrated021.automaticResourceSpending)
+assert(migrated021.diceOffset.x == -1.5 and migrated021.diceOffset.y == 5.25
+    and migrated021.diceOffset.z == 2.75)
+assert(migrated021.lastResult == 'resultado 0.2.1 preservado')
+assert(#migrated021.ownedDiceGuids == 1 and migrated021.ownedDiceGuids[1] == 'legacy-021-die')
+assert(migrated021.undo ~= nil and migrated021.undo.hp == 38 and migrated021.undo.mp == 8)
 local legacyState = defaultState()
 legacyState.runtimeVersion = '0.1.5'
 legacyState.hp = 47
@@ -956,12 +997,13 @@ assert(exportState().mp == 9 and attributes.pm_adjust == '')
 assert(handleUiEvent({id = 'pm_adjust', value = '999', playerColor = 'White'}))
 assert(handleUiEvent({id = 'pm_add', playerColor = 'White'}))
 assert(exportState().mp == 21)
-dieValues = {6}
+dieValues = {6, 4}
 assert(handleUiEvent({id = 'roll_damage', playerColor = 'White'}))
 local afterDamage = exportState()
-assert(afterDamage.lastResult == 'Dano - 11 (d8[6] + 5)')
-assert(publicChat[#publicChat] == expectedPublicRoll('Dano', 11, 'd8(6) + 5'))
+assert(afterDamage.lastResult == 'Dano - 20 (2d8[6,4] + 10)')
+assert(publicChat[#publicChat] == expectedPublicRoll('Dano', 20, '2d8(6,4) + 10'))
 assert(publicChatRichText[#publicChatRichText] == true)
+assert(#afterDamage.ownedDiceGuids == 2)
 
 assert(handleUiEvent({id = 'power_combat_defensive', playerColor = 'White'}))
 assert(CorvanRules.calculateAttackModifier(CHARACTER, exportState(), 'sword') == 11)
@@ -999,16 +1041,19 @@ assert(state.undo == undoBeforeClear)
 assert(#publicChat == publicBeforeClear and #privateChat == privateBeforeClear)
 assert(attributes.clear_dice == 'false')
 
-dieValues = {6, 3}
+dieValues = {6, 3, 8, 1}
 assert(handleUiEvent({id = 'roll_critical', playerColor = 'White'}))
 local afterCritical = exportState()
-assert(afterCritical.pendingThreat == nil and afterCritical.lastResult == 'Crítico - 14 (2d8[6,3] + 5)')
-assert(publicChat[#publicChat] == expectedPublicRoll('Crítico', 14, '2d8(6,3) + 5'))
-assert(#afterCritical.ownedDiceGuids == 2)
+assert(afterCritical.pendingThreat == nil and afterCritical.lastResult == 'Crítico - 28 (4d8[6,3,8,1] + 10)')
+assert(publicChat[#publicChat] == expectedPublicRoll('Crítico', 28, '4d8(6,3,8,1) + 10'))
+assert(#afterCritical.ownedDiceGuids == 4)
 local criticalDieOne = afterCritical.ownedDiceGuids[1]
 local criticalDieTwo = afterCritical.ownedDiceGuids[2]
+local criticalDieThree = afterCritical.ownedDiceGuids[3]
+local criticalDieFour = afterCritical.ownedDiceGuids[4]
 assert(handleUiEvent({id = 'clear_dice', playerColor = 'White'}))
-assert(diceByGuid[criticalDieOne] == nil and diceByGuid[criticalDieTwo] == nil)
+assert(diceByGuid[criticalDieOne] == nil and diceByGuid[criticalDieTwo] == nil
+    and diceByGuid[criticalDieThree] == nil and diceByGuid[criticalDieFour] == nil)
 assert(#exportState().ownedDiceGuids == 0 and exportState().lastResult == afterCritical.lastResult)
 assert(handleUiEvent({id = 'end_turn', playerColor = 'White'}))
 assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 24)
@@ -1069,12 +1114,12 @@ local latestSpawn = spawnPositions[#spawnPositions]
 assert(latestSpawn.x == 35 and math.abs(latestSpawn.y - 7.2) < 0.001 and latestSpawn.z == 42,
     'spawn did not follow panel: ' .. tostring(latestSpawn.x) .. ','
         .. tostring(latestSpawn.y) .. ',' .. tostring(latestSpawn.z))
-assert(launchCalls == 1 and torqueCalls == 1 and frameCalls == 11
-        and velocityFallbackCalls == 10 and angularFallbackCalls == 10,
+assert(launchCalls == 1 and torqueCalls == 1 and frameCalls == 14
+        and velocityFallbackCalls == 13 and angularFallbackCalls == 13,
     'unexpected launch counts: ' .. tostring(launchCalls) .. ','
         .. tostring(torqueCalls) .. ',' .. tostring(frameCalls) .. ','
         .. tostring(velocityFallbackCalls) .. ',' .. tostring(angularFallbackCalls))
-assert(#appliedVelocities == 11)
+assert(#appliedVelocities == 14)
 for _, velocity in ipairs(appliedVelocities) do
     assert(velocity.y >= DICE_VERTICAL_SPEED_MIN and velocity.y <= DICE_VERTICAL_SPEED_MAX)
     assert(math.abs(velocity.x) <= 1.4 and math.abs(velocity.z) <= 1.4)
@@ -1186,7 +1231,7 @@ assert(#exportState().ownedDiceGuids == 0)
 assert(#privateChat >= 5)
 local nativeEnvelope = nativeExportState()
 assert(nativeEnvelope.characterId == 'corvan'
-    and nativeEnvelope.runtimeVersion == '0.2.1'
+    and nativeEnvelope.runtimeVersion == '0.2.2'
     and type(nativeEnvelope.core) == 'table'
     and type(nativeEnvelope.character) == 'table')
 
@@ -1204,7 +1249,7 @@ try {
     }
     throw
 }
-$expectedRuntimeFlow = '19, 14, "Dano - 11 (d8[6] + 5)", 18, "Crítico - 14 (2d8[6,3] + 5)", 14, 0, 12'
+$expectedRuntimeFlow = '19, 14, "Dano - 20 (2d8[6,4] + 10)", 18, "Crítico - 28 (4d8[6,3,8,1] + 10)", 14, 0, 12'
 if ($runtimeFlowResult -ne $expectedRuntimeFlow) {
     throw "Smoke do fluxo de combate retornou '$runtimeFlowResult'; esperado '$expectedRuntimeFlow'."
 }
@@ -1417,7 +1462,7 @@ $legacyIntegrityRunner.Globals.Set('HASH_SIZE', [MoonSharp.Interpreter.DynValue]
 $legacyIntegrityRunner.Globals.Set('HASH_EXPECTED', [MoonSharp.Interpreter.DynValue]::NewString($manifest.runtime.sha256))
 $legacyIntegrityResult = $legacyIntegrityRunner.DoString($legacyBootstrap + "`n" + $integrityHarness)
 if (-not $legacyIntegrityResult.Tuple[0].Boolean) {
-    throw "Bootstrap congelado v0.2.0 rejeitou a integridade do runtime v0.2.1: $($legacyIntegrityResult.Tuple[1])"
+    throw "Bootstrap congelado 1.0.2 rejeitou a integridade do runtime v0.2.2: $($legacyIntegrityResult.Tuple[1])"
 }
 
 $legacyManifestHarness = @"
@@ -1443,7 +1488,7 @@ $legacyManifestRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpret
 $legacyManifestRunner.Globals.Set('ACTUAL_RUNTIME_SOURCE', [MoonSharp.Interpreter.DynValue]::NewString($runtime))
 $legacyManifestResult = $legacyManifestRunner.DoString($legacyBootstrap + "`n" + $legacyManifestHarness).ToString()
 if ($legacyManifestResult -ne 'true, true') {
-    throw "Contrato do manifesto v0.2.1 falhou no bootstrap congelado v0.2.0: '$legacyManifestResult'."
+    throw "Contrato do manifesto v0.2.2 falhou no bootstrap congelado 1.0.2: '$legacyManifestResult'."
 }
 
 $onLoadHarness = @'
@@ -1510,15 +1555,15 @@ spawnObject = function(params)
                 xml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
             })
             if not accepted then error('bootstrap rejected valid UI') end
-            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.2.1'})
+            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.2.2'})
             setRuntimeUiAttribute({id = 'missing', attribute = 'text', value = 'must stay queued'})
             return helper
         end,
         call = function(name, _)
             if name == 'healthCheck' then
-                return {ok = true, version = '0.2.1', parentGuid = 'panel1'}
+                return {ok = true, version = '0.2.2', parentGuid = 'panel1'}
             elseif name == 'exportState' then
-                return {schemaVersion = 1, runtimeVersion = '0.2.1'}
+                return {schemaVersion = 1, runtimeVersion = '0.2.2'}
             end
             return true
         end
@@ -1556,7 +1601,7 @@ return xmlSetCalls, attributeCalls, invalidAttributeCalls, info.helperGuid, info
 
 $onLoadRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $onLoadResult = $onLoadRunner.DoString($bootstrap + "`n" + $onLoadHarness).ToString()
-$expectedOnLoad = '2, 5, 0, "helper1", "0.2.1"'
+$expectedOnLoad = '2, 5, 0, "helper1", "0.2.2"'
 if ($onLoadResult -ne $expectedOnLoad) {
     throw "Smoke de onLoad retornou '$onLoadResult'; esperado '$expectedOnLoad'."
 }
@@ -1565,7 +1610,7 @@ $copyPersistenceHarness = @'
 local timeQueue = {}
 local helper = nil
 local helperState = nil
-local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.2.1', mp = 21, effects = {duel = false}}
+local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.2.2', mp = 21, effects = {duel = false}}
 local persistedRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.2', mp = 10, effects = {duel = true}}
 
 JSON = {
@@ -1614,7 +1659,7 @@ spawnObject = function(params)
                 cacheRuntimeState({state = helperState or defaultRuntimeState})
                 return true
             elseif name == 'healthCheck' then
-                return {ok = true, version = '0.2.1', parentGuid = 'panel-copy'}
+                return {ok = true, version = '0.2.2', parentGuid = 'panel-copy'}
             elseif name == 'importState' then
                 helperState = payload
                 return true
@@ -1693,7 +1738,7 @@ if ($webRequestResult -ne $expectedWebRequest) {
 $transactionHarness = @'
 local oldXml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
 local candidateXml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/><Text id="activeWeaponLabel"/></Panel>'
-local candidateSource = '-- CORVAN_RUNTIME candidate v0.2.1'
+local candidateSource = '-- CORVAN_RUNTIME candidate v0.2.2'
 local oldSource = SEED_RUNTIME
 local timers = {}
 local currentGuid = 'helper1'
@@ -1744,7 +1789,7 @@ helper = {
     reload = function()
         if loadedSource == candidateSource then
             currentGuid = 'candidate-guid'
-            activeVersion = CANDIDATE_HEALTH_OK and '0.2.1' or 'broken'
+            activeVersion = CANDIDATE_HEALTH_OK and '0.2.2' or 'broken'
             applyRuntimeUi({xml = candidateXml})
         else
             currentGuid = 'rollback-guid'
@@ -1781,7 +1826,7 @@ update.playerColor = 'White'
 update.phase = 'install'
 
 installCandidate(9, {
-    manifest = {version = '0.2.1', commitSha = '0123456789abcdef0123456789abcdef01234567'},
+    manifest = {version = '0.2.2', commitSha = '0123456789abcdef0123456789abcdef01234567'},
     source = candidateSource,
     etag = 'etag-2'
 })
@@ -1811,7 +1856,7 @@ function Invoke-TransactionSmoke([bool]$healthy, [string]$bootstrapSource = $boo
 }
 
 $updateSuccess = Invoke-TransactionSmoke $true
-$expectedUpdateSuccess = '"0.2.1", true, false, false, "candidate-guid", 23, true, false'
+$expectedUpdateSuccess = '"0.2.2", true, false, false, "candidate-guid", 23, true, false'
 if ($updateSuccess -ne $expectedUpdateSuccess) {
     throw "Smoke de update retornou '$updateSuccess'; esperado '$expectedUpdateSuccess'."
 }
@@ -1824,7 +1869,7 @@ if ($updateRollback -ne $expectedUpdateRollback) {
 
 $legacyUpdateSuccess = Invoke-TransactionSmoke $true $legacyBootstrap
 if ($legacyUpdateSuccess -ne $expectedUpdateSuccess) {
-    throw "Bootstrap congelado v0.2.0 não instalou a transação v0.2.1: '$legacyUpdateSuccess'."
+    throw "Bootstrap congelado 1.0.2 não instalou a transação v0.2.2: '$legacyUpdateSuccess'."
 }
 
 $legacyLatestShortCircuitHarness = @'
