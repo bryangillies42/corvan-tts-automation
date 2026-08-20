@@ -184,30 +184,52 @@ $spentarRulesAssertions = @'
 local currentState = {
     resources = {hp = 20, mp = 48, temporaryHp = 0, temporaryMp = 0},
     equipment = {staffTwoHanded = true},
-    scene = {profanar = true, connectionMode = 'off', connectionCircle = 1,
+    scene = {profanar = true, profanarTargetsConfirmed = true,
+        connectionMode = 'off', connectionCircle = 1,
         connectionPaidHp = 0, necropotencyGained = 0},
     souls = {stored = 6},
-    summons = {undeadCount = 6, ballisticSpirits = 1,
-        corpsePartner = 'none', commandUsed = false},
-    casting = {spellId = 'inflict_wounds', upgrades = {}, upgradeLevel = 0,
-        releasedSouls = 6, targets = 1, sequence = 0, phase = 'configure',
-        failed = 0, defeated = 0, lastConfigurations = {}},
+    summons = {bodiesAvailable = 6, undeadCount = 6, ballisticSpirits = 1,
+        ballisticDice = 2, corpsePartner = 'none',
+        commandUsed = {undead = false, ballistic = false}},
+    casting = {spellId = 'inflict_wounds', sequence = 0, phase = 'configure',
+        preparations = {inflict_wounds = {cost = 1, targets = 1,
+            diceCount = 3, diceSides = 8, bonus = 9, releasedSouls = 6,
+            damageType = 'trevas', darkness = true, profaneTargets = true,
+            effect = '', note = ''}}, pendingResolutions = {}},
     effects = {}, preferences = {automaticResourceSpending = true}, undo = {}
 }
 
 local undead = SpentarRules.undeadDamagePlan(characterConfig, currentState, 6)
 assert(SpentarRules.totalDamage(undead, {}) == 54, 'Spentar: 6d6+18 sob Profanar deve ser 54')
 
-currentState.casting.releasedSouls = 0
+currentState.casting.preparations.inflict_wounds.releasedSouls = 0
 local wounds = SpentarRules.damagePlan(characterConfig, currentState, 'inflict_wounds')
 assert(SpentarRules.totalDamage(wounds, {}) == 33, 'Spentar: 3d8+9 sob Profanar deve ser 33')
 
-currentState.casting.releasedSouls = 6
+currentState.casting.preparations.inflict_wounds.releasedSouls = 6
 local woundsWithSouls = SpentarRules.damagePlan(characterConfig, currentState, 'inflict_wounds')
 assert(SpentarRules.totalDamage(woundsWithSouls, {}) == 105,
     'Spentar: Infligir Ferimentos com seis almas sob Profanar deve ser 105')
 assert(SpentarRules.totalDamage({bonus=0, groups={{id='souls', count=12, sides=6, maximized=true}}}, {}) == 72,
     'Spentar: 12d6 sob Profanar deve ser 72')
+currentState.scene.profanarTargetsConfirmed = false
+local woundsOutsideProfane = SpentarRules.damagePlan(characterConfig, currentState, 'inflict_wounds')
+assert(not woundsOutsideProfane.groups[1].maximized
+    and not woundsOutsideProfane.groups[2].maximized,
+    'Spentar: Profanar maximizou grupo sem confirmação de área')
+currentState.scene.profanarTargetsConfirmed = true
+
+local necropotencyState = {
+    resources = {temporaryMp = 0},
+    scene = {connectionMode = 'doubled', necropotencyGained = 0}
+}
+assert(SpentarRules.applyNecropotency(characterConfig, necropotencyState, 6) == 2
+    and necropotencyState.resources.temporaryMp == 2,
+    'Spentar: Necropotência multiplicou benefício pelos derrotados')
+necropotencyState.scene.necropotencyGained = 6
+assert(SpentarRules.applyNecropotency(characterConfig, necropotencyState, 1) == 1
+    and necropotencyState.scene.necropotencyGained == 7,
+    'Spentar: Necropotência ultrapassou ou ignorou o teto da cena')
 
 assert(SpentarRules.calculateSpellDifficulty(characterConfig, currentState, 'arcane_armor') == 25)
 currentState.equipment.staffTwoHanded = false
@@ -254,6 +276,34 @@ assert(recovered.character.resources.mp == 48 and recovered.character.souls.stor
     and recovered.character.casting.transaction == nil
     and recovered.core.page == 'casting',
     'Spentar não restaurou snapshot de transação interrompida')
+
+assert(importState({
+    characterId = 'spentar', runtimeVersion = '0.1.0',
+    characterStateSchemaVersion = 1, core = {page = 'casting'},
+    character = {
+        resources = {hp = 13, mp = 31, temporaryHp = 4, temporaryMp = 1},
+        souls = {stored = 4}, summons = {commandUsed = true},
+        casting = {spellId = 'inflict_wounds', phase = 'resolution', sequence = 9,
+            failed = 1, defeated = 2,
+            lastConfigurations = {inflict_wounds = {targets = 3, releasedSouls = 2}}}
+    }
+}), 'Spentar recusou estado legado v1')
+local migratedV2 = exportState()
+assert(migratedV2.characterStateSchemaVersion == 2
+    and migratedV2.character.resources.hp == 13
+    and migratedV2.character.resources.mp == 31
+    and migratedV2.character.resources.temporaryHp == 4
+    and migratedV2.character.resources.temporaryMp == 1
+    and migratedV2.character.souls.stored == 4
+    and migratedV2.character.summons.bodiesAvailable == 0
+    and migratedV2.character.summons.undeadCount == 0
+    and migratedV2.character.summons.commandUsed.undead
+    and migratedV2.character.summons.commandUsed.ballistic
+    and migratedV2.character.casting.phase == 'configure'
+    and migratedV2.character.casting.preparations.inflict_wounds.targets == 3
+    and migratedV2.character.casting.preparations.inflict_wounds.releasedSouls == 2
+    and migratedV2.character.casting.pendingResolution ~= nil,
+    'Spentar não migrou estado v1 para a bancada v2')
 assert(not importState({characterId = 'corvan', character = {}, core = {}}),
     'Spentar aceitou estado do Corvan')
 assert(not importState({characterId = 'arcane-test', character = {}, core = {}}),
@@ -482,86 +532,136 @@ local arcaneAfterCast = arcane.exportState()
 assert(arcaneAfterCast.character.focus == 11 and arcaneAfterCast.character.casts == 1,
     'shared world: Arcane state did not mutate locally')
 
--- O atalho apenas prepara a conjuração: não cobra PM, não consome almas e
--- não cria dados antes da confirmação explícita.
+-- A bancada permite editar e salvar uma preparação sem cobrar recursos.
 assert(spentar.handleUiEvent({
-    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'quick_inflict_wounds',
-    playerColor = 'White', eventId = 'spentar-prepare-1'
-}), 'shared world: Spentar quick prepare failed')
+    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'connection_doubled',
+    playerColor = 'White', eventId = 'spentar-connection-doubled'
+}), 'shared world: Spentar doubled connection failed')
+assert(spentar.handleUiEvent({
+    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'quick_inflict_edit',
+    playerColor = 'White', eventId = 'spentar-edit-1'
+}), 'shared world: Spentar quick edit failed')
+assert(not spentar.handleUiEvent({
+    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'prepare_cost', value = 'abc',
+    playerColor = 'White', eventId = 'spentar-invalid-cost'
+}), 'shared world: Spentar accepted invalid typed cost')
+for _, input in ipairs({
+    {id='prepare_cost', value='2'}, {id='prepare_targets', value='2'},
+    {id='prepare_dice_count', value='4'}, {id='prepare_dice_sides', value='8'},
+    {id='prepare_bonus', value='11'}, {id='prepare_note', value='preparo persistido'}
+}) do
+    input.characterId = 'spentar'; input.parentGuid = 'spentar-panel'
+    input.playerColor = 'White'; input.eventId = 'spentar-input-' .. input.id
+    assert(spentar.handleUiEvent(input), 'shared world: typed input failed: ' .. input.id)
+end
+assert(not spentar.handleUiEvent({
+    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'prepare_dice_sides',
+    value = '7', playerColor = 'White', eventId = 'spentar-invalid-d7'
+}), 'shared world: Spentar accepted a die unsupported by the physical host')
+assert(spentar.handleUiEvent({
+    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'prepare_save',
+    playerColor = 'White', eventId = 'spentar-save-1'
+}), 'shared world: saving preparation failed')
 local spentarPrepared = spentar.exportState()
+local savedPreparation = spentarPrepared.character.casting.preparations.inflict_wounds
 assert(spentarPrepared.core.page == 'casting'
     and spentarPrepared.character.resources.mp == 48
+    and spentarPrepared.character.resources.hp == 18
     and spentarPrepared.character.souls.stored == 0
-    and spentarPrepared.character.casting.phase == 'configure'
+    and savedPreparation.cost == 2 and savedPreparation.targets == 2
+    and savedPreparation.diceCount == 4 and savedPreparation.diceSides == 8
+    and savedPreparation.bonus == 11 and savedPreparation.note == 'preparo persistido'
     and spentarPrepared.character.casting.transaction == nil
     and #spentarPrepared.core.ownedDice == 0,
-    'shared world: Spentar quick action mutated before review')
+    'shared world: editing/saving mutated resources or lost preparation')
+
+-- Rolar último usa exatamente o preparo salvo, cobra uma vez e cria uma
+-- resolução persistente sem bloquear o restante do painel.
 assert(spentar.handleUiEvent({
-    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'cast_review',
-    playerColor = 'White', eventId = 'spentar-review-1'
-}), 'shared world: Spentar review failed')
-local spentarReviewed = spentar.exportState()
-assert(spentarReviewed.character.casting.phase == 'review'
-    and spentarReviewed.character.resources.mp == 48
-    and #spentarReviewed.core.ownedDice == 0,
-    'shared world: Spentar review mutated resources or dice')
-assert(spentar.importState(spentarReviewed),
-    'shared world: Spentar review state did not import')
-local spentarReviewReloaded = spentar.exportState()
-assert(spentarReviewReloaded.core.page == 'casting'
-    and spentarReviewReloaded.character.casting.phase == 'review'
-    and spentarReviewReloaded.character.casting.spellId == 'inflict_wounds'
-    and spentarReviewReloaded.character.resources.mp == 48,
-    'shared world: Spentar review did not survive save/load')
-assert(not spentar.handleUiEvent({
-    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'nav_necromancy',
-    playerColor = 'White', eventId = 'spentar-review-nav-blocked'
-}), 'shared world: Spentar review allowed leaving the guided journey')
-assert(not spentar.handleUiEvent({
-    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'undead_roll',
-    playerColor = 'White', eventId = 'spentar-review-undead-blocked'
-}), 'shared world: Spentar review allowed an unrelated physical roll')
-assert(spentar.handleUiEvent({
-    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'cast_confirm',
+    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'quick_inflict_roll',
     playerColor = 'White', eventId = 'spentar-roll-1'
-}), 'shared world: Spentar physical roll failed')
+}), 'shared world: Spentar quick roll failed')
+assert(not spentar.handleUiEvent({
+    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'quick_inflict_roll',
+    playerColor = 'White', eventId = 'spentar-roll-1'
+}), 'shared world: duplicate event charged or rolled twice')
 local spentarAfterRoll = spentar.exportState()
-assert(spentarAfterRoll.character.resources.mp == 47
-    and spentarAfterRoll.character.casting.phase == 'resolution',
-    'shared world: Spentar roll state did not complete locally')
-assert(#spentarAfterRoll.core.ownedDice == 3, 'shared world: Spentar did not own three d8')
+assert(spentarAfterRoll.character.resources.mp == 46
+    and spentarAfterRoll.character.casting.phase == 'configure'
+    and spentarAfterRoll.character.casting.transaction == nil
+    and spentarAfterRoll.character.casting.pendingResolution ~= nil,
+    'shared world: quick roll did not finish into a nonblocking resolution')
+assert(#spentarAfterRoll.core.ownedDice == 4,
+    'shared world: saved preparation did not create four d8')
 assert(spentar.importState(spentarAfterRoll),
-    'shared world: Spentar resolution state did not import')
+    'shared world: pending resolution state did not import')
 local spentarResolutionReloaded = spentar.exportState()
 assert(spentarResolutionReloaded.core.page == 'casting'
-    and spentarResolutionReloaded.character.casting.phase == 'resolution'
-    and spentarResolutionReloaded.character.resources.mp == 47,
-    'shared world: Spentar resolution did not survive save/load')
+    and spentarResolutionReloaded.character.casting.phase == 'configure'
+    and spentarResolutionReloaded.character.casting.pendingResolution ~= nil
+    and spentarResolutionReloaded.character.resources.mp == 46,
+    'shared world: pending resolution did not survive save/load')
+assert(spentar.handleUiEvent({
+    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'nav_necromancy',
+    playerColor = 'White', eventId = 'spentar-pending-nav'
+}), 'shared world: pending resolution blocked navigation')
+
+-- Corpos e invocações são entradas independentes e continuam utilizáveis
+-- enquanto a resolução anterior aguarda as informações da mesa.
+for _, input in ipairs({
+    {id='bodies_available', value='5'}, {id='undead_count', value='2'},
+    {id='ballistic_count', value='1'}, {id='ballistic_dice', value='2'},
+    {id='corpse_partner', value='Cadáver magivocador'}
+}) do
+    input.characterId = 'spentar'; input.parentGuid = 'spentar-panel'
+    input.playerColor = 'White'; input.eventId = 'spentar-necro-' .. input.id
+    assert(spentar.handleUiEvent(input), 'shared world: necromancy input failed: ' .. input.id)
+end
+local independentSummons = spentar.exportState().character.summons
+assert(independentSummons.bodiesAvailable == 5 and independentSummons.undeadCount == 2
+    and independentSummons.ballisticSpirits == 1 and independentSummons.ballisticDice == 2
+    and independentSummons.corpsePartner == 'Cadáver magivocador',
+    'shared world: corpses and summons crossed state')
+assert(spentar.handleUiEvent({
+    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'necro_undead_roll',
+    playerColor = 'White', eventId = 'spentar-direct-undead'
+}), 'shared world: pending resolution blocked undead roll')
+assert(spentar.handleUiEvent({
+    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'necro_ballistic_roll',
+    playerColor = 'White', eventId = 'spentar-direct-ballistic'
+}), 'shared world: pending resolution blocked ballistic roll')
+
+-- Consequências são aplicadas uma vez: cajado +10 PV temporários,
+-- Necropotência +2 PM temporários e almas limitadas pelo estoque máximo.
+assert(spentar.handleUiEvent({
+    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'pending_failed', value = '2',
+    playerColor = 'White', eventId = 'spentar-pending-failed'
+}), 'shared world: pending failed input failed')
+assert(spentar.handleUiEvent({
+    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'pending_defeated', value = '2',
+    playerColor = 'White', eventId = 'spentar-pending-defeated'
+}), 'shared world: pending defeated input failed')
+assert(spentar.handleUiEvent({
+    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'pending_apply',
+    playerColor = 'White', eventId = 'spentar-pending-apply'
+}), 'shared world: pending resolution did not apply')
+local spentarResolved = spentar.exportState()
+assert(spentarResolved.character.resources.temporaryHp == 10
+    and spentarResolved.character.resources.temporaryMp == 2
+    and spentarResolved.character.souls.stored == 2
+    and spentarResolved.character.casting.pendingResolution == nil,
+    'shared world: resolution consequences were not applied once')
 assert(not spentar.handleUiEvent({
-    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'ballistic_roll',
-    playerColor = 'White', eventId = 'spentar-resolution-ballistic-blocked'
-}), 'shared world: Spentar resolution allowed an unrelated physical roll')
-assert(spentar.handleUiEvent({
-    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'resolution_apply',
-    playerColor = 'White', eventId = 'spentar-apply-1'
-}), 'shared world: Spentar resolution did not conclude')
-assert(spentar.handleUiEvent({
-    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'toggle_profanar',
-    playerColor = 'White', eventId = 'spentar-prepare-profanar'
-}), 'shared world: Profanar did not enter the guided journey')
-local spentarProfanarPrepared = spentar.exportState()
-assert(spentarProfanarPrepared.core.page == 'casting'
-    and spentarProfanarPrepared.character.casting.phase == 'configure'
-    and spentarProfanarPrepared.character.casting.spellId == 'profane'
-    and spentarProfanarPrepared.character.scene.profanar == false
-    and spentarProfanarPrepared.character.resources.mp == 47,
-    'shared world: Profanar bypassed review or spent resources while preparing')
+    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'pending_apply',
+    playerColor = 'White', eventId = 'spentar-pending-apply-again'
+}), 'shared world: resolution consequences applied twice')
+local spentarBeforeCorvanClear = spentar.exportState()
 assert(corvan.handleUiEvent({
     characterId = 'corvan', parentGuid = 'corvan-panel', id = 'clear_dice', playerColor = 'White'
 }), 'shared world: Corvan clear failed')
 assert(corvanDie.destroyed == true, 'shared world: Corvan die survived own clear')
 assert(arcaneDie.destroyed == false, 'shared world: Arcane die was destroyed by Corvan')
-for _, guid in ipairs(spentarAfterRoll.core.ownedDice) do
+for _, guid in ipairs(spentarBeforeCorvanClear.core.ownedDice) do
     assert(world.dice[guid] and not world.dice[guid].destroyed,
         'shared world: Corvan destroyed Spentar physical die ' .. tostring(guid))
 end
@@ -570,65 +670,33 @@ assert(arcaneAfterCorvanClear.character.focus == 11 and arcaneAfterCorvanClear.c
     'shared world: Corvan clear changed Arcane state')
 assert(arcanePanel.cache.characterId == 'arcane-test', 'shared world: Arcane cache was replaced')
 
+local spentarBeforeClear = spentar.exportState()
 assert(spentar.handleUiEvent({
     characterId = 'spentar', parentGuid = 'spentar-panel', id = 'clear_dice',
     playerColor = 'White', eventId = 'spentar-clear-1'
 }), 'shared world: Spentar clear failed')
-for _, guid in ipairs(spentarAfterRoll.core.ownedDice) do
+for _, guid in ipairs(spentarBeforeClear.core.ownedDice) do
     assert(world.dice[guid].destroyed == true, 'shared world: Spentar die survived own clear')
 end
 assert(arcaneDie.destroyed == false, 'shared world: Spentar destroyed Arcane die')
 assert(spentarForeignDie.destroyed == false, 'shared world: Spentar destroyed die from another panel')
 
--- Ataques diretos de invocações exibem apenas o próprio resultado e não
--- herdam nem substituem a resolução da magia previamente selecionada.
-assert(spentar.handleUiEvent({
-    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'nav_necromancy',
-    playerColor = 'White', eventId = 'spentar-direct-nav'
-}), 'shared world: Spentar could not open Necromancy for a direct attack')
-assert(spentar.handleUiEvent({
-    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'undead_roll',
-    playerColor = 'White', eventId = 'spentar-direct-undead'
-}), 'shared world: direct undead attack failed')
-local spentarAfterUndeadAttack = spentar.exportState()
-assert(spentarAfterUndeadAttack.core.page == 'necromancy'
-    and spentarAfterUndeadAttack.character.casting.phase == 'configure'
-    and spentarAfterUndeadAttack.character.casting.spellId == 'profane'
-    and spentarAfterUndeadAttack.character.resources.mp == 47,
-    'shared world: direct undead attack entered or corrupted spell resolution')
 assert(spentar.handleUiEvent({
     characterId = 'spentar', parentGuid = 'spentar-panel', id = 'end_turn',
     playerColor = 'White', eventId = 'spentar-direct-reset-command'
 }), 'shared world: direct summon command did not reset')
-assert(spentar.handleUiEvent({
-    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'ballistic_roll',
-    playerColor = 'White', eventId = 'spentar-direct-ballistic'
-}), 'shared world: direct ballistic attack failed')
-local spentarAfterBallisticAttack = spentar.exportState()
-assert(spentarAfterBallisticAttack.core.page == 'necromancy'
-    and spentarAfterBallisticAttack.character.casting.phase == 'configure'
-    and spentarAfterBallisticAttack.character.casting.spellId == 'profane'
-    and spentarAfterBallisticAttack.character.resources.mp == 47,
-    'shared world: direct ballistic attack entered or corrupted spell resolution')
 
 -- Uma limpeza durante Rolando cancela a transação, restaura o snapshot e
 -- remove somente os dados do Spentar.
 world.holdSpentarRoll = true
 assert(spentar.handleUiEvent({
-    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'quick_inflict_wounds',
-    playerColor = 'White', eventId = 'spentar-prepare-2'
-}), 'shared world: Spentar second prepare failed')
-assert(spentar.handleUiEvent({
-    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'cast_review',
-    playerColor = 'White', eventId = 'spentar-review-2'
-}), 'shared world: Spentar second review failed')
-assert(spentar.handleUiEvent({
-    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'cast_confirm',
+    characterId = 'spentar', parentGuid = 'spentar-panel', id = 'quick_inflict_roll',
     playerColor = 'White', eventId = 'spentar-roll-2'
 }), 'shared world: Spentar second roll did not enter host')
 local spentarRolling = spentar.exportState()
 assert(spentarRolling.character.casting.phase == 'rolling'
     and spentarRolling.character.resources.mp == 46
+    and spentarRolling.character.resources.temporaryMp == 0
     and spentarRolling.character.casting.transaction ~= nil,
     'shared world: Spentar second roll did not remain cancellable phase='
         .. tostring(spentarRolling.character.casting.phase)
@@ -640,9 +708,10 @@ assert(spentar.handleUiEvent({
 }), 'shared world: Spentar rolling clear did not cancel')
 world.holdSpentarRoll = false
 local spentarAfterCancel = spentar.exportState()
-assert(spentarAfterCancel.character.casting.phase == 'review'
+assert(spentarAfterCancel.character.casting.phase == 'configure'
     and spentarAfterCancel.character.casting.transaction == nil
-    and spentarAfterCancel.character.resources.mp == 47,
+    and spentarAfterCancel.character.resources.mp == 46
+    and spentarAfterCancel.character.resources.temporaryMp == 2,
     'shared world: Spentar rolling clear did not restore snapshot phase='
         .. tostring(spentarAfterCancel.character.casting.phase)
         .. ' mp=' .. tostring(spentarAfterCancel.character.resources.mp)
@@ -651,6 +720,88 @@ assert(arcaneDie.destroyed == false,
     'shared world: Spentar cancellation destroyed an Arcane die')
 assert(spentarForeignDie.destroyed == false,
     'shared world: Spentar cancellation destroyed a foreign Spentar die')
+
+-- Controles visíveis possuem dispatch real e as rotas especiais não deixam
+-- custo sem efeito: Vitalidade aplica PV temporários e Espírito invoca.
+assert(spentar.handleUiEvent({
+    characterId='spentar', parentGuid='spentar-panel', id='combat_edit_last',
+    playerColor='White', eventId='spentar-edit-last'
+}), 'shared world: Editar último não abriu o preparo usado')
+assert(spentar.handleUiEvent({
+    characterId='spentar', parentGuid='spentar-panel', id='mark_command_used',
+    playerColor='White', eventId='spentar-mark-commands'
+}), 'shared world: marcador manual de comandos falhou')
+local markedCommands = spentar.exportState().character.summons.commandUsed
+assert(markedCommands.undead and markedCommands.ballistic,
+    'shared world: marcador manual não marcou ambos os comandos')
+assert(spentar.handleUiEvent({
+    characterId='spentar', parentGuid='spentar-panel', id='mark_command_used',
+    playerColor='White', eventId='spentar-release-commands'
+}), 'shared world: liberação manual de comandos falhou')
+
+assert(spentar.handleUiEvent({
+    characterId='spentar', parentGuid='spentar-panel', id='toggle_physical_dice',
+    playerColor='White', eventId='spentar-virtual-dice'
+}), 'shared world: não foi possível desligar dados físicos')
+assert(spentar.handleUiEvent({
+    characterId='spentar', parentGuid='spentar-panel', id='prepare_select_phantom_vitality',
+    playerColor='White', eventId='spentar-select-vitality'
+}), 'shared world: Vitalidade Fantasma não abriu')
+local beforeVitality = spentar.exportState()
+assert(spentar.handleUiEvent({
+    characterId='spentar', parentGuid='spentar-panel', id='prepare_roll',
+    playerColor='White', eventId='spentar-roll-vitality'
+}), 'shared world: Vitalidade Fantasma não rolou')
+local afterVitality = spentar.exportState()
+assert(afterVitality.character.resources.temporaryHp
+        > beforeVitality.character.resources.temporaryHp
+    and afterVitality.character.casting.pendingResolution == nil,
+    'shared world: Vitalidade não aplicou PV temporários diretamente')
+local vitalityMp = afterVitality.character.resources.mp
+local vitalityTemporaryMp = afterVitality.character.resources.temporaryMp
+assert(not spentar.handleUiEvent({
+    characterId='spentar', parentGuid='spentar-panel', id='prepare_apply',
+    playerColor='White', eventId='spentar-apply-vitality'
+}), 'shared world: Vitalidade aceitou aplicação sem resultado de dados')
+local afterInvalidVitality = spentar.exportState()
+assert(afterInvalidVitality.character.resources.mp == vitalityMp
+    and afterInvalidVitality.character.resources.temporaryMp == vitalityTemporaryMp,
+    'shared world: Vitalidade inválida cobrou PM')
+
+assert(spentar.handleUiEvent({
+    characterId='spentar', parentGuid='spentar-panel', id='prepare_select_ballistic_spirit',
+    playerColor='White', eventId='spentar-select-ballistic'
+}), 'shared world: Espírito Balístico não abriu')
+assert(spentar.handleUiEvent({
+    characterId='spentar', parentGuid='spentar-panel', id='prepare_targets', value='2',
+    playerColor='White', eventId='spentar-ballistic-targets'
+}), 'shared world: configuração de espíritos falhou')
+assert(spentar.handleUiEvent({
+    characterId='spentar', parentGuid='spentar-panel', id='prepare_roll',
+    playerColor='White', eventId='spentar-conjure-ballistic'
+}), 'shared world: conjuração de Espírito Balístico falhou')
+assert(spentar.exportState().character.summons.ballisticSpirits == 2,
+    'shared world: Rolar/Conjurar não criou os espíritos configurados')
+
+-- Sem eventId (como no bootstrap distribuído), o debounce impede cobrança
+-- dupla em ações síncronas.
+assert(spentar.handleUiEvent({
+    characterId='spentar', parentGuid='spentar-panel', id='prepare_select_profane',
+    playerColor='White', eventId='spentar-select-profane-debounce'
+}), 'shared world: Profanar não abriu para teste de debounce')
+local beforeProfane = spentar.exportState()
+assert(spentar.handleUiEvent({
+    characterId='spentar', parentGuid='spentar-panel', id='prepare_apply',
+    playerColor='White'
+}), 'shared world: primeira aplicação sem eventId falhou')
+assert(not spentar.handleUiEvent({
+    characterId='spentar', parentGuid='spentar-panel', id='prepare_apply',
+    playerColor='White'
+}), 'shared world: duplo clique sem eventId foi aceito')
+local afterProfane = spentar.exportState()
+assert((beforeProfane.character.resources.mp + beforeProfane.character.resources.temporaryMp)
+        - (afterProfane.character.resources.mp + afterProfane.character.resources.temporaryMp) == 1,
+    'shared world: duplo clique cobrou Profanar mais de uma vez')
 assert(corvanPanel.cache.characterId == 'corvan' and arcanePanel.cache.characterId == 'arcane-test'
     and spentarPanel.cache.characterId == 'spentar', 'shared world: cache crossed characters')
 assert(world.crossCalls == 0, 'shared world: parent received cross-character callback')
@@ -663,7 +814,7 @@ return corvanPanel.cache.characterId, arcanePanel.cache.characterId, spentarPane
 
 $sharedWorldRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $sharedWorldResult = $sharedWorldRunner.DoString($sharedWorldHarness).ToString()
-$expectedSharedWorld = '"corvan", "arcane-test", "spentar", true, false, false, 11, 47, 0'
+$expectedSharedWorld = '"corvan", "arcane-test", "spentar", true, false, false, 11, 46, 0'
 if ($sharedWorldResult -ne $expectedSharedWorld) {
     throw "Smoke multi-personagem compartilhado retornou '$sharedWorldResult'; esperado '$expectedSharedWorld'."
 }

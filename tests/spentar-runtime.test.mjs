@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import {readFile} from "node:fs/promises";
 import test from "node:test";
 
 const character = JSON.parse(await readFile(
@@ -9,7 +9,7 @@ const runtime = await readFile(
 const ui = await readFile(
   new URL("../characters/spentar/ui.xml", import.meta.url), "utf8");
 
-function spellDifficulty({ staff = true, spellId = "inflict_wounds" } = {}) {
+function spellDifficulty({staff = true, spellId = "inflict_wounds"} = {}) {
   const spell = character.spells[spellId];
   return character.spellcasting.baseDifficulty
     + (staff ? character.spellcasting.staffDifficultyBonus : 0)
@@ -35,90 +35,162 @@ function spendMp(state, cost) {
   return true;
 }
 
-function damage({ count, sides, bonus = 0, profanar = false }) {
-  return (profanar ? count * sides : 0) + bonus;
+function deterministicDamage({count, sides, bonus = 0, maximize = false}) {
+  return (maximize ? count * sides : 0) + bonus;
 }
 
-test("identidade, versão e regras de mesa estão explícitas", () => {
+test("identidade, versão e schema v2 estão explícitos", () => {
   assert.equal(character.id, "spentar");
   assert.equal(character.version, "0.1.0");
-  assert.equal(character.stateSchemaVersion, 1);
+  assert.equal(character.stateSchemaVersion, 2);
+  assert.match(runtime, /local STATE_SCHEMA_VERSION = 2/);
   assert.equal(character.resources.hp.max, 20);
   assert.equal(character.resources.mp.max, 48);
   assert.equal(character.resources.souls.max, 6);
-  assert.equal(character.houseRules.spellDifficulty.enabled, true);
-  assert.equal(character.houseRules.staffTemporaryHpStacks.enabled, true);
-  assert.equal(character.houseRules.staffTemporaryHpStacks.expires, "scene");
+  assert.equal(character.houseRules.profaneRequiresPerRollConfirmation.enabled, true);
 });
 
-test("CDs congeladas são 22/23 geral e 24/25 Necromancia", () => {
-  assert.equal(spellDifficulty({ staff: false, spellId: "arcane_bolt" }), 22);
-  assert.equal(spellDifficulty({ staff: true, spellId: "arcane_bolt" }), 23);
-  assert.equal(spellDifficulty({ staff: false, spellId: "inflict_wounds" }), 24);
-  assert.equal(spellDifficulty({ staff: true, spellId: "inflict_wounds" }), 25);
+test("CDs congeladas são 22\/23 geral e 24\/25 Necromancia", () => {
+  assert.equal(spellDifficulty({staff: false, spellId: "arcane_bolt"}), 22);
+  assert.equal(spellDifficulty({staff: true, spellId: "arcane_bolt"}), 23);
+  assert.equal(spellDifficulty({staff: false, spellId: "inflict_wounds"}), 24);
+  assert.equal(spellDifficulty({staff: true, spellId: "inflict_wounds"}), 25);
 });
 
-test("almas alteram Defesa e todas as resistências sem ultrapassar seis", () => {
-  assert.deepEqual(defenses(0), { defense: 17, fortitude: 7, reflex: 10, will: 8 });
-  assert.deepEqual(defenses(6), { defense: 29, fortitude: 19, reflex: 22, will: 20 });
-  assert.equal(character.powers.chainFallen.releasedSoulDamage.count, 2);
-  assert.equal(character.powers.chainFallen.releasedSoulDamage.sides, 6);
+test("almas alteram Defesa e resistências sem ultrapassar seis", () => {
+  assert.deepEqual(defenses(0), {defense: 17, fortitude: 7, reflex: 10, will: 8});
+  assert.deepEqual(defenses(6), {defense: 29, fortitude: 19, reflex: 22, will: 20});
+  assert.deepEqual(character.powers.chainFallen.releasedSoulDamage,
+    {count: 2, sides: 6, type: "trevas"});
 });
 
-test("PM temporários são consumidos antes dos PM normais e insuficiência é atômica", () => {
-  const enough = { mp: 10, temporaryMp: 3 };
+test("PM temporários são consumidos primeiro e insuficiência é atômica", () => {
+  const enough = {mp: 10, temporaryMp: 3};
   assert.equal(spendMp(enough, 5), true);
-  assert.deepEqual(enough, { mp: 8, temporaryMp: 0 });
-
-  const insufficient = { mp: 1, temporaryMp: 1 };
+  assert.deepEqual(enough, {mp: 8, temporaryMp: 0});
+  const insufficient = {mp: 1, temporaryMp: 1};
   assert.equal(spendMp(insufficient, 3), false);
-  assert.deepEqual(insufficient, { mp: 1, temporaryMp: 1 });
+  assert.deepEqual(insufficient, {mp: 1, temporaryMp: 1});
 });
 
-test("exemplos obrigatórios de Profanar são determinísticos", () => {
-  assert.equal(damage({ count: 6, sides: 6, bonus: 18, profanar: true }), 54);
-  assert.equal(damage({ count: 3, sides: 8, bonus: 9, profanar: true }), 33);
-  assert.equal(damage({ count: 12, sides: 6, profanar: true }), 72);
+test("exemplos obrigatórios de Profanar permanecem determinísticos", () => {
+  assert.equal(deterministicDamage({count: 6, sides: 6, bonus: 18, maximize: true}), 54);
+  assert.equal(deterministicDamage({count: 3, sides: 8, bonus: 9, maximize: true}), 33);
+  assert.equal(deterministicDamage({count: 12, sides: 6, maximize: true}), 72);
   assert.equal(
-    damage({ count: 3, sides: 8, bonus: 9, profanar: true })
-      + damage({ count: 12, sides: 6, profanar: true }),
-    105,
-  );
+    deterministicDamage({count: 3, sides: 8, bonus: 9, maximize: true})
+      + deterministicDamage({count: 12, sides: 6, maximize: true}), 105);
 });
 
-test("mortos-vivos usam Nd6 + 2N + INT uma vez", () => {
-  const count = 6;
-  const bonus = count * 2 + character.attributes.intelligence;
-  assert.equal(bonus, 18);
-  assert.equal(damage({ count, sides: 6, bonus, profanar: true }), 54);
+test("Profanar exige estado de cena e confirmação granular do preparo", () => {
+  assert.match(runtime, /currentState\.scene\.profanar == true\s+and currentState\.scene\.profanarTargetsConfirmed == true/s);
+  assert.match(runtime, /shadow\.scene\.profanarTargetsConfirmed = preparation\.profaneTargets == true/);
+  assert.match(runtime, /maximized = profaneApplies and baseTrevas/);
+  assert.match(runtime, /damageType = "trevas",\s+maximized = profaneApplies/s);
+  assert.match(runtime, /state\.casting\.draft\.profaneTargets = not state\.casting\.draft\.profaneTargets/);
 });
 
-test("invocações respeitam o limite suportado e o parceiro cobra o custo declarado", () => {
-  assert.match(runtime, /summons\.undeadCount, 0, 6, 6/);
-  assert.match(runtime, /CHARACTER\.powers\.animateCorpse\.veteranCost/);
-  assert.match(runtime, /CHARACTER\.powers\.animateCorpse\.noviceCost/);
+test("Necropotência e cajado aplicam benefícios uma vez por conjuração", () => {
+  assert.equal(character.powers.necropotency.temporaryMpPerQualifyingCast, 2);
+  assert.equal(character.powers.necropotency.maximumTemporaryMpPerScene, 7);
+  assert.equal(character.equipment.staff.temporaryHpOnAnyFailedResistance, 10);
+  assert.match(runtime, /defeated < 1 then return 0/);
+  assert.match(runtime, /temporaryMpPerQualifyingCast/);
+  assert.doesNotMatch(runtime, /temporaryMpPerDefeatedEnemy/);
+  assert.match(runtime, /pending\.failed > 0[\s\S]*temporaryHpOnAnyFailedResistance/);
+  assert.match(runtime, /local function nextPendingResolution\(\)/);
+  assert.match(runtime, /state\.casting\.pendingResolution = nextPendingResolution\(\)/);
 });
 
-test("catálogo completo distingue dano seguro de resolução por referência", () => {
+test("catálogo completo distingue dano de referência manual", () => {
   assert.deepEqual(Object.keys(character.spells).sort(), [
     "animate_dead", "arcane_armor", "arcane_bolt", "ballistic_spirit",
     "curse", "dimensional_step", "fear", "inflict_wounds",
     "phantom_vitality", "profane",
   ]);
   for (const spell of Object.values(character.spells)) {
-    assert.equal(typeof spell.name, "string");
-    assert.equal(typeof spell.summary, "string");
-    for (const field of ["action", "range", "target", "duration", "resistance",
-      "damageType", "upgrades", "consequences"]) {
+    for (const field of ["name", "summary", "action", "range", "target",
+      "duration", "resistance", "damageType", "automation", "upgrades",
+      "consequences"]) {
       assert.ok(Object.hasOwn(spell, field), `${spell.name} sem ${field}`);
     }
-    assert.ok(["damage", "effect", "reference", "toggle", "undead"].includes(spell.automation));
   }
-  assert.equal(character.spells.inflict_wounds.damageType, "trevas");
-  assert.equal(character.spells.arcane_bolt.damageType, "essencia");
 });
 
-test("runtime usa core, envelope isolado, host opt-in e rollback transacional", () => {
+test("preparos são digitáveis, salvos por magia e editar não cobra", () => {
+  for (const id of ["prepare_cost", "prepare_targets", "prepare_dice_count",
+    "prepare_dice_sides", "prepare_bonus", "prepare_souls", "prepare_note",
+    "prepare_effect", "prepare_darkness", "prepare_profane_targets",
+    "prepare_save", "prepare_roll", "prepare_apply", "prepare_reset"]) {
+    assert.match(runtime, new RegExp(id));
+  }
+  assert.match(runtime, /casting = \{[\s\S]*preparations = defaultPreparations\(\)/);
+  assert.match(runtime, /state\.casting\.preparations\[state\.casting\.spellId\] = deepCopy\(state\.casting\.draft\)/);
+  assert.match(runtime, /elseif id == "prepare_save" then\s+pushUndo\(\)/s);
+  assert.doesNotMatch(runtime, /elseif id == "prepare_save"[\s\S]{0,300}SpentarRules\.spendMp/);
+  assert.match(runtime, /parseInputInteger\(payload, spec\[1\], spec\[2\], spec\[3\]\)/);
+  assert.match(runtime, /SUPPORTED_DIE_SIDES = \{\[4\]=true, \[6\]=true, \[8\]=true, \[10\]=true, \[12\]=true, \[20\]=true\}/);
+  assert.match(runtime, /Faces deve ser 4, 6, 8, 10, 12 ou 20/);
+});
+
+test("atalhos rolam a última preparação salva com idempotência", () => {
+  for (const id of ["quick_inflict_roll", "quick_inflict_edit",
+    "quick_arcane_bolt_roll", "quick_arcane_bolt_edit", "quick_undead_roll",
+    "quick_undead_edit", "quick_ballistic_roll", "quick_ballistic_edit"]) {
+    assert.match(runtime, new RegExp(id));
+  }
+  assert.match(runtime, /beginPrepared\(spellId, deepCopy\(state\.casting\.preparations\[spellId\]\)/);
+  assert.match(runtime, /state\.lastHandledEventId == payload\.eventId/);
+  assert.match(runtime, /state\.casting\.transaction ~= nil then return false/);
+  assert.match(runtime, /payload\.eventId == nil and isDuplicateAction/);
+  assert.match(runtime, /now - previous < 0\.45/);
+  assert.match(runtime, /lastUsedSpellId = spellId/);
+  assert.match(runtime, /id == "combat_edit_last"/);
+  assert.match(runtime, /selectSpellForConfiguration\(state\.casting\.lastUsedSpellId/);
+});
+
+test("resolução pendente é persistente e não bloqueia o painel", () => {
+  assert.match(runtime, /pendingResolution = nil, pendingResolutions = \{\}/);
+  assert.match(runtime, /state\.casting\.pendingResolution = pending/);
+  assert.match(runtime, /pendingResolutions/);
+  assert.doesNotMatch(runtime, /state\.casting\.phase == "resolution" or state\.casting\.transaction ~= nil/);
+  assert.doesNotMatch(runtime, /state\.casting\.pendingResolution ~= nil and id ~=/);
+  assert.match(runtime, /id == "pending_apply" or id == "resolution_apply"/);
+  assert.match(runtime, /id == "pending_discard"/);
+});
+
+test("Vitalidade aplica o resultado e Espírito Balístico conjura antes do ataque", () => {
+  assert.match(runtime, /kind = type\(spell\.temporaryHp\) == "table" and "temporary_hp"/);
+  assert.match(runtime, /transaction\.plan\.kind == "temporary_hp"[\s\S]*temporaryHp = state\.resources\.temporaryHp \+ total/);
+  assert.match(runtime, /Vitalidade Fantasma precisa ser rolada/);
+  assert.match(runtime, /state\.casting\.spellId == "ballistic_spirit"[\s\S]*applyPreparedEffect/);
+  assert.match(runtime, /state\.summons\.ballisticSpirits = boundedInteger\(preparation\.targets, 0, 2, 0\)/);
+});
+
+test("corpos, invocações e comandos são estados independentes", () => {
+  assert.equal(character.spells.animate_dead.configuredCount, 0);
+  assert.equal(character.spells.ballistic_spirit.maximumSpirits, 2);
+  assert.equal(character.spells.ballistic_spirit.maximumDamageDice, 2);
+  assert.match(runtime, /bodiesAvailable = 0, undeadCount = 0, ballisticSpirits = 0/);
+  assert.match(runtime, /commandUsed = \{undead=false, ballistic=false\}/);
+  assert.match(runtime, /bodies_available=\{"bodiesAvailable",0,99\}/);
+  assert.match(runtime, /undead_count=\{"undeadCount",0,6\}/);
+  assert.match(runtime, /ballistic_count=\{"ballisticSpirits",0,2\}/);
+  assert.match(runtime, /ballistic_dice=\{"ballisticDice",1,2\}/);
+  assert.match(runtime, /id == "mark_command_used"/);
+  assert.match(runtime, /state\.summons\.commandUsed = \{undead=not release, ballistic=not release\}/);
+});
+
+test("migração v1 para v2 preserva configurações e neutraliza rolagem", () => {
+  assert.match(runtime, /casting\.preparations or casting\.lastConfigurations/);
+  assert.match(runtime, /Migração v1/);
+  assert.match(runtime, /elseif casting\.phase == "resolution"/);
+  assert.match(runtime, /normalized\.casting\.transaction = nil/);
+  assert.match(runtime, /normalized\.casting\.phase = "configure"/);
+  assert.match(runtime, /stateSchemaVersion = STATE_SCHEMA_VERSION/);
+});
+
+test("runtime usa envelope isolado, host opt-in e rollback transacional", () => {
   assert.match(runtime, /SpentarRules = \{\}/);
   assert.match(runtime, /CharacterRuntimeCore|RuntimeCore/);
   assert.match(runtime, /AdapterApi\.state\.envelope\(state, coreState\)/);
@@ -127,135 +199,24 @@ test("runtime usa core, envelope isolado, host opt-in e rollback transacional", 
   assert.match(runtime, /TtsRuntimeHost\.create/);
   assert.match(runtime, /transactionId=transaction\.id/);
   assert.match(runtime, /onRollback=function\(_, reason\) rollbackRoll/);
-  assert.match(runtime, /onFailure=function\(reason\) rejectionReason = reason end/);
-  assert.doesNotMatch(runtime, /onFailure=function\(reason\) rollbackRoll/);
-  assert.match(runtime, /state\.resources\.temporaryHp = state\.resources\.temporaryHp/);
-  assert.match(runtime, /state\.resources\.temporaryHp = 0/);
+  assert.match(runtime, /characterState = pending\.snapshot\.character/);
+  assert.match(runtime, /nextCore = pending\.snapshot\.core/);
 });
 
-test("runtime reconhece o contrato prefixado de navegação e conjuração", () => {
-  for (const id of [
-    "nav_combat", "nav_casting", "nav_necromancy", "nav_sheet", "nav_settings",
-    "resource_hp", "resource_mp", "resource_temp_hp", "resource_temp_mp",
-    "toggle_staff", "toggle_profanar", "souls_add", "souls_sub",
-    "cast_review", "cast_edit", "cast_confirm", "resolution_apply",
-    "connection_off", "connection_normal", "connection_doubled",
-    "undead_roll", "ballistic_roll", "end_turn", "end_scene", "end_day",
-    "undo", "clear_dice", "reset_state",
-    "skill_initiative", "skill_will", "skill_archery", "calibrate_roll",
-    "toggle_auto_spend", "toggle_physical_dice", "toggle_detailed_chat",
-    "health_check",
-  ]) {
-    assert.match(runtime, new RegExp(id));
-  }
-  assert.match(runtime, /\^offset_\(\[xyz\]\)_/);
-  assert.match(runtime, /SKILL_IDS\[id\]/);
-  assert.match(runtime, /else\s+return false\s+end\s+state\.casting\.lastConfigurations/s);
-});
-
-test("todo ID literal atualizado pelo runtime existe na UI do Spentar", () => {
-  const ids = [...runtime.matchAll(/safeSet\("([^"]+)"\s*,/g)].map((match) => match[1]);
+test("todo ID literal atualizado pelo runtime existe na UI", () => {
+  const ids = [...runtime.matchAll(/safeSet\("([^"]+)"\s*,/g)]
+    .map((match) => match[1]).filter((id) => !id.endsWith("_"));
   for (const id of ids) {
     assert.match(ui, new RegExp(`\\bid=["']${id}["']`), `ID ausente na UI: ${id}`);
   }
   for (const page of ["combat", "casting", "necromancy", "sheet", "settings"]) {
     assert.match(ui, new RegExp(`\\bid=["']page_${page}["']`));
   }
-  assert.doesNotMatch(runtime, /spell_dc_value/);
 });
 
-test("reload durante rolagem restaura o snapshot anterior ao custo", () => {
-  assert.match(runtime, /characterState\.casting\.transaction/);
-  assert.match(runtime, /characterState = pending\.snapshot\.character/);
-  assert.match(runtime, /nextCore = pending\.snapshot\.core/);
-});
-
-test("uma resolução pendente não pode ser descartada por nova seleção ou atalho", () => {
-  assert.match(runtime, /local function selectSpellForConfiguration\(spellId\)/);
-  assert.match(runtime, /state\.casting\.phase == "rolling" or state\.casting\.phase == "resolution"/);
-  assert.match(runtime, /quick_animate_dead/);
-  assert.match(runtime, /state\.casting\.transaction ~= nil and id ~= "nav_casting" and id ~= "clear_dice"/);
-});
-
-test("reset remove primeiro os dados físicos próprios persistidos", () => {
+test("reset e limpeza atuam sobre dados físicos próprios", () => {
   assert.match(runtime, /id == "reset_state" then\s+local host = createDiceHost\(\)/s);
   assert.match(runtime, /host\.clear\(coreState\.ownedDice\)/);
-});
-
-test("jornada guiada só cobra e cria dados depois da confirmação", () => {
-  const journey = {page: "combat", phase: "configure", mp: 48, souls: 6,
-    transaction: null, spawned: 0, result: null};
-  const dispatch = (id) => {
-    if (id.startsWith("quick_")) {
-      journey.page = "casting";
-      journey.phase = "configure";
-      return true;
-    }
-    if (id === "cast_review") {
-      if (journey.phase !== "configure") return false;
-      journey.phase = "review";
-      return true;
-    }
-    if (id === "cast_edit") {
-      if (journey.phase !== "review") return false;
-      journey.phase = "configure";
-      return true;
-    }
-    if (id === "cast_confirm") {
-      if (journey.phase !== "review" || journey.transaction) return false;
-      journey.phase = "rolling";
-      journey.transaction = "spentar-1";
-      journey.mp -= 1;
-      journey.spawned += 3;
-      return true;
-    }
-    if (id === "resolution_apply") {
-      if (journey.phase !== "resolution") return false;
-      journey.phase = "configure";
-      journey.transaction = null;
-      return true;
-    }
-    return false;
-  };
-
-  assert.equal(dispatch("quick_inflict_wounds"), true);
-  assert.deepEqual(journey, {page: "casting", phase: "configure", mp: 48,
-    souls: 6, transaction: null, spawned: 0, result: null});
-  assert.equal(dispatch("cast_review"), true);
-  assert.equal(journey.phase, "review");
-  assert.equal(journey.mp, 48);
-  assert.equal(journey.spawned, 0);
-  assert.equal(dispatch("cast_edit"), true);
-  assert.equal(journey.phase, "configure");
-  assert.equal(dispatch("cast_review"), true);
-  assert.equal(dispatch("cast_confirm"), true);
-  assert.equal(journey.phase, "rolling");
-  assert.equal(journey.mp, 47);
-  assert.equal(journey.spawned, 3);
-  assert.equal(dispatch("cast_confirm"), false, "confirmation must be idempotent");
-});
-
-test("runtime contém as fases e controles da jornada guiada", () => {
-  assert.match(runtime, /phase == "review"/);
-  assert.match(runtime, /id == "cast_review"/);
-  assert.match(runtime, /id == "cast_edit"/);
-  assert.match(runtime, /id == "cast_confirm"/);
-  assert.match(runtime, /id == "resolution_apply"/);
-  assert.doesNotMatch(runtime, /id == "cast_now"/);
-  assert.doesNotMatch(runtime, /id == "cast_configure"/);
-  assert.doesNotMatch(runtime, /id == "roll_cancel"/);
   assert.match(runtime, /id == "clear_dice"/);
-  assert.match(runtime, /selectSpellForConfiguration\("profane"\)/,
-    "Profanar must enter the guided journey instead of toggling directly");
-  assert.doesNotMatch(runtime, /state\.scene\.profanar = not state\.scene\.profanar/);
-  assert.match(runtime, /id == "undead_roll" then\s+if state\.casting\.phase ~= "configure"/s);
-  assert.match(runtime, /id == "ballistic_roll" then\s+if state\.casting\.phase ~= "configure"/s);
-  assert.match(runtime, /transaction\.plan\.kind ~= "direct"/,
-    "direct summon attacks must not enter spell resolution");
-  assert.match(runtime, /plan\.kind = "direct"/);
-  assert.match(runtime, /bonus=state\.summons\.ballisticSpirits, kind="direct"/);
-  for (const id of ["cast_config_spell_name", "cast_review_targets",
-    "cast_review_souls", "cast_spending_notice"]) {
-    assert.match(runtime, new RegExp(`safeSet\\("${id}"`));
-  }
+  assert.match(runtime, /host\.cancel\("rolagem cancelada pelo jogador"\)/);
 });

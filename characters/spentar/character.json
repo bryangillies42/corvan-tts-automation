@@ -195,7 +195,7 @@
       "school": "necromancia", "action": "completa", "range": "curto",
       "target": "espaços desocupados", "duration": "sustentada", "resistance": null,
       "damageType": "trevas", "automation": "summon_undead",
-      "configuredCount": 6, "maximumCount": 6, "upgrades": {},
+      "configuredCount": 0, "maximumCount": 6, "upgrades": {},
       "consequences": { "summon": "undead" },
       "summary": "Mantém até seis mortos-vivos. Ataque agregado: Nd6 + 2N + Inteligência."
     },
