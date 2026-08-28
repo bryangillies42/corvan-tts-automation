@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "corvan",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "name": "Corvan Duras",
   "shortName": "Corvan",
   "resources": {
@@ -15,7 +15,7 @@
     }
   },
   "defense": 24,
-  "damageReduction": 8,
+  "damageReduction": 10,
   "weapons": {
     "sword": {
       "name": "Espada Maculada pela Ira",
@@ -171,7 +171,7 @@
     "platesOfWrath": {
       "name": "Placas da Ira",
       "passive": true,
-      "damageReduction": 3
+      "damageReduction": 5
     },
     "bastion": {
       "name": "Bastião",

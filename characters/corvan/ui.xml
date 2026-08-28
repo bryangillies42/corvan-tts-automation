@@ -170,7 +170,7 @@
                     <VerticalLayout anchorMin="0 0" anchorMax="1 1" offsetMin="8 8" offsetMax="-8 -8"
                                     spacing="1" childForceExpandHeight="true">
                         <Text text="RD" class="caption gold" preferredHeight="25" alignment="MiddleCenter" />
-                        <Text id="rdValue" text="8" fontSize="35" resizeTextMaxSize="38" />
+                        <Text id="rdValue" text="10" fontSize="35" resizeTextMaxSize="38" />
                     </VerticalLayout>
                 </Panel>
 
@@ -298,7 +298,7 @@
                                 <Text text="ESTILO + SOLIDEZ + ENCOURAÇADO" class="gold" fontSize="17" preferredHeight="28" />
                                 <Text text="escudo +4 refletido em DEF e resistências" class="muted" fontSize="14" />
                                 <Text text="BASTIÃO + PLACAS DA IRA" class="gold" fontSize="17" preferredHeight="28" />
-                                <Text text="RD 5 + 3 = 8  •  PASSIVOS" class="muted" fontSize="14" />
+                                <Text text="RD 5 + 5 = 10  •  PASSIVOS" class="muted" fontSize="14" />
                             </VerticalLayout>
                         </Panel>
                     </GridLayout>
@@ -350,7 +350,7 @@
                                             childForceExpandWidth="true" childForceExpandHeight="false">
                                 <HorizontalLayout preferredHeight="22" childForceExpandWidth="false">
                                     <Text text="RUNTIME" class="caption gold" preferredWidth="82" />
-                                    <Text id="versionLabel" text="v0.2.2 • offline pronto" class="muted"
+                                    <Text id="versionLabel" text="v0.2.3 • offline pronto" class="muted"
                                           alignment="MiddleRight" flexibleWidth="1" />
                                 </HorizontalLayout>
                                 <Text id="refreshStatus" text="ATUALIZAÇÃO  •  pronta"
