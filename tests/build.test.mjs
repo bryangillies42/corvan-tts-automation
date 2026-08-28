@@ -514,8 +514,12 @@ test("registry é a fonte única e recusa identidades, caminhos e canais conflit
 
   assert.equal(corvan.version, "0.2.3");
   assert.equal(corvan.sourceDir, "characters/corvan");
-  assert.equal(spentar.status, "scaffold");
+  assert.equal(spentar.status, "active");
+  assert.equal(spentar.version, "0.1.0");
   assert.equal(spentar.productionEnabled, false);
+  assert.equal(spentar.tagMode, "namespaced");
+  assert.deepEqual(spentar.runtimeLibraries, ["shared/tts-runtime-host.lua"]);
+  assert.equal(spentar.assets.panelImage, "panel-board.png");
 
   const duplicate = structuredClone(registry);
   duplicate.characters.push(structuredClone(corvan));
