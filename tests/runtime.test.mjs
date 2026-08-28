@@ -106,10 +106,10 @@ function activateBaluarteAllies(state) {
 }
 
 test('fórmulas de ataque, defesa e crítico seguem os números da ficha', () => {
-  assert.equal(character.version, '0.2.2');
+  assert.equal(character.version, '0.2.3');
   assert.equal(character.weapons.sword.name, 'Espada Maculada pela Ira');
-  assert.match(runtime, /version = "0\.2\.2"/);
-  assert.match(runtime, /EXPECTED_RUNTIME_VERSION = "0\.2\.2"/);
+  assert.match(runtime, /version = "0\.2\.3"/);
+  assert.match(runtime, /EXPECTED_RUNTIME_VERSION = "0\.2\.3"/);
   assert.match(runtime, /name = "Espada Maculada pela Ira", chatName = "Espada", attack = 13/);
   assert.match(runtime, /damage = \{count = 2, sides = 8, bonus = 10\}/);
 
@@ -142,7 +142,7 @@ test('fórmulas de ataque, defesa e crítico seguem os números da ficha', () =>
   assert.equal(defense(state), 33);
 
   assert.deepEqual(damageSpec(state, 'shield', true), { count: 2, sides: 6, bonus: 8 });
-  assert.equal(damageReduction(state), 11);
+  assert.equal(damageReduction(state), 13);
   assert.equal(character.weapons.sword.critical.min, 18);
   assert.equal(character.weapons.sword.chatName, 'Espada');
   assert.equal([17, 18, 19, 20].filter((natural) => natural >= character.weapons.sword.critical.min).join(','), '18,19,20');
@@ -251,10 +251,11 @@ test('Duelista Escudado, guarda do escudo e remoção da Torre Armada fazem part
   assert.doesNotMatch(runtime, /armedTower|power_torre_armada|Torre Armada/);
 });
 
-test('migração v0.2.1 → v0.2.2 e saltos legados preservam recursos gastos', () => {
+test('migração v0.2.2 → v0.2.3 e saltos legados preservam recursos gastos', () => {
   assert.match(runtime, /CHARACTER\.version == "0\.2\.0"/);
   assert.match(runtime, /CHARACTER\.version == "0\.2\.1"/);
   assert.match(runtime, /CHARACTER\.version == "0\.2\.2"/);
+  assert.match(runtime, /CHARACTER\.version == "0\.2\.3"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.1\.6"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.1\.7"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.1\.8"/);
@@ -262,6 +263,7 @@ test('migração v0.2.1 → v0.2.2 e saltos legados preservam recursos gastos', 
   assert.match(runtime, /source\.runtimeVersion ~= "0\.2\.0"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.2\.1"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.2\.2"/);
+  assert.match(runtime, /source\.runtimeVersion ~= "0\.2\.3"/);
   assert.match(runtime, /source\.hp or source\.pv, 0\) == 47[\s\S]*normalized\.hp = 55/);
   assert.match(runtime, /source\.mp or source\.pm, 0\) == 12[\s\S]*normalized\.mp = 15/);
   assert.match(runtime, /normalized\.hp == 55[\s\S]*normalized\.hp = 69/);

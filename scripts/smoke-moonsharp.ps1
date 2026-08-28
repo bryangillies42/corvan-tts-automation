@@ -438,7 +438,7 @@ local function bootstrapEnvironment(source, label, characterId, panelGuid, versi
 end
 
 local corvan = bootstrapEnvironment(
-    corvanBootstrapSource, 'corvan-bootstrap', 'corvan', 'corvan-panel', '0.2.2', 'CORVAN_RUNTIME')
+    corvanBootstrapSource, 'corvan-bootstrap', 'corvan', 'corvan-panel', '0.2.3', 'CORVAN_RUNTIME')
 local arcane = bootstrapEnvironment(
     arcaneBootstrapSource, 'arcane-bootstrap', 'arcane-test', 'arcane-panel', '0.1.0', 'ARCANE_TEST_RUNTIME')
 
@@ -483,7 +483,7 @@ if ($sharedBootstrapResult -ne $expectedSharedBootstrap) {
 $rulesHarness = @'
 local character = {
     defense = 24,
-    damageReduction = 8,
+    damageReduction = 10,
     weapons = {
         sword = {
             attack = 13,
@@ -565,7 +565,7 @@ return CorvanRules.calculateAttackModifier(character, state, 'sword'),
 
 $runner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $actual = $runner.DoString($runtimeConfigPrelude + "`n" + $runtime + "`n" + $rulesHarness).ToString()
-$expected = '14, 29, 15, 11, 4, 8, 13, true'
+$expected = '14, 29, 15, 13, 4, 8, 13, true'
 if ($actual -ne $expected) {
     throw "Smoke de regras retornou '$actual'; esperado '$expected'."
 }
@@ -1135,7 +1135,7 @@ assert(CorvanRules.calculateDefense(CHARACTER, afterShieldAttack) == 20)
 assert(CorvanRules.calculateSkillModifier(CHARACTER, afterShieldAttack, 'fortitude') == 11)
 assert(CorvanRules.calculateSkillModifier(CHARACTER, afterShieldAttack, 'reflex') == 3)
 assert(CorvanRules.calculateSkillModifier(CHARACTER, afterShieldAttack, 'will') == 4)
-assert(CorvanRules.calculateDamageReduction(CHARACTER, afterShieldAttack) == 8)
+assert(CorvanRules.calculateDamageReduction(CHARACTER, afterShieldAttack) == 10)
 assert(handleUiEvent({id = 'end_turn', playerColor = 'White'}))
 assert(not exportState().effects.shieldGuardSuppressed)
 assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 24)
@@ -1231,7 +1231,7 @@ assert(#exportState().ownedDiceGuids == 0)
 assert(#privateChat >= 5)
 local nativeEnvelope = nativeExportState()
 assert(nativeEnvelope.characterId == 'corvan'
-    and nativeEnvelope.runtimeVersion == '0.2.2'
+    and nativeEnvelope.runtimeVersion == '0.2.3'
     and type(nativeEnvelope.core) == 'table'
     and type(nativeEnvelope.character) == 'table')
 
@@ -1462,7 +1462,7 @@ $legacyIntegrityRunner.Globals.Set('HASH_SIZE', [MoonSharp.Interpreter.DynValue]
 $legacyIntegrityRunner.Globals.Set('HASH_EXPECTED', [MoonSharp.Interpreter.DynValue]::NewString($manifest.runtime.sha256))
 $legacyIntegrityResult = $legacyIntegrityRunner.DoString($legacyBootstrap + "`n" + $integrityHarness)
 if (-not $legacyIntegrityResult.Tuple[0].Boolean) {
-    throw "Bootstrap congelado 1.0.2 rejeitou a integridade do runtime v0.2.2: $($legacyIntegrityResult.Tuple[1])"
+    throw "Bootstrap congelado 1.0.2 rejeitou a integridade do runtime v0.2.3: $($legacyIntegrityResult.Tuple[1])"
 }
 
 $legacyManifestHarness = @"
@@ -1488,7 +1488,7 @@ $legacyManifestRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpret
 $legacyManifestRunner.Globals.Set('ACTUAL_RUNTIME_SOURCE', [MoonSharp.Interpreter.DynValue]::NewString($runtime))
 $legacyManifestResult = $legacyManifestRunner.DoString($legacyBootstrap + "`n" + $legacyManifestHarness).ToString()
 if ($legacyManifestResult -ne 'true, true') {
-    throw "Contrato do manifesto v0.2.2 falhou no bootstrap congelado 1.0.2: '$legacyManifestResult'."
+    throw "Contrato do manifesto v0.2.3 falhou no bootstrap congelado 1.0.2: '$legacyManifestResult'."
 }
 
 $onLoadHarness = @'
@@ -1555,15 +1555,15 @@ spawnObject = function(params)
                 xml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
             })
             if not accepted then error('bootstrap rejected valid UI') end
-            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.2.2'})
+            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.2.3'})
             setRuntimeUiAttribute({id = 'missing', attribute = 'text', value = 'must stay queued'})
             return helper
         end,
         call = function(name, _)
             if name == 'healthCheck' then
-                return {ok = true, version = '0.2.2', parentGuid = 'panel1'}
+                return {ok = true, version = '0.2.3', parentGuid = 'panel1'}
             elseif name == 'exportState' then
-                return {schemaVersion = 1, runtimeVersion = '0.2.2'}
+                return {schemaVersion = 1, runtimeVersion = '0.2.3'}
             end
             return true
         end
@@ -1601,7 +1601,7 @@ return xmlSetCalls, attributeCalls, invalidAttributeCalls, info.helperGuid, info
 
 $onLoadRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $onLoadResult = $onLoadRunner.DoString($bootstrap + "`n" + $onLoadHarness).ToString()
-$expectedOnLoad = '2, 5, 0, "helper1", "0.2.2"'
+$expectedOnLoad = '2, 5, 0, "helper1", "0.2.3"'
 if ($onLoadResult -ne $expectedOnLoad) {
     throw "Smoke de onLoad retornou '$onLoadResult'; esperado '$expectedOnLoad'."
 }
@@ -1610,7 +1610,7 @@ $copyPersistenceHarness = @'
 local timeQueue = {}
 local helper = nil
 local helperState = nil
-local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.2.2', mp = 21, effects = {duel = false}}
+local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.2.3', mp = 21, effects = {duel = false}}
 local persistedRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.2', mp = 10, effects = {duel = true}}
 
 JSON = {
@@ -1659,7 +1659,7 @@ spawnObject = function(params)
                 cacheRuntimeState({state = helperState or defaultRuntimeState})
                 return true
             elseif name == 'healthCheck' then
-                return {ok = true, version = '0.2.2', parentGuid = 'panel-copy'}
+                return {ok = true, version = '0.2.3', parentGuid = 'panel-copy'}
             elseif name == 'importState' then
                 helperState = payload
                 return true
@@ -1738,7 +1738,7 @@ if ($webRequestResult -ne $expectedWebRequest) {
 $transactionHarness = @'
 local oldXml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
 local candidateXml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/><Text id="activeWeaponLabel"/></Panel>'
-local candidateSource = '-- CORVAN_RUNTIME candidate v0.2.2'
+local candidateSource = '-- CORVAN_RUNTIME candidate v0.2.3'
 local oldSource = SEED_RUNTIME
 local timers = {}
 local currentGuid = 'helper1'
@@ -1789,7 +1789,7 @@ helper = {
     reload = function()
         if loadedSource == candidateSource then
             currentGuid = 'candidate-guid'
-            activeVersion = CANDIDATE_HEALTH_OK and '0.2.2' or 'broken'
+            activeVersion = CANDIDATE_HEALTH_OK and '0.2.3' or 'broken'
             applyRuntimeUi({xml = candidateXml})
         else
             currentGuid = 'rollback-guid'
@@ -1826,7 +1826,7 @@ update.playerColor = 'White'
 update.phase = 'install'
 
 installCandidate(9, {
-    manifest = {version = '0.2.2', commitSha = '0123456789abcdef0123456789abcdef01234567'},
+    manifest = {version = '0.2.3', commitSha = '0123456789abcdef0123456789abcdef01234567'},
     source = candidateSource,
     etag = 'etag-2'
 })
@@ -1856,7 +1856,7 @@ function Invoke-TransactionSmoke([bool]$healthy, [string]$bootstrapSource = $boo
 }
 
 $updateSuccess = Invoke-TransactionSmoke $true
-$expectedUpdateSuccess = '"0.2.2", true, false, false, "candidate-guid", 23, true, false'
+$expectedUpdateSuccess = '"0.2.3", true, false, false, "candidate-guid", 23, true, false'
 if ($updateSuccess -ne $expectedUpdateSuccess) {
     throw "Smoke de update retornou '$updateSuccess'; esperado '$expectedUpdateSuccess'."
 }
@@ -1869,7 +1869,7 @@ if ($updateRollback -ne $expectedUpdateRollback) {
 
 $legacyUpdateSuccess = Invoke-TransactionSmoke $true $legacyBootstrap
 if ($legacyUpdateSuccess -ne $expectedUpdateSuccess) {
-    throw "Bootstrap congelado 1.0.2 não instalou a transação v0.2.2: '$legacyUpdateSuccess'."
+    throw "Bootstrap congelado 1.0.2 não instalou a transação v0.2.3: '$legacyUpdateSuccess'."
 }
 
 $legacyLatestShortCircuitHarness = @'

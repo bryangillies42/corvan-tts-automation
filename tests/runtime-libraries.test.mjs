@@ -9,7 +9,7 @@ import { buildProject, loadCharacterRegistry } from "../scripts/build.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
-test("Corvan v0.2.2 permanece independente do host físico opcional do Spentar", async (t) => {
+test("Corvan v0.2.3 permanece independente do host físico opcional do Spentar", async (t) => {
   const registry = await loadCharacterRegistry(ROOT);
   const corvan = registry.characters.find((profile) => profile.id === "corvan");
   assert.ok(corvan);
