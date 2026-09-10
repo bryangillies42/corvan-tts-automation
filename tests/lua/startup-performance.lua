@@ -1,142 +1,7 @@
--- Execute the real bootstrap and runtime in separate Lua environments, with a
--- queued clock: immediate Wait mocks cannot detect duplicate work in one frame.
-local function copy(value)
-    if type(value) ~= 'table' then return value end
-    local result = {}
-    for key, item in pairs(value) do result[key] = copy(item) end
-    return result
-end
-
 local function world(helperFirst, automaticSpending, bootstrapSource)
-    local w = {
-        tick = 0, queue = {}, json = {}, requests = {}, conditions = {},
-        xmlSets = 0, attributeSets = 0, renderPasses = 0, registrations = 0,
-        reloads = 0, fallbackButtons = 0, failAttribute = false,
-        attributes = {}, installedXml = '',
-    }
-    local function enqueue(callback, frames)
-        table.insert(w.queue, {callback = callback, tick = w.tick + frames})
-    end
-    function w.flush()
-        local iterations = 0
-        while #w.queue > 0 do
-            iterations = iterations + 1
-            assert(iterations < 1000, 'startup event loop did not converge')
-            local index = 1
-            for i, pending in ipairs(w.queue) do
-                if pending.tick < w.queue[index].tick then index = i end
-            end
-            local pending = table.remove(w.queue, index)
-            w.tick = pending.tick
-            pending.callback()
-        end
-    end
-    local json = {
-        encode = function(value)
-            local token = 'JSON:' .. tostring(#w.json + 1)
-            w.json[#w.json + 1] = copy(value)
-            return token
-        end,
-        decode = function(text)
-            local index = tonumber(string.match(text, '^JSON:(%d+)$'))
-            if index then return copy(w.json[index]) end
-            return copy(CHARACTER_CONFIG)
-        end,
-    }
-    local function environment(source, label, object)
-        local env = {}
-        env._G = env
-        setmetatable(env, {__index = _G})
-        env.JSON = json
-        env.self = object
-        env.Wait = {
-            frames = function(callback, frames) enqueue(callback, frames) end,
-            time = function(callback, seconds) enqueue(callback, math.ceil(seconds * 60)) end,
-            condition = function(callback, condition, _, timeout)
-                table.insert(w.conditions, timeout)
-                enqueue(function()
-                    assert(condition(), 'UI never became ready')
-                    callback()
-                end, 1)
-            end,
-        }
-        env.WebRequest = {get = function(_, callback) table.insert(w.requests, callback) end}
-        env.getObjectFromGUID = function(guid)
-            if guid == 'panel' then return w.panel end
-            if guid == 'helper' then return w.helper end
-        end
-        env.getAllObjects = function() return {w.panel, w.helper} end
-        env.printToColor = function() end
-        env.log = function() end
-        env.Player = {getPlayers = function() return {} end}
-        env.spawnObject = function() error('healthy saved helper was not reused') end
-        local chunk, message = load(source, label, 't', env)
-        assert(chunk, message)
-        chunk()
-        return env
-    end
-    w.panel = {
-        getGUID = function() return 'panel' end,
-        createButton = function() w.fallbackButtons = w.fallbackButtons + 1 end,
-        clearButtons = function() w.fallbackButtons = 0 end,
-        UI = {
-            loading = false,
-            getXml = function() return w.installedXml end,
-            setXml = function(xml)
-                w.xmlSets = w.xmlSets + 1
-                w.panel.UI.loading = true
-                enqueue(function()
-                    w.installedXml = xml
-                    w.attributes = {}
-                    w.panel.UI.loading = false
-                end, 1)
-            end,
-            setAttribute = function(id, attribute, value)
-                assert(not w.panel.UI.loading, 'attribute sent before UI readiness')
-                assert(string.find(w.installedXml, 'id="' .. id .. '"', 1, true), 'missing UI ID')
-                if w.failAttribute then error('transient attribute failure') end
-                w.attributeSets = w.attributeSets + 1
-                w.attributes[id .. ':' .. attribute] = value
-            end,
-        },
-    }
-    w.helper = {
-        getGUID = function() return 'helper' end,
-        getGMNotes = function() return json.encode({characterId = 'corvan', parentGuid = 'panel'}) end,
-        setGMNotes = function() end, setName = function() end,
-        setDescription = function() end, setLock = function() end,
-        setInvisibleTo = function() end, setLuaScript = function() end,
-        reload = function() w.reloads = w.reloads + 1; return w.helper end,
-    }
-    w.bootstrap = environment(bootstrapSource or BOOTSTRAP_SOURCE, 'startup-bootstrap', w.panel)
-    w.runtime = environment(RUNTIME_SOURCE, 'startup-runtime', w.helper)
-    w.panel.call = function(name, payload)
-        if name == 'setRuntimeUiAttribute' and payload.id == 'pvCurrent' then
-            w.renderPasses = w.renderPasses + 1
-        end
-        return w.bootstrap[name](payload)
-    end
-    w.helper.call = function(name, payload)
-        if name == 'registerParent' then w.registrations = w.registrations + 1 end
-        return w.runtime[name](payload)
-    end
-    local savedRuntime = {
-        characterId = 'corvan', runtimeVersion = CHARACTER_CONFIG.version,
-        schemaVersion = 1, parentGuid = 'panel',
-        character = {hp = 47, mp = 12, effects = {duel = 2}, automaticResourceSpending = automaticSpending},
-        core = {settingsOpen = true, diceOffset = {x = 2, y = 4, z = 1}},
-    }
-    local xml = SEED_UI_SOURCE:gsub('id="automatic_resource_spending" isOn="[^"]*"',
-        'id="automatic_resource_spending" isOn="' .. tostring(automaticSpending) .. '"')
-    local savedPanel = json.encode({
-        characterId = 'corvan', helperGuid = 'helper', runtimeVersion = CHARACTER_CONFIG.version,
-        runtimeSource = RUNTIME_SOURCE, runtimeState = savedRuntime, uiXml = xml,
-    })
-    if helperFirst then w.runtime.onLoad(json.encode(savedRuntime)) end
-    w.bootstrap.onLoad(savedPanel)
-    if not helperFirst then w.runtime.onLoad(json.encode(savedRuntime)) end
-    w.flush()
-    return w
+    return RuntimeTestWorld.create({config = CHARACTER_CONFIG, helperFirst = helperFirst,
+        automaticSpending = automaticSpending, bootstrapSource = bootstrapSource or BOOTSTRAP_SOURCE,
+        runtimeSource = RUNTIME_SOURCE, ui = SEED_UI_SOURCE})
 end
 
 for _, helperFirst in ipairs({false, true}) do
@@ -151,6 +16,17 @@ for _, helperFirst in ipairs({false, true}) do
         assert(state.character.effects.duel == 2 and state.core.settingsOpen, 'effects/settings changed')
         assert(state.core.diceOffset.x == 2, 'dice calibration changed')
         assert(w.attributes['automatic_resource_spending:isOn'] == tostring(automaticSpending))
+        state.character.effects.duel = 99
+        state.core.diceOffset.x = 99
+        assert(w.runtime.exportState().character.effects.duel == 2)
+        assert(w.runtime.exportState().core.diceOffset.x == 2)
+
+        local writes = w.attributeSets
+        assert(not w.bootstrap.setRuntimeUiAttributes({characterId = 'spentar', parentGuid = 'panel', attributes = {}}))
+        assert(not w.bootstrap.setRuntimeUiAttributes({characterId = 'corvan', parentGuid = 'foreign', attributes = {}}))
+        assert(not w.bootstrap.setRuntimeUiAttributes({characterId = 'corvan', parentGuid = 'panel',
+            attributes = {pvCurrent = {text = '99'}, bad = {unknownAttribute = 'invalid'}}}))
+        assert(w.attributeSets == writes, 'invalid batch partially changed the UI')
 
         -- Repeated registrations while HTTP is pending must reuse both XML and request.
         for _ = 1, 5 do
@@ -188,13 +64,13 @@ for _, helperFirst in ipairs({false, true}) do
         assert(w.renderPasses == beforeRender + 1)
         assert(w.attributes['pvCurrent:text'] == '44')
         assert(w.attributes['automatic_resource_spending:isOn'] == tostring(not automaticSpending))
-        assert(w.xmlSets == 2 and #w.requests == 1)
+        assert(w.xmlSets == 1 and #w.requests == 1)
 
         -- Explicit recovery forces a rebuild and replays even unchanged values.
         beforeAttributes = w.attributeSets
         w.bootstrap.recoverUi(nil, 'White')
         w.flush()
-        assert(w.xmlSets == 3 and w.attributeSets > beforeAttributes)
+        assert(w.xmlSets == 2 and w.attributeSets > beforeAttributes)
         assert(w.attributes['pvCurrent:text'] == '44' and w.attributes['panelBoardArt:active'] == 'true')
         -- A timeout belonging to a replaced tree cannot invalidate the current UI.
         w.conditions[1]()

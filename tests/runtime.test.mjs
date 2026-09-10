@@ -324,7 +324,7 @@ test('runtime expõe o contrato público e o estado de busy para o bootstrap', (
   assert.match(runtime, /safeParentCall\("runtimeReady"/);
   assert.match(runtime, /parent\.call\(functionName, payload\)/);
   assert.match(runtime, /cacheRuntimeState/);
-  assert.match(runtime, /safeParentCall\("setRuntimeUiAttribute"/);
+  assert.match(runtime, /UiWriter\.set\(id, attribute, value\)/);
   assert.doesNotMatch(runtime, /parent\.UI\.setAttribute/);
 });
 

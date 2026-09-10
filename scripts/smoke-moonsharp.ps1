@@ -2,41 +2,8 @@ $ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 
-function ConvertTo-LuaLiteral($value) {
-    if ($null -eq $value) { return 'nil' }
-    if ($value -is [bool]) { return $(if ($value) { 'true' } else { 'false' }) }
-    if ($value -is [string]) {
-        return "'" + $value.Replace('\', '\\').Replace("'", "\'").Replace("`r", '\r').Replace("`n", '\n') + "'"
-    }
-    if ($value -is [System.Collections.IDictionary]) {
-        $pairs = foreach ($key in $value.Keys) {
-            "[" + (ConvertTo-LuaLiteral ([string]$key)) + "] = " + (ConvertTo-LuaLiteral $value[$key])
-        }
-        return '{' + ($pairs -join ', ') + '}'
-    }
-    if ($value -is [System.Collections.IEnumerable] -and $value -isnot [string]) {
-        $items = foreach ($item in $value) { ConvertTo-LuaLiteral $item }
-        return '{' + ($items -join ', ') + '}'
-    }
-    if ($value -is [pscustomobject]) {
-        $pairs = foreach ($property in $value.PSObject.Properties) {
-            "[" + (ConvertTo-LuaLiteral $property.Name) + "] = " + (ConvertTo-LuaLiteral $property.Value)
-        }
-        return '{' + ($pairs -join ', ') + '}'
-    }
-    return ([System.Convert]::ToString($value, [System.Globalization.CultureInfo]::InvariantCulture))
-}
+. (Join-Path $PSScriptRoot "lua-test-utils.ps1")
 
-function ConvertTo-LuaLongString([string]$value) {
-    for ($level = 0; $level -le 16; $level++) {
-        $equals = '=' * $level
-        $close = "]$equals]"
-        if (-not $value.Contains($close)) {
-            return "[$equals[$value$close"
-        }
-    }
-    throw 'Não foi possível criar um literal Lua longo sem colisão.'
-}
 $candidateDlls = @()
 if (${env:ProgramFiles(x86)}) {
     $candidateDlls += Join-Path ${env:ProgramFiles(x86)} 'Steam\steamapps\common\Tabletop Simulator\Tabletop Simulator_Data\Managed\MoonSharp.Interpreter.dll'
@@ -2112,6 +2079,7 @@ $startupRunner.Globals.Set('LEGACY_BOOTSTRAP_SOURCE', [MoonSharp.Interpreter.Dyn
 $startupRunner.Globals.Set('RUNTIME_SOURCE', [MoonSharp.Interpreter.DynValue]::NewString($runtime))
 $startupRunner.Globals.Set('SEED_UI_SOURCE', [MoonSharp.Interpreter.DynValue]::NewString($savedObject.ObjectStates[0].XmlUI))
 $null = $startupRunner.DoString("CHARACTER_CONFIG = $characterConfigLiteral")
+$null = $startupRunner.DoString((Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'tests/lua/runtime-world.lua')))
 $startupHarness = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'tests/lua/startup-performance.lua')
 try {
     $startupResult = $startupRunner.DoString($startupHarness).String
@@ -2123,4 +2091,8 @@ try {
     throw
 }
 Write-Output $startupResult
+$writerRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
+$writerSource = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'shared/runtime-core.lua')
+$writerAssertions = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'tests/lua/ui-writer.lua')
+Write-Output $writerRunner.DoString($writerSource + "`n" + $writerAssertions).String
 Write-Output "MoonSharp OK: runtime/bootstrap compilam; runtimes e helpers Corvan+Arcane isolados; combate $runtimeFlowResult; SHA-256 em $integrityFrames frames; onLoad, cópia persistente, watchdog, update e rollback seguros"

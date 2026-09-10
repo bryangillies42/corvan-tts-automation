@@ -9,7 +9,8 @@
     "build:fixture": "node scripts/build.mjs --fixture arcane-test",
     "character:new": "node scripts/new-character.mjs",
     "test": "node --test",
-    "test:lua": "pwsh -NoProfile -File scripts/smoke-moonsharp.ps1"
+    "test:lua": "pwsh -NoProfile -File scripts/smoke-moonsharp.ps1",
+    "benchmark:lua": "pwsh -NoProfile -File scripts/benchmark-runtime.ps1"
   },
   "engines": {
     "node": ">=20"

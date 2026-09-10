@@ -1,6 +1,6 @@
 # Teste manual do Corvan — v0.2.5
 
-Candidato: `Corvan_Duras_Console_v0.2.5-test.json`, com runtime v0.2.5 e bootstrap 1.0.3. Não cria tag nem publica release. O painel novo nasce com recursos padrão; mantenha o painel/salvamento antigo para comparação e consulta do estado.
+Candidato: `Corvan_Duras_Console_v0.2.5-performance-test.json`, com runtime v0.2.5 e bootstrap 1.0.4. Não cria tag nem publica release. O painel novo nasce com recursos padrão; mantenha o painel/salvamento antigo para comparação e consulta do estado.
 
 ## Inicialização e desempenho
 
@@ -20,7 +20,7 @@ Candidato: `Corvan_Duras_Console_v0.2.5-test.json`, com runtime v0.2.5 e bootstr
 
 ## Compatibilidade de atualização
 
-O Refresh consulta a última release publicada, não esta branch. Antes da publicação, a compatibilidade com o bootstrap congelado 1.0.2 é verificada pelo smoke Lua. Após disponibilizar a release, atualize uma cópia do painel antigo e confirme preservação de recursos, efeitos, preferência, posição, rotação, escala e GUID. O Refresh não instala o bootstrap 1.0.3; o objeto novo é necessário para receber todas as otimizações.
+O Refresh consulta a última release publicada, não esta branch. Antes da publicação, a compatibilidade com o bootstrap congelado 1.0.2 é verificada pelo smoke Lua. Após disponibilizar a release, atualize uma cópia do painel antigo e confirme preservação de recursos, efeitos, preferência, posição, rotação, escala e GUID. O Refresh não instala o bootstrap 1.0.4; o objeto novo é necessário para receber todas as otimizações.
 
 ## Evidência automatizada
 
@@ -30,4 +30,4 @@ Na abertura simulada com helper saudável e XML persistido atual: **1 montagem d
 
 O Spentar tem implementação de desenvolvimento na branch `codex/spentar-v0.1.0` (PR #3), ainda não integrada ao main. Ele usa o mesmo `shared/bootstrap.lua` e recebe as otimizações compartilhadas ao incorporar esta alteração. Esta versão não publica nem habilita a release do Spentar.
 
-Também foi validada uma cópia temporária do commit Spentar `8f6d941`, substituindo somente o bootstrap pelo 1.0.3 desta alteração e ajustando as expectativas dos testes para essa versão e a deduplicação: **105 testes Node aprovados**, além do smoke MoonSharp com Corvan, Arcane e Spentar. A branch e o PR originais do Spentar não foram alterados.
+As otimizações específicas do Spentar estão na branch separada `codex/spentar-performance`, baseada em `8f6d941`: agrupamento de renderizações, páginas ocultas adiadas, cache das prévias e snapshots sem copiar o histórico para descartá-lo. A branch e o PR originais do Spentar não foram alterados. Os [benchmarks offline](../benchmarks/runtime-performance.md) comparam fontes reais, estado e interface visível antes/depois.

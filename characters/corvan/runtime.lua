@@ -434,14 +434,10 @@ local function safeParentCall(functionName, payload)
     return ok, result
 end
 
+local UiWriter = RuntimeCore.createUiWriter(CHARACTER_ID, safeParentCall, function() return parentGuid end)
+
 local function safeSetAttribute(id, attribute, value)
-    local ok, accepted = safeParentCall("setRuntimeUiAttribute", {
-        characterId = CHARACTER_ID,
-        id = id,
-        attribute = attribute,
-        value = tostring(value)
-    })
-    return ok and accepted ~= false
+    return UiWriter.set(id, attribute, value)
 end
 
 local function signed(value)
@@ -611,6 +607,7 @@ end
 local function renderNow()
     if not characterLoaded then return end
     if not parent then return end
+    UiWriter.begin()
     local weapon = CHARACTER.weapons[state.activeWeapon]
     local attack = CorvanRules.calculateAttackModifier(CHARACTER, state, state.activeWeapon)
     local damage = CorvanRules.calculateDamageSpec(CHARACTER, state, state.activeWeapon, false)
@@ -678,6 +675,7 @@ local function renderNow()
     for id, active in pairs(powerColors) do
         safeSetAttribute(id, "colors", active and "#73402F|#93543D|#4E2B20|#22222288" or "#1C252C|#2B373F|#11171B|#22222288")
     end
+    UiWriter.flush()
 end
 
 local function scheduleRender()
@@ -1640,7 +1638,7 @@ function handleUiEvent(payload)
         local enabled = value == true or tostring(value):lower() == "true" or tostring(value) == "1"
         state.automaticResourceSpending = enabled
         safeParentCall("cacheRuntimeState", {characterId = CHARACTER_ID, state = exportState()})
-        applyUi()
+        if UiWriter.supportsBatch() then scheduleRender() else applyUi() end
         return true
     end
     if id == "end_turn" then return endTurn() end
@@ -1711,7 +1709,7 @@ local function unwrapStatePayload(payload)
     if stateError ~= nil then return nil end
     local flattened = characterState
     for key in pairs(CORE_STATE_FIELDS) do
-        if coreState[key] ~= nil then flattened[key] = deepCopy(coreState[key]) end
+        if coreState[key] ~= nil then flattened[key] = coreState[key] end
     end
     flattened.runtimeVersion = payload.runtimeVersion or flattened.runtimeVersion
     flattened.schemaVersion = payload.characterStateSchemaVersion or flattened.schemaVersion
@@ -1723,8 +1721,8 @@ function exportState()
     local core = {}
     local character = {}
     for key, value in pairs(state) do
-        if CORE_STATE_FIELDS[key] then core[key] = deepCopy(value)
-        else character[key] = deepCopy(value) end
+        if CORE_STATE_FIELDS[key] then core[key] = value
+        else character[key] = value end
     end
     local envelope = AdapterApi.state.envelope(character, core)
     envelope.schemaVersion = 1

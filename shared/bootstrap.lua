@@ -2,7 +2,7 @@
 -- This file deliberately contains no character rules. The replaceable runtime lives
 -- on an invisible helper so this visible panel never needs to be reloaded to update.
 
-local BOOTSTRAP_VERSION = "1.0.3"
+local BOOTSTRAP_VERSION = "1.0.4"
 local STATE_SCHEMA_VERSION = 1
 local MANIFEST_SCHEMA_VERSION = 1
 local CHARACTER_ID = __CHARACTER_ID_LITERAL__
@@ -575,15 +575,15 @@ local function applyUiAttribute(id, attribute, value)
     if not uiReady or uiIds[id] ~= true then
         return false
     end
+    local text = tostring(value)
+    if uiAppliedAttributeValues[id] and uiAppliedAttributeValues[id][attribute] == text then
+        return true
+    end
     local loadingOk, loading = pcall(function()
         return self.UI.loading
     end)
     if loadingOk and loading == true then
         return false
-    end
-    local text = tostring(value)
-    if uiAppliedAttributeValues[id] and uiAppliedAttributeValues[id][attribute] == text then
-        return true
     end
     local ok = pcall(function()
         self.UI.setAttribute(id, attribute, text)
@@ -1834,8 +1834,31 @@ function getBootstrapInfo()
         bootstrapVersion = BOOTSTRAP_VERSION,
         schemaVersion = STATE_SCHEMA_VERSION,
         characterId = CHARACTER_ID,
+        uiProtocolVersion = 1,
         runtimeVersion = state and state.runtimeVersion or SEED_RUNTIME_VERSION,
         helperGuid = state and state.helperGuid or nil,
         updating = update.active,
     }
+end
+
+function setRuntimeUiAttributes(payload)
+    if type(payload) ~= "table" or payload.characterId ~= CHARACTER_ID
+        or payload.parentGuid ~= self.getGUID() or type(payload.attributes) ~= "table" then
+        return false
+    end
+    -- Validate the entire message before changing the desired UI state.
+    for id, attributes in pairs(payload.attributes) do
+        if type(id) ~= "string" or type(attributes) ~= "table" then return false end
+        for attribute, value in pairs(attributes) do
+            if UI_ATTRIBUTES[attribute] ~= true or type(value) ~= "string" then return false end
+        end
+    end
+    for id, attributes in pairs(payload.attributes) do
+        for attribute, value in pairs(attributes) do
+            setUiAttribute(id, attribute, value)
+        end
+    end
+    -- Accepted also means queued while XML is loading. Failed engine writes
+    -- remain uncached and are retried on the next render or explicit recovery.
+    return true
 end
