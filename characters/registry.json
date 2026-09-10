@@ -71,16 +71,21 @@
       "id": "spentar",
       "displayName": "Spentar",
       "shortName": "Spentar",
-      "version": null,
-      "status": "scaffold",
+      "version": "0.1.0",
+      "status": "active",
       "sourceDir": "characters/spentar",
       "sourceFiles": {
         "runtime": "runtime.lua",
         "ui": "ui.xml",
         "character": "character.json"
       },
+      "runtimeLibraries": [
+        "shared/tts-runtime-host.lua"
+      ],
       "assetsDir": "characters/spentar/assets",
-      "assets": {},
+      "assets": {
+        "panelImage": "panel-board.png"
+      },
       "files": {
         "runtime": "spentar-runtime.lua",
         "manifest": "spentar-manifest.json",
@@ -97,11 +102,26 @@
           "savedObject": "Spentar_Console.json"
         }
       },
+      "savedObjectName": "Spentar — Grimório Necromântico",
+      "savedObjectNote": "Console de combate, magia e necromancia do Spentar",
+      "savedObjectDescription": "Grimório necromântico atualizável • Spentar v{version}",
+      "aspectRatio": "1.60:1",
       "discovery": "character-releases",
       "uiContract": "generic",
       "uiRootId": "spentarConsole",
+      "requiredUiIds": [
+        "spentarConsole",
+        "refresh",
+        "refreshStatus",
+        "page_combat",
+        "page_casting",
+        "page_necromancy",
+        "page_sheet",
+        "page_settings"
+      ],
       "runtimeMarker": "SPENTAR_RUNTIME",
-      "minBootstrapVersion": "1.0.2"
+      "minBootstrapVersion": "1.0.2",
+      "guid": "5e7a21"
     }
   ]
 }
