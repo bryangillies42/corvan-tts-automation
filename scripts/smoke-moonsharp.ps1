@@ -2115,7 +2115,7 @@ return xmlSetCalls, attributeCalls, invalidAttributeCalls, info.helperGuid, info
 
 $onLoadRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $onLoadResult = $onLoadRunner.DoString($bootstrap + "`n" + $onLoadHarness).ToString()
-$expectedOnLoad = '2, 5, 0, "helper1", "0.2.2"'
+$expectedOnLoad = '2, 3, 0, "helper1", "0.2.2"'
 if ($onLoadResult -ne $expectedOnLoad) {
     throw "Smoke de onLoad retornou '$onLoadResult'; esperado '$expectedOnLoad'."
 }
@@ -2568,5 +2568,10 @@ $releaseDiscoveryResult = $releaseDiscoveryRunner.DoString($fixtureBootstrap + "
 if ($releaseDiscoveryResult -ne '"arcane-test-v2.0.0", true') {
     throw "Smoke de descoberta retornou '$releaseDiscoveryResult'."
 }
+
+$writerRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
+$writerSource = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'shared/runtime-core.lua')
+$writerAssertions = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'tests/lua/ui-writer.lua')
+Write-Output $writerRunner.DoString($writerSource + "`n" + $writerAssertions).String
 
 Write-Output "MoonSharp OK: runtimes/bootstraps Corvan+Arcane+Spentar compilam; regras, estado, UI, helpers, cache e dados dos 3 personagens isolados; combate $runtimeFlowResult; SHA-256 em $integrityFrames frames; onLoad, cópia persistente, watchdog, update e rollback seguros"

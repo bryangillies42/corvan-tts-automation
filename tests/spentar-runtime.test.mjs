@@ -84,7 +84,7 @@ test("exemplos obrigatórios de Profanar permanecem determinísticos", () => {
 
 test("Profanar exige estado de cena e confirmação granular do preparo", () => {
   assert.match(runtime, /currentState\.scene\.profanar == true\s+and currentState\.scene\.profanarTargetsConfirmed == true/s);
-  assert.match(runtime, /shadow\.scene\.profanarTargetsConfirmed = preparation\.profaneTargets == true/);
+  assert.match(runtime, /profanarTargetsConfirmed = preparation\.profaneTargets == true/);
   assert.match(runtime, /maximized = profaneApplies and baseTrevas/);
   assert.match(runtime, /damageType = "trevas",\s+maximized = profaneApplies/s);
   assert.match(runtime, /state\.casting\.draft\.profaneTargets = not state\.casting\.draft\.profaneTargets/);

@@ -39,3 +39,9 @@ O estado usa `stateSchemaVersion: 2`, migra saves do schema 1 e mantém o envelo
 - Executar a matriz de Profanar, almas, resistências, Necropotência e rollback.
 - Validar Spentar e Corvan simultaneamente sem estado, helper ou dados cruzados.
 - Somente então habilitar produção e publicar `spentar-v0.1.0` estável.
+
+## Candidato de performance
+
+A branch codex/spentar-performance acrescenta o bootstrap 1.0.4 e o protocolo de atributos em lote. O runtime agrupa renderizações no próximo frame, atualiza páginas ocultas ao abri-las e reaproveita planos de prévia sem copiar o histórico de Desfazer. Snapshots continuam independentes, e a indicação de rolagem é enviada antes de criar dados físicos.
+
+O objeto de teste se chama Spentar_Console_v0.1.0-performance-test.json. A versão permanece de desenvolvimento e a publicação continua desabilitada. Runtimes novos também funcionam com o protocolo individual de bootstraps antigos. Consulte [benchmark offline](../../docs/benchmarks/runtime-performance.md) para método, resultados e limites.
