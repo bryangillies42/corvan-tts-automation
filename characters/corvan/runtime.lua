@@ -32,7 +32,7 @@ local clamp = RuntimeCore.clamp
 local DEFAULT_CHARACTER = {
     schemaVersion = 1,
     id = "corvan",
-    version = "0.2.4",
+    version = "0.2.5",
     name = "Corvan Duras",
     shortName = "Corvan",
     resources = {hp = {max = 78}, mp = {max = 21}},
@@ -84,7 +84,7 @@ local DEFAULT_CHARACTER = {
 }
 
 local EXPECTED_CHARACTER_ID = "corvan"
-local EXPECTED_RUNTIME_VERSION = "0.2.4"
+local EXPECTED_RUNTIME_VERSION = "0.2.5"
 local characterLoaded = false
 local configurationError = nil
 local function decodeCharacter()
@@ -290,7 +290,7 @@ local function normalizeSnapshot(source)
             or CHARACTER.version == "0.1.8" or CHARACTER.version == "0.1.9"
             or CHARACTER.version == "0.2.0" or CHARACTER.version == "0.2.1"
             or CHARACTER.version == "0.2.2" or CHARACTER.version == "0.2.3"
-            or CHARACTER.version == "0.2.4")
+            or CHARACTER.version == "0.2.4" or CHARACTER.version == "0.2.5")
         and source.runtimeVersion ~= "0.1.6"
         and source.runtimeVersion ~= "0.1.7"
         and source.runtimeVersion ~= "0.1.8"
@@ -299,32 +299,35 @@ local function normalizeSnapshot(source)
         and source.runtimeVersion ~= "0.2.1"
         and source.runtimeVersion ~= "0.2.2"
         and source.runtimeVersion ~= "0.2.3"
-        and source.runtimeVersion ~= "0.2.4" then
+        and source.runtimeVersion ~= "0.2.4"
+        and source.runtimeVersion ~= "0.2.5" then
         if finiteNumber(source.hp or source.pv, 0) == 47 then normalized.hp = 55 end
         if finiteNumber(source.mp or source.pm, 0) == 12 then normalized.mp = 15 end
     end
     if (CHARACTER.version == "0.1.8" or CHARACTER.version == "0.1.9"
             or CHARACTER.version == "0.2.0" or CHARACTER.version == "0.2.1"
             or CHARACTER.version == "0.2.2" or CHARACTER.version == "0.2.3"
-            or CHARACTER.version == "0.2.4")
+            or CHARACTER.version == "0.2.4" or CHARACTER.version == "0.2.5")
         and source.runtimeVersion ~= "0.1.8"
         and source.runtimeVersion ~= "0.1.9"
         and source.runtimeVersion ~= "0.2.0"
         and source.runtimeVersion ~= "0.2.1"
         and source.runtimeVersion ~= "0.2.2"
         and source.runtimeVersion ~= "0.2.3"
-        and source.runtimeVersion ~= "0.2.4" then
+        and source.runtimeVersion ~= "0.2.4"
+        and source.runtimeVersion ~= "0.2.5" then
         if normalized.hp == 55 then normalized.hp = 69 end
         if normalized.mp == 15 then normalized.mp = 18 end
     end
     if (CHARACTER.version == "0.2.0" or CHARACTER.version == "0.2.1"
             or CHARACTER.version == "0.2.2" or CHARACTER.version == "0.2.3"
-            or CHARACTER.version == "0.2.4")
+            or CHARACTER.version == "0.2.4" or CHARACTER.version == "0.2.5")
         and source.runtimeVersion ~= "0.2.0"
         and source.runtimeVersion ~= "0.2.1"
         and source.runtimeVersion ~= "0.2.2"
         and source.runtimeVersion ~= "0.2.3"
-        and source.runtimeVersion ~= "0.2.4" then
+        and source.runtimeVersion ~= "0.2.4"
+        and source.runtimeVersion ~= "0.2.5" then
         if normalized.hp == 69 then normalized.hp = 78 end
         if normalized.mp == 18 then normalized.mp = 21 end
     end
@@ -394,6 +397,10 @@ local chatAuditSequence = 0
 local panelBoardArtNeeded = false
 local panelBoardArtReady = false
 local panelBoardArtRequestSerial = 0
+local panelBoardArtRequestPending = false
+local renderPending = false
+local appliedUiXml = nil
+local appliedUiParentGuid = nil
 
 local function recordChatAudit(message, route, accepted)
     chatAuditSequence = chatAuditSequence + 1
@@ -569,12 +576,17 @@ local function panelBoardOverlayActive()
 end
 
 local function preparePanelBoardArt()
+    panelBoardArtNeeded = panelBoardOverlayNeeded()
+    if panelBoardArtReady or panelBoardArtRequestPending then
+        safeSetAttribute("panelBoardArt", "active", panelBoardOverlayActive() and "true" or "false")
+        return
+    end
     panelBoardArtRequestSerial = panelBoardArtRequestSerial + 1
     local serial = panelBoardArtRequestSerial
-    panelBoardArtNeeded = panelBoardOverlayNeeded()
     panelBoardArtReady = false
     safeSetAttribute("panelBoardArt", "active", "false")
     if not panelBoardArtNeeded or WebRequest == nil then return end
+    panelBoardArtRequestPending = true
 
     -- Uma URL direta inválida faz o Image do TTS ficar branco. Primeiro
     -- verificamos se o JPEG responde; em erro, a camada permanece inativa e a
@@ -582,6 +594,7 @@ local function preparePanelBoardArt()
     local started = pcall(function()
         WebRequest.get(PANEL_UI_IMAGE_URL, function(request)
             if serial ~= panelBoardArtRequestSerial then return end
+            panelBoardArtRequestPending = false
             local status = finiteNumber(request and request.response_code, 0)
             if request and not request.is_error and status >= 200 and status < 300 then
                 panelBoardArtReady = true
@@ -589,7 +602,10 @@ local function preparePanelBoardArt()
             end
         end)
     end)
-    if not started then panelBoardArtReady = false end
+    if not started then
+        panelBoardArtRequestPending = false
+        panelBoardArtReady = false
+    end
 end
 
 local function renderNow()
@@ -665,11 +681,21 @@ local function renderNow()
 end
 
 local function scheduleRender()
-    if not parent then return end
+    if not parent or renderPending then return end
     -- O bootstrap mantém o último valor de cada atributo e o aplica somente
     -- depois que o XML termina de carregar. Assim o runtime nunca toca
     -- diretamente em parent.UI, cuja exceção Unity não é capturada por pcall.
-    renderNow()
+    renderPending = true
+    local scheduled = pcall(function()
+        Wait.frames(function()
+            renderPending = false
+            if parent then renderNow() end
+        end, 1)
+    end)
+    if not scheduled then
+        renderPending = false
+        renderNow()
+    end
 end
 
 local function applyUi()
@@ -688,11 +714,18 @@ local function applyUi()
     renderedXml = renderedXml:gsub(
         'id="panelBoardArt" active="[^"]*"',
         'id="panelBoardArt" active="' .. overlayValue .. '"', 1)
-    local ok, accepted = safeParentCall("applyRuntimeUi", {
-        xml = renderedXml,
-        characterId = CHARACTER_ID,
-        version = CHARACTER.version
-    })
+    local ok, accepted = true, true
+    if appliedUiXml ~= renderedXml or appliedUiParentGuid ~= parentGuid then
+        ok, accepted = safeParentCall("applyRuntimeUi", {
+            xml = renderedXml,
+            characterId = CHARACTER_ID,
+            version = CHARACTER.version
+        })
+        if ok and accepted ~= false then
+            appliedUiXml = renderedXml
+            appliedUiParentGuid = parentGuid
+        end
+    end
     preparePanelBoardArt()
     scheduleRender()
     return ok and accepted ~= false

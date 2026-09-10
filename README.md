@@ -1,6 +1,6 @@
 # Saved Objects multi-personagem para Tabletop Simulator
 
-Este repositório contém os Saved Objects, runtimes e ferramentas de desenvolvimento para painéis de personagens no **Tabletop Simulator**. Desde a fundação multi-personagem da v0.2.1, identidade, estado, interface, regras, artefatos e releases são separados por personagem, permitindo que vários objetos coexistam na mesma mesa e no mesmo repositório sem compartilharem atualização ou estado por acidente. O Corvan está em desenvolvimento na v0.2.4, que sincroniza os equipamentos defensivos da ficha e adiciona o uso rápido da Fortificação 25% com um d4 físico.
+Este repositório contém os Saved Objects, runtimes e ferramentas de desenvolvimento para painéis de personagens no **Tabletop Simulator**. Desde a fundação multi-personagem da v0.2.1, identidade, estado, interface, regras, artefatos e releases são separados por personagem, permitindo que vários objetos coexistam na mesma mesa e no mesmo repositório sem compartilharem atualização ou estado por acidente. O candidato Corvan v0.2.5 otimiza a inicialização do painel e do helper, preservando as regras da v0.2.4 e a compatibilidade com objetos antigos.
 
 O primeiro produto é o [Console do Corvan](characters/corvan/README.md). O próximo personagem planejado é o [Spentar](characters/spentar/README.md), que permanece apenas como scaffold até que sua ficha e referências sejam fornecidas.
 
@@ -141,6 +141,7 @@ A listagem não depende do nome visível do objeto. Ela lê `characterId` e os m
 - [Roteiro manual do Corvan v0.2.2](docs/testing/corvan-v0.2.2.md)
 - [Roteiro manual do Corvan v0.2.3](docs/testing/corvan-v0.2.3.md)
 - [Roteiro manual do Corvan v0.2.4](docs/testing/corvan-v0.2.4.md)
+- [Roteiro manual do Corvan v0.2.5](docs/testing/corvan-v0.2.5.md)
 
 ## Limitações
 

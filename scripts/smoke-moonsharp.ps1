@@ -438,7 +438,7 @@ local function bootstrapEnvironment(source, label, characterId, panelGuid, versi
 end
 
 local corvan = bootstrapEnvironment(
-    corvanBootstrapSource, 'corvan-bootstrap', 'corvan', 'corvan-panel', '0.2.4', 'CORVAN_RUNTIME')
+    corvanBootstrapSource, 'corvan-bootstrap', 'corvan', 'corvan-panel', '0.2.5', 'CORVAN_RUNTIME')
 local arcane = bootstrapEnvironment(
     arcaneBootstrapSource, 'arcane-bootstrap', 'arcane-test', 'arcane-panel', '0.1.0', 'ARCANE_TEST_RUNTIME')
 
@@ -734,6 +734,7 @@ Wait = {
     end,
     time = function(callback, _) callback() end,
     frames = function(callback, frames)
+        if frames == 1 then callback(); return end
         assert(frames == 3)
         frameCalls = frameCalls + 1
         callback()
@@ -816,10 +817,15 @@ customObjectInspectionFails = false
 panelPhysicalImage = 'legacy-panel.png'
 panelArtRequestFails = true
 assert(registerParent({parentGuid = 'panel1', characterId = 'corvan'}))
+assert(attributes.panelBoardArt == 'true' and panelArtRequests == 1,
+    'a successful preflight must be reused across registrations')
+-- Simulate a cold image cache to exercise failure and retry independently.
+panelBoardArtReady = false
+preparePanelBoardArt()
 assert(attributes.panelBoardArt == 'false', 'network failure exposed the white image fallback')
 panelArtRequestFails = false
 assert(registerParent({parentGuid = 'panel1', characterId = 'corvan'}))
-assert(attributes.panelBoardArt == 'true' and panelArtRequests == 5)
+assert(attributes.panelBoardArt == 'true' and panelArtRequests == 3)
 assert(not handleUiEvent({
     id = 'power_duel', playerColor = 'White',
     characterId = 'arcane-test', parentGuid = 'panel1'
@@ -1276,7 +1282,7 @@ assert(#exportState().ownedDiceGuids == 0)
 assert(#privateChat >= 5)
 local nativeEnvelope = nativeExportState()
 assert(nativeEnvelope.characterId == 'corvan'
-    and nativeEnvelope.runtimeVersion == '0.2.4'
+    and nativeEnvelope.runtimeVersion == '0.2.5'
     and type(nativeEnvelope.core) == 'table'
     and type(nativeEnvelope.character) == 'table')
 
@@ -1507,7 +1513,7 @@ $legacyIntegrityRunner.Globals.Set('HASH_SIZE', [MoonSharp.Interpreter.DynValue]
 $legacyIntegrityRunner.Globals.Set('HASH_EXPECTED', [MoonSharp.Interpreter.DynValue]::NewString($manifest.runtime.sha256))
 $legacyIntegrityResult = $legacyIntegrityRunner.DoString($legacyBootstrap + "`n" + $integrityHarness)
 if (-not $legacyIntegrityResult.Tuple[0].Boolean) {
-    throw "Bootstrap congelado 1.0.2 rejeitou a integridade do runtime v0.2.4: $($legacyIntegrityResult.Tuple[1])"
+    throw "Bootstrap congelado 1.0.2 rejeitou a integridade do runtime v0.2.5: $($legacyIntegrityResult.Tuple[1])"
 }
 
 $legacyManifestHarness = @"
@@ -1533,7 +1539,7 @@ $legacyManifestRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpret
 $legacyManifestRunner.Globals.Set('ACTUAL_RUNTIME_SOURCE', [MoonSharp.Interpreter.DynValue]::NewString($runtime))
 $legacyManifestResult = $legacyManifestRunner.DoString($legacyBootstrap + "`n" + $legacyManifestHarness).ToString()
 if ($legacyManifestResult -ne 'true, true') {
-    throw "Contrato do manifesto v0.2.4 falhou no bootstrap congelado 1.0.2: '$legacyManifestResult'."
+    throw "Contrato do manifesto v0.2.5 falhou no bootstrap congelado 1.0.2: '$legacyManifestResult'."
 }
 
 $onLoadHarness = @'
@@ -1600,15 +1606,15 @@ spawnObject = function(params)
                 xml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
             })
             if not accepted then error('bootstrap rejected valid UI') end
-            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.2.4'})
+            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.2.5'})
             setRuntimeUiAttribute({id = 'missing', attribute = 'text', value = 'must stay queued'})
             return helper
         end,
         call = function(name, _)
             if name == 'healthCheck' then
-                return {ok = true, version = '0.2.4', parentGuid = 'panel1'}
+                return {ok = true, version = '0.2.5', parentGuid = 'panel1'}
             elseif name == 'exportState' then
-                return {schemaVersion = 1, runtimeVersion = '0.2.4'}
+                return {schemaVersion = 1, runtimeVersion = '0.2.5'}
             end
             return true
         end
@@ -1646,7 +1652,7 @@ return xmlSetCalls, attributeCalls, invalidAttributeCalls, info.helperGuid, info
 
 $onLoadRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $onLoadResult = $onLoadRunner.DoString($bootstrap + "`n" + $onLoadHarness).ToString()
-$expectedOnLoad = '2, 5, 0, "helper1", "0.2.4"'
+$expectedOnLoad = '2, 3, 0, "helper1", "0.2.5"'
 if ($onLoadResult -ne $expectedOnLoad) {
     throw "Smoke de onLoad retornou '$onLoadResult'; esperado '$expectedOnLoad'."
 }
@@ -1655,7 +1661,7 @@ $copyPersistenceHarness = @'
 local timeQueue = {}
 local helper = nil
 local helperState = nil
-local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.2.4', mp = 21, effects = {duel = false}}
+local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.2.5', mp = 21, effects = {duel = false}}
 local persistedRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.2', mp = 10, effects = {duel = true}}
 
 JSON = {
@@ -1704,7 +1710,7 @@ spawnObject = function(params)
                 cacheRuntimeState({state = helperState or defaultRuntimeState})
                 return true
             elseif name == 'healthCheck' then
-                return {ok = true, version = '0.2.4', parentGuid = 'panel-copy'}
+                return {ok = true, version = '0.2.5', parentGuid = 'panel-copy'}
             elseif name == 'importState' then
                 helperState = payload
                 return true
@@ -1783,7 +1789,7 @@ if ($webRequestResult -ne $expectedWebRequest) {
 $transactionHarness = @'
 local oldXml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
 local candidateXml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/><Text id="activeWeaponLabel"/></Panel>'
-local candidateSource = '-- CORVAN_RUNTIME candidate v0.2.4'
+local candidateSource = '-- CORVAN_RUNTIME candidate v0.2.5'
 local oldSource = SEED_RUNTIME
 local timers = {}
 local currentGuid = 'helper1'
@@ -1834,7 +1840,7 @@ helper = {
     reload = function()
         if loadedSource == candidateSource then
             currentGuid = 'candidate-guid'
-            activeVersion = CANDIDATE_HEALTH_OK and '0.2.4' or 'broken'
+            activeVersion = CANDIDATE_HEALTH_OK and '0.2.5' or 'broken'
             applyRuntimeUi({xml = candidateXml})
         else
             currentGuid = 'rollback-guid'
@@ -1871,7 +1877,7 @@ update.playerColor = 'White'
 update.phase = 'install'
 
 installCandidate(9, {
-    manifest = {version = '0.2.4', commitSha = '0123456789abcdef0123456789abcdef01234567'},
+    manifest = {version = '0.2.5', commitSha = '0123456789abcdef0123456789abcdef01234567'},
     source = candidateSource,
     etag = 'etag-2'
 })
@@ -1901,7 +1907,7 @@ function Invoke-TransactionSmoke([bool]$healthy, [string]$bootstrapSource = $boo
 }
 
 $updateSuccess = Invoke-TransactionSmoke $true
-$expectedUpdateSuccess = '"0.2.4", true, false, false, "candidate-guid", 23, true, false'
+$expectedUpdateSuccess = '"0.2.5", true, false, false, "candidate-guid", 23, true, false'
 if ($updateSuccess -ne $expectedUpdateSuccess) {
     throw "Smoke de update retornou '$updateSuccess'; esperado '$expectedUpdateSuccess'."
 }
@@ -1914,7 +1920,7 @@ if ($updateRollback -ne $expectedUpdateRollback) {
 
 $legacyUpdateSuccess = Invoke-TransactionSmoke $true $legacyBootstrap
 if ($legacyUpdateSuccess -ne $expectedUpdateSuccess) {
-    throw "Bootstrap congelado 1.0.2 não instalou a transação v0.2.4: '$legacyUpdateSuccess'."
+    throw "Bootstrap congelado 1.0.2 não instalou a transação v0.2.5: '$legacyUpdateSuccess'."
 }
 
 $legacyLatestShortCircuitHarness = @'
@@ -2100,4 +2106,21 @@ if ($releaseDiscoveryResult -ne '"arcane-test-v2.0.0", true') {
     throw "Smoke de descoberta retornou '$releaseDiscoveryResult'."
 }
 
+$startupRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
+$startupRunner.Globals.Set('BOOTSTRAP_SOURCE', [MoonSharp.Interpreter.DynValue]::NewString($bootstrap))
+$startupRunner.Globals.Set('LEGACY_BOOTSTRAP_SOURCE', [MoonSharp.Interpreter.DynValue]::NewString($legacyBootstrap))
+$startupRunner.Globals.Set('RUNTIME_SOURCE', [MoonSharp.Interpreter.DynValue]::NewString($runtime))
+$startupRunner.Globals.Set('SEED_UI_SOURCE', [MoonSharp.Interpreter.DynValue]::NewString($savedObject.ObjectStates[0].XmlUI))
+$null = $startupRunner.DoString("CHARACTER_CONFIG = $characterConfigLiteral")
+$startupHarness = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'tests/lua/startup-performance.lua')
+try {
+    $startupResult = $startupRunner.DoString($startupHarness).String
+} catch {
+    $moonSharpError = $_.Exception.InnerException
+    if ($moonSharpError -and $moonSharpError.DecoratedMessage) {
+        throw $moonSharpError.DecoratedMessage
+    }
+    throw
+}
+Write-Output $startupResult
 Write-Output "MoonSharp OK: runtime/bootstrap compilam; runtimes e helpers Corvan+Arcane isolados; combate $runtimeFlowResult; SHA-256 em $integrityFrames frames; onLoad, cópia persistente, watchdog, update e rollback seguros"

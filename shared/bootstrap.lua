@@ -2,7 +2,7 @@
 -- This file deliberately contains no character rules. The replaceable runtime lives
 -- on an invisible helper so this visible panel never needs to be reloaded to update.
 
-local BOOTSTRAP_VERSION = "1.0.2"
+local BOOTSTRAP_VERSION = "1.0.3"
 local STATE_SCHEMA_VERSION = 1
 local MANIFEST_SCHEMA_VERSION = 1
 local CHARACTER_ID = __CHARACTER_ID_LITERAL__
@@ -48,6 +48,8 @@ local uiReady = false
 local uiLoadSerial = 0
 local uiIds = {}
 local uiAttributeValues = {}
+local uiAppliedAttributeValues = {}
+local uiRequestedXml = nil
 local uiFallbackVisible = false
 local pendingRefreshText = ""
 local pendingRefreshBusy = false
@@ -579,9 +581,17 @@ local function applyUiAttribute(id, attribute, value)
     if loadingOk and loading == true then
         return false
     end
+    local text = tostring(value)
+    if uiAppliedAttributeValues[id] and uiAppliedAttributeValues[id][attribute] == text then
+        return true
+    end
     local ok = pcall(function()
-        self.UI.setAttribute(id, attribute, tostring(value))
+        self.UI.setAttribute(id, attribute, text)
     end)
+    if ok then
+        uiAppliedAttributeValues[id] = uiAppliedAttributeValues[id] or {}
+        uiAppliedAttributeValues[id][attribute] = text
+    end
     return ok
 end
 
@@ -605,10 +615,13 @@ local function setRefreshFeedback(text, busy)
     setUiAttribute("refresh", "interactable", pendingRefreshBusy and "false" or "true")
 end
 
-local function installUiXml(xml)
+local function installUiXml(xml, force)
     if type(xml) ~= "string" or xml == "" then
         return false
     end
+    -- Repeated helper handshakes must not restart an identical UI load.
+    -- Explicit recovery bypasses this cache, including after external UI damage.
+    if not force and uiRequestedXml == xml then return true end
 
     local nextUiIds = collectUiIds(xml)
     if nextUiIds.refresh == nil or nextUiIds.refreshStatus == nil then
@@ -630,6 +643,8 @@ local function installUiXml(xml)
         return false
     end
     uiIds = nextUiIds
+    uiRequestedXml = xml
+    uiAppliedAttributeValues = {}
 
     local function finishLoading()
         if serial ~= uiLoadSerial then
@@ -637,6 +652,7 @@ local function installUiXml(xml)
         end
         if not installedUiMatches(xml) then
             uiReady = false
+            uiRequestedXml = nil
             showUiFallback("a interface carregada não corresponde ao XML esperado.")
             return
         end
@@ -665,12 +681,16 @@ local function installUiXml(xml)
         -- validar XML obsoleto. Dois frames cobrem tanto o início quanto um
         -- carregamento que já tenha terminado.
         Wait.frames(function()
+            if serial ~= uiLoadSerial then return end
             Wait.condition(finishLoading, hasFinishedLoading, 5, function()
+                if serial ~= uiLoadSerial then return end
+                uiRequestedXml = nil
                 showUiFallback("a interface não terminou de carregar.")
             end)
         end, 2)
     end)
     if not scheduled then
+        uiRequestedXml = nil
         showUiFallback("não foi possível aguardar o carregamento da interface.")
     end
     return true
@@ -948,7 +968,7 @@ local function cacheExportedState(helper)
 end
 
 local function acceptStableHelper(helper, expectedVersion, runtimeState)
-    registerHelper(helper, runtimeState)
+    -- probeExistingHelper already bound this helper before checking its health.
     if not restoreRuntimeState(helper, runtimeState) then
         return false
     end
@@ -1638,7 +1658,7 @@ end
 function recoverUi(_, playerColor, _)
     local color = playerColorOf(playerColor)
     local xml = state and state.uiXml or SEED_UI
-    if installUiXml(xml) then
+    if installUiXml(xml, true) then
         tell(color, "recarregando a interface...", {0.80, 0.68, 0.38})
     else
         tell(color, "não foi possível recarregar a interface.", {1.0, 0.38, 0.30})
@@ -1668,6 +1688,10 @@ end
 
 function dispatch(player, value, id)
     local playerColor = playerColorOf(player)
+    -- Native inputs/toggles can change their displayed value without going
+    -- through setAttribute. The next render must reconcile that control even
+    -- when the desired value equals the last value sent by the runtime.
+    if type(id) == "string" then uiAppliedAttributeValues[id] = nil end
     if id == "refresh" or id == "settings_refresh" or id == "bootstrap_refresh" then
         refresh(playerColor, value, id)
         return
