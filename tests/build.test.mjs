@@ -30,7 +30,7 @@ const PLACEHOLDERS = [
   "__SEED_RUNTIME_LITERAL__",
 ];
 
-test("a v0.2.3 preserva a política de canal e Latest definida no registry", async () => {
+test("a v0.2.4 preserva a política de canal e Latest definida no registry", async () => {
   const packageJson = JSON.parse(await readFile(join(ROOT, "package.json"), "utf8"));
   const registry = await loadCharacterRegistry(ROOT);
   const corvan = registry.characters.find((profile) => profile.id === "corvan");
@@ -38,7 +38,7 @@ test("a v0.2.3 preserva a política de canal e Latest definida no registry", asy
 
   assert.equal(packageJson.version, undefined);
   assert.equal(packageJson.release, undefined);
-  assert.equal(corvan.version, "0.2.3");
+  assert.equal(corvan.version, "0.2.4");
   assert.equal(corvan.prerelease, false);
   assert.equal(corvan.globalLatest, true);
   assert.equal(corvan.tagMode, "legacy");
@@ -124,7 +124,7 @@ test("literal Lua escolhe delimitador sem colidir com o conteúdo", () => {
 
 test("a ficha possui o schema e os valores canônicos do Corvan", async () => {
   const character = JSON.parse(await readFile(join(ROOT, "characters", "corvan", "character.json"), "utf8"));
-  validateCharacter(character, "0.2.3");
+  validateCharacter(character, "0.2.4");
 
   assert.equal(character.schemaVersion, 1);
   assert.equal(character.name, "Corvan Duras");
@@ -132,7 +132,7 @@ test("a ficha possui o schema e os valores canônicos do Corvan", async () => {
     { hp: character.resources.hp.max, mp: character.resources.mp.max },
     { hp: 78, mp: 21 },
   );
-  assert.equal(character.defense, 24);
+  assert.equal(character.defense, 27);
   assert.equal(character.damageReduction, 10);
   assert.deepEqual(character.weapons.sword, {
     name: "Espada Maculada pela Ira",
@@ -144,10 +144,10 @@ test("a ficha possui o schema e os valores canônicos do Corvan", async () => {
     range: "Corpo a corpo",
   });
   assert.deepEqual(character.weapons.shield, {
-    name: "Escudo Pesado",
+    name: "Escudo Pesado Reforçado",
     chatName: "Escudo",
     attack: 12,
-    defenseModifier: 4,
+    defenseModifier: 5,
     damage: { count: 1, sides: 6, bonus: 5 },
     critical: { min: 20, multiplier: 2 },
     type: "Impacto",
@@ -157,7 +157,7 @@ test("a ficha possui o schema e os valores canônicos do Corvan", async () => {
     Object.fromEntries(Object.entries(character.skills).map(([id, skill]) => [id, skill.modifier])),
     {
       initiative: 3, fight: 12, intimidation: 6, perception: 8,
-      fortitude: 15, reflex: 7, will: 8, riding: 7,
+      fortitude: 18, reflex: 10, will: 11, riding: 7,
       diplomacy: 10, warfare: 8, aim: 7,
     },
   );
@@ -177,8 +177,8 @@ test("a ficha possui o schema e os valores canônicos do Corvan", async () => {
   assert.equal(character.powers.platesOfWrath.damageReduction, 5);
   assert.equal(character.powers.duelistShielded.damageReduction, 2);
   assert.equal(character.powers.duelistShielded.upgradedDamageReduction, 3);
-  assert.equal(character.powers.solidity.resistanceModifier, 4);
-  assert.equal(character.powers.weaponAndShieldStyle.shieldDefenseModifier, 4);
+  assert.equal(character.powers.solidity.resistanceModifier, 5);
+  assert.equal(character.powers.weaponAndShieldStyle.shieldDefenseModifier, 5);
   assert.deepEqual(
     {
       base: character.powers.duel.attackModifier,
@@ -199,22 +199,23 @@ test("a ficha possui o schema e os valores canônicos do Corvan", async () => {
   const ui = await readFile(join(ROOT, "characters", "corvan", "ui.xml"), "utf8");
   assert.match(ui, /id="pvCurrent" text="78"/);
   assert.match(ui, /id="pmCurrent" text="21"/);
-  assert.match(ui, /id="defenseValue" text="24"/);
+  assert.match(ui, /id="defenseValue" text="27"/);
   assert.match(ui, /id="attackValue" text="\+13"/);
   assert.match(ui, /id="damageValue" text="2d8\+10"/);
   assert.match(ui, /ESPADA MACULADA PELA IRA/);
   assert.match(ui, /CRÍTICO 18–20\/x2/);
   assert.match(ui, /id="rdValue" text="10"/);
   assert.match(ui, /RD 5 \+ 5 = 10/);
-  assert.match(ui, /id="versionLabel" text="v0\.2\.3/);
-  assert.match(ui, /id="calculatedDefenseValue" text="24"/);
+  assert.match(ui, /id="versionLabel" text="v0\.2\.4/);
+  assert.match(ui, /id="calculatedDefenseValue" text="27"/);
+  assert.match(ui, /id="roll_fortification"[^>]*text="FORTIFICAÇÃO 25%&#10;d4 • sucesso no 1"/s);
 });
 
 test("validadores rejeitam character e UI estruturalmente inválidos", async () => {
   const character = JSON.parse(await readFile(join(ROOT, "characters", "corvan", "character.json"), "utf8"));
   const invalidCharacter = structuredClone(character);
   invalidCharacter.weapons.sword.damage.sides = 1;
-  assert.throws(() => validateCharacter(invalidCharacter, "0.2.3"), /damage\.sides/);
+  assert.throws(() => validateCharacter(invalidCharacter, "0.2.4"), /damage\.sides/);
 
   const prereleaseCharacter = structuredClone(character);
   prereleaseCharacter.version = "0.1.0-rc.1";
@@ -346,20 +347,23 @@ test("manifesto e Saved Object possuem o contrato publicável", async (t) => {
   const runtime = await readFile(join(outDir, "corvan-runtime.lua"), "utf8");
   const manifest = JSON.parse(await readFile(join(outDir, "manifest.json"), "utf8"));
   const saved = JSON.parse(await readFile(join(outDir, "Corvan_Duras_Console.json"), "utf8"));
+  const savedMetadata = JSON.parse(saved.ObjectStates[0].GMNotes);
 
   assert.equal(manifest.schemaVersion, 1);
   assert.equal(manifest.characterId, "corvan");
-  assert.equal(manifest.releaseTag, "v0.2.3");
-  assert.equal(manifest.version, "0.2.3");
+  assert.equal(manifest.releaseTag, "v0.2.4");
+  assert.equal(manifest.version, "0.2.4");
   assert.equal(manifest.minBootstrapVersion, "1.0.2");
   assert.equal(manifest.commitSha, FIXED_SHA);
   assert.equal(
     manifest.runtime.url,
-    "https://github.com/bryangillies42/corvan-tts-automation/releases/download/v0.2.3/corvan-runtime.lua",
+    "https://github.com/bryangillies42/corvan-tts-automation/releases/download/v0.2.4/corvan-runtime.lua",
   );
   assert.equal(manifest.runtime.size, Buffer.byteLength(runtime, "utf8"));
   assert.equal(manifest.runtime.sha256, createHash("sha256").update(runtime, "utf8").digest("hex"));
   assert.equal(manifest.previousVersion, null);
+  assert.equal(savedMetadata.version, "0.2.4");
+  assert.equal(savedMetadata.commitSha, FIXED_SHA);
 
   for (const placeholder of PLACEHOLDERS) {
     assert.equal(runtime.includes(placeholder), false);
@@ -492,16 +496,16 @@ test("manifesto aceita somente uma versão anterior estável e realmente menor",
     rootDir: project,
     outDir: join(project, "dist-previous"),
     commitSha: FIXED_SHA,
-    previousVersion: "0.2.2",
+    previousVersion: "0.2.3",
   });
-  assert.equal(valid.manifest.previousVersion, "0.2.2");
+  assert.equal(valid.manifest.previousVersion, "0.2.3");
 
   await assert.rejects(
     buildProject({
       rootDir: project,
       outDir: join(project, "dist-invalid-previous"),
       commitSha: FIXED_SHA,
-      previousVersion: "0.2.3",
+      previousVersion: "0.2.4",
     }),
     /deve ser anterior/,
   );
@@ -512,7 +516,7 @@ test("registry é a fonte única e recusa identidades, caminhos e canais conflit
   const corvan = registry.characters.find((profile) => profile.id === "corvan");
   const spentar = registry.characters.find((profile) => profile.id === "spentar");
 
-  assert.equal(corvan.version, "0.2.3");
+  assert.equal(corvan.version, "0.2.4");
   assert.equal(corvan.sourceDir, "characters/corvan");
   assert.equal(spentar.status, "scaffold");
   assert.equal(spentar.productionEnabled, false);
@@ -568,7 +572,7 @@ test("Corvan e fixture divergente geram produtos isolados sem colisão", async (
     "Arcane_Test_Console.json", "arcane-test-manifest.json", "arcane-test-runtime.lua",
   ]);
   assert.equal(corvan.manifest.characterId, "corvan");
-  assert.equal(corvan.manifest.releaseTag, "v0.2.3");
+  assert.equal(corvan.manifest.releaseTag, "v0.2.4");
   assert.equal(arcane.manifest.characterId, "arcane-test");
   assert.equal(arcane.manifest.releaseTag, "arcane-test-v0.1.0");
   assert.match(arcane.panelImageUrl, /fixtures\/characters\/arcane-test\/assets\/panel-board\.png\?sha256=[0-9a-f]{64}$/);

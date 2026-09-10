@@ -35,7 +35,7 @@ O painel automatiza:
 
 - PV/PM ajustáveis por valor;
 - Defesa e RD calculadas;
-- Espada Maculada pela Ira e Escudo Pesado;
+- Espada Maculada pela Ira e Escudo Pesado Reforçado;
 - rolagens físicas de ataque, dano e crítico;
 - poderes e recursos;
 - perícias e resistências;
@@ -65,6 +65,8 @@ Na v0.2.2, Corvan continua no nível 7 e troca sua arma ativa pela **Espada Macu
 
 Na v0.2.3, a RD concedida por **Placas da Ira** sobe de 3 para 5. Com Bastião, a RD passiva total passa de 8 para 10; Duelista Escudado continua elevando o valor para 12 ou 13 conforme o estágio de Duelo.
 
+Na v0.2.4, os equipamentos defensivos da ficha passam a ser refletidos nos totais: Defesa 27, Fortitude +18, Reflexos +10, Vontade +11 e Escudo Pesado Reforçado +5. O painel também oferece **Fortificação 25%**, que lança um d4 físico e considera o resultado 1 como sucesso, sem custo ou efeito persistente.
+
 ## Histórico resumido
 
 - **v0.1.7** — moldura alinhada ao painel passou a ser camada visual da UI, mantendo fallback da textura física.
@@ -74,6 +76,7 @@ Na v0.2.3, a RD concedida por **Placas da Ira** sobe de 3 para 5. Com Bastião, 
 - **v0.2.1** — fundação multi-personagem, sem mudança intencional nas regras do Corvan.
 - **v0.2.2** — Espada Maculada pela Ira como arma ativa, com dano `2d8+10` e crítico `4d8+10`, preservando nível, recursos e estado.
 - **v0.2.3** — Placas da Ira passa a conceder RD 5; RD passiva total passa a 10.
+- **v0.2.4** — equipamentos defensivos sincronizados; Defesa e resistências atualizadas; Fortificação 25% em d4 físico.
 
 ## Teste e release
 

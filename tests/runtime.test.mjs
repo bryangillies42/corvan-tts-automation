@@ -106,10 +106,10 @@ function activateBaluarteAllies(state) {
 }
 
 test('fórmulas de ataque, defesa e crítico seguem os números da ficha', () => {
-  assert.equal(character.version, '0.2.3');
+  assert.equal(character.version, '0.2.4');
   assert.equal(character.weapons.sword.name, 'Espada Maculada pela Ira');
-  assert.match(runtime, /version = "0\.2\.3"/);
-  assert.match(runtime, /EXPECTED_RUNTIME_VERSION = "0\.2\.3"/);
+  assert.match(runtime, /version = "0\.2\.4"/);
+  assert.match(runtime, /EXPECTED_RUNTIME_VERSION = "0\.2\.4"/);
   assert.match(runtime, /name = "Espada Maculada pela Ira", chatName = "Espada", attack = 13/);
   assert.match(runtime, /damage = \{count = 2, sides = 8, bonus = 10\}/);
 
@@ -135,11 +135,11 @@ test('fórmulas de ataque, defesa e crítico seguem os números da ficha', () =>
     { count: 2, sides: 8, bonus: 13 },
     'Combate Defensivo não altera o dano',
   );
-  assert.equal(defense(state), 29, 'Combate Defensivo concede +5 DEF imediatamente');
+  assert.equal(defense(state), 32, 'Combate Defensivo concede +5 DEF imediatamente');
   state.effects.combatDefensiveArmed = false;
-  assert.equal(defense(state), 29, 'o ataque consome somente a penalidade armada');
+  assert.equal(defense(state), 32, 'o ataque consome somente a penalidade armada');
   state.effects.baluarte = 4;
-  assert.equal(defense(state), 33);
+  assert.equal(defense(state), 36);
 
   assert.deepEqual(damageSpec(state, 'shield', true), { count: 2, sides: 6, bonus: 8 });
   assert.equal(damageReduction(state), 13);
@@ -149,13 +149,13 @@ test('fórmulas de ataque, defesa e crítico seguem os números da ficha', () =>
 
   const guardState = initialState();
   guardState.effects.shieldGuardSuppressed = true;
-  assert.equal(defense(guardState), 20);
-  assert.equal(skillModifier(guardState, 'fortitude'), 11);
-  assert.equal(skillModifier(guardState, 'reflex'), 3);
-  assert.equal(skillModifier(guardState, 'will'), 4);
-  guardState.effects.baluarte = 2;
   assert.equal(defense(guardState), 22);
   assert.equal(skillModifier(guardState, 'fortitude'), 13);
+  assert.equal(skillModifier(guardState, 'reflex'), 5);
+  assert.equal(skillModifier(guardState, 'will'), 6);
+  guardState.effects.baluarte = 2;
+  assert.equal(defense(guardState), 24);
+  assert.equal(skillModifier(guardState, 'fortitude'), 15);
 
   assert.match(runtime, /local spec = CorvanRules\.calculateDamageSpec\(CHARACTER, state, weaponKey, critical\)/);
   assert.match(runtime, /startPhysicalRoll\(\{kind = "damage", count = spec\.count, sides = spec\.sides, bonus = spec\.bonus/);
@@ -251,11 +251,12 @@ test('Duelista Escudado, guarda do escudo e remoção da Torre Armada fazem part
   assert.doesNotMatch(runtime, /armedTower|power_torre_armada|Torre Armada/);
 });
 
-test('migração v0.2.2 → v0.2.3 e saltos legados preservam recursos gastos', () => {
+test('migração v0.2.3 → v0.2.4 e saltos legados preservam recursos gastos', () => {
   assert.match(runtime, /CHARACTER\.version == "0\.2\.0"/);
   assert.match(runtime, /CHARACTER\.version == "0\.2\.1"/);
   assert.match(runtime, /CHARACTER\.version == "0\.2\.2"/);
   assert.match(runtime, /CHARACTER\.version == "0\.2\.3"/);
+  assert.match(runtime, /CHARACTER\.version == "0\.2\.4"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.1\.6"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.1\.7"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.1\.8"/);
@@ -264,6 +265,7 @@ test('migração v0.2.2 → v0.2.3 e saltos legados preservam recursos gastos', 
   assert.match(runtime, /source\.runtimeVersion ~= "0\.2\.1"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.2\.2"/);
   assert.match(runtime, /source\.runtimeVersion ~= "0\.2\.3"/);
+  assert.match(runtime, /source\.runtimeVersion ~= "0\.2\.4"/);
   assert.match(runtime, /source\.hp or source\.pv, 0\) == 47[\s\S]*normalized\.hp = 55/);
   assert.match(runtime, /source\.mp or source\.pm, 0\) == 12[\s\S]*normalized\.mp = 15/);
   assert.match(runtime, /normalized\.hp == 55[\s\S]*normalized\.hp = 69/);
@@ -346,6 +348,11 @@ test('atalhos e poderes da ficha nível 7 possuem contrato completo entre dados,
   assert.match(ui, /id="power_baluarte_allies"/);
   assert.match(runtime, /activateBaluarteAllies/);
   assert.match(runtime, /activateDuel/);
+  assert.match(ui, /id="roll_fortification"[^>]*text="FORTIFICAÇÃO 25%&#10;d4 • sucesso no 1"/s);
+  assert.match(runtime, /local types = \{\[4\] = "Die_4"/);
+  assert.match(runtime, /roll\.kind == "fortification"/);
+  assert.match(runtime, /values\[1\] == 1 and "SUCESSO" or "FALHA"/);
+  assert.match(runtime, /if id == "roll_fortification" then return rollFortification\(playerColor\) end/);
 });
 
 test('moldura da UI cobre painéis novos e legados sem recarregar ou alterar o objeto físico', () => {
@@ -378,6 +385,7 @@ test('dados físicos usam offset local, espera oficial e limpeza por GUID própr
   assert.match(runtime, /object\.setAngularVelocity\(angularVelocity\)/);
   assert.match(runtime, /parameters\.pendingLaunches\s*=\s*parameters\.count/);
   assert.match(runtime, /\[6\]\s*=\s*"Die_6"/);
+  assert.match(runtime, /\[4\]\s*=\s*"Die_4"/);
   assert.match(runtime, /\[8\]\s*=\s*"Die_8"/);
   assert.match(runtime, /\[20\]\s*=\s*"Die_20"/);
   assert.match(runtime, /spawnObject\s*\(\s*\{/);
