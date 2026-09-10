@@ -1,0 +1,351 @@
+{
+  "characterId": "spentar",
+  "baselineCommit": "8f6d94128b39731883995be69a38555d63bc100f",
+  "candidateCommit": "2faf83eb18c1242489af66dbab4d779dfe1d834d",
+  "candidateDirty": false,
+  "iterations": 100,
+  "semanticEquivalence": true,
+  "methodology": "Offline MoonSharp, real built sources, deterministic queued host, warm caches; counts are not FPS or wall-clock speed. copyTables counts table allocations inside Core.deepCopy; equivalence-check exports are excluded.",
+  "sourceHashes": {
+    "runtime": "6FE37C214928E7CE9BD58C51F258FC09F60D6DA2603CE95F8FFE36EA7F40A11F",
+    "bootstrap": "BC69950D52FC53FEA2DD435B1B6C6E6459C52EFB25D20037F63D0B490E670829"
+  },
+  "results": [
+    {
+      "scenario": "resources",
+      "metric": "uiCalls",
+      "before": 20600,
+      "after": 200,
+      "reductionPercent": 99.03
+    },
+    {
+      "scenario": "resources",
+      "metric": "attributeAttempts",
+      "before": 20600,
+      "after": 10800,
+      "reductionPercent": 47.57
+    },
+    {
+      "scenario": "resources",
+      "metric": "attributeSets",
+      "before": 20600,
+      "after": 400,
+      "reductionPercent": 98.06
+    },
+    {
+      "scenario": "resources",
+      "metric": "loadingReads",
+      "before": 20600,
+      "after": 400,
+      "reductionPercent": 98.06
+    },
+    {
+      "scenario": "resources",
+      "metric": "xmlSets",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "resources",
+      "metric": "renderPasses",
+      "before": 200,
+      "after": 200,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "resources",
+      "metric": "copyTables",
+      "before": 819600,
+      "after": 122800,
+      "reductionPercent": 85.02
+    },
+    {
+      "scenario": "resources",
+      "metric": "previewPlans",
+      "before": 800,
+      "after": 0,
+      "reductionPercent": 100.0
+    },
+    {
+      "scenario": "pages",
+      "metric": "uiCalls",
+      "before": 51500,
+      "after": 500,
+      "reductionPercent": 99.03
+    },
+    {
+      "scenario": "pages",
+      "metric": "attributeAttempts",
+      "before": 51500,
+      "after": 28300,
+      "reductionPercent": 45.05
+    },
+    {
+      "scenario": "pages",
+      "metric": "attributeSets",
+      "before": 51500,
+      "after": 2000,
+      "reductionPercent": 96.12
+    },
+    {
+      "scenario": "pages",
+      "metric": "loadingReads",
+      "before": 51500,
+      "after": 2000,
+      "reductionPercent": 96.12
+    },
+    {
+      "scenario": "pages",
+      "metric": "xmlSets",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "pages",
+      "metric": "renderPasses",
+      "before": 500,
+      "after": 500,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "pages",
+      "metric": "copyTables",
+      "before": 75500,
+      "after": 13500,
+      "reductionPercent": 82.12
+    },
+    {
+      "scenario": "pages",
+      "metric": "previewPlans",
+      "before": 2000,
+      "after": 0,
+      "reductionPercent": 100.0
+    },
+    {
+      "scenario": "preparation",
+      "metric": "uiCalls",
+      "before": 20600,
+      "after": 200,
+      "reductionPercent": 99.03
+    },
+    {
+      "scenario": "preparation",
+      "metric": "attributeAttempts",
+      "before": 20600,
+      "after": 14200,
+      "reductionPercent": 31.07
+    },
+    {
+      "scenario": "preparation",
+      "metric": "attributeSets",
+      "before": 20600,
+      "after": 400,
+      "reductionPercent": 98.06
+    },
+    {
+      "scenario": "preparation",
+      "metric": "loadingReads",
+      "before": 20600,
+      "after": 400,
+      "reductionPercent": 98.06
+    },
+    {
+      "scenario": "preparation",
+      "metric": "xmlSets",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "preparation",
+      "metric": "renderPasses",
+      "before": 200,
+      "after": 200,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "preparation",
+      "metric": "copyTables",
+      "before": 30200,
+      "after": 5400,
+      "reductionPercent": 82.12
+    },
+    {
+      "scenario": "preparation",
+      "metric": "previewPlans",
+      "before": 800,
+      "after": 200,
+      "reductionPercent": 75.0
+    },
+    {
+      "scenario": "souls",
+      "metric": "uiCalls",
+      "before": 20600,
+      "after": 200,
+      "reductionPercent": 99.03
+    },
+    {
+      "scenario": "souls",
+      "metric": "attributeAttempts",
+      "before": 20600,
+      "after": 10800,
+      "reductionPercent": 47.57
+    },
+    {
+      "scenario": "souls",
+      "metric": "attributeSets",
+      "before": 20600,
+      "after": 1000,
+      "reductionPercent": 95.15
+    },
+    {
+      "scenario": "souls",
+      "metric": "loadingReads",
+      "before": 20600,
+      "after": 1000,
+      "reductionPercent": 95.15
+    },
+    {
+      "scenario": "souls",
+      "metric": "xmlSets",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "souls",
+      "metric": "renderPasses",
+      "before": 200,
+      "after": 200,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "souls",
+      "metric": "copyTables",
+      "before": 819600,
+      "after": 122800,
+      "reductionPercent": 85.02
+    },
+    {
+      "scenario": "souls",
+      "metric": "previewPlans",
+      "before": 800,
+      "after": 400,
+      "reductionPercent": 50.0
+    },
+    {
+      "scenario": "burst-resources",
+      "metric": "uiCalls",
+      "before": 41200,
+      "after": 100,
+      "reductionPercent": 99.76
+    },
+    {
+      "scenario": "burst-resources",
+      "metric": "attributeAttempts",
+      "before": 41200,
+      "after": 5400,
+      "reductionPercent": 86.89
+    },
+    {
+      "scenario": "burst-resources",
+      "metric": "attributeSets",
+      "before": 41200,
+      "after": 200,
+      "reductionPercent": 99.51
+    },
+    {
+      "scenario": "burst-resources",
+      "metric": "loadingReads",
+      "before": 41200,
+      "after": 200,
+      "reductionPercent": 99.51
+    },
+    {
+      "scenario": "burst-resources",
+      "metric": "xmlSets",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "burst-resources",
+      "metric": "renderPasses",
+      "before": 400,
+      "after": 100,
+      "reductionPercent": 75.0
+    },
+    {
+      "scenario": "burst-resources",
+      "metric": "copyTables",
+      "before": 1639200,
+      "after": 245600,
+      "reductionPercent": 85.02
+    },
+    {
+      "scenario": "burst-resources",
+      "metric": "previewPlans",
+      "before": 1600,
+      "after": 0,
+      "reductionPercent": 100.0
+    },
+    {
+      "scenario": "export",
+      "metric": "uiCalls",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "export",
+      "metric": "attributeAttempts",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "export",
+      "metric": "attributeSets",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "export",
+      "metric": "loadingReads",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "export",
+      "metric": "xmlSets",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "export",
+      "metric": "renderPasses",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "export",
+      "metric": "copyTables",
+      "before": 2700,
+      "after": 2700,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "export",
+      "metric": "previewPlans",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    }
+  ]
+}

@@ -1,0 +1,295 @@
+{
+  "characterId": "corvan",
+  "baselineCommit": "a8508135171fa42c2fef73d03e73060d2c342250",
+  "candidateCommit": "924dc070d0eb77fe76500eea913faf404ab1dd7a",
+  "candidateDirty": false,
+  "iterations": 100,
+  "semanticEquivalence": true,
+  "methodology": "Offline MoonSharp, real built sources, deterministic queued host, warm caches; counts are not FPS or wall-clock speed. copyTables counts table allocations inside Core.deepCopy; equivalence-check exports are excluded.",
+  "sourceHashes": {
+    "runtime": "376C23530C7B76F0ECF083CC85326491B2F05C3AA11BE9979D18881D0E8363DE",
+    "bootstrap": "B0E2995A06248F0A1A0DE2075B84B6E45FE0EF53FBF171D8415173B06BE2C5C6"
+  },
+  "results": [
+    {
+      "scenario": "pv-adjust",
+      "metric": "uiCalls",
+      "before": 14800,
+      "after": 400,
+      "reductionPercent": 97.3
+    },
+    {
+      "scenario": "pv-adjust",
+      "metric": "attributeAttempts",
+      "before": 14800,
+      "after": 14800,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "pv-adjust",
+      "metric": "attributeSets",
+      "before": 600,
+      "after": 600,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "pv-adjust",
+      "metric": "loadingReads",
+      "before": 14800,
+      "after": 600,
+      "reductionPercent": 95.95
+    },
+    {
+      "scenario": "pv-adjust",
+      "metric": "xmlSets",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "pv-adjust",
+      "metric": "renderPasses",
+      "before": 400,
+      "after": 400,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "pv-adjust",
+      "metric": "copyTables",
+      "before": 3400,
+      "after": 2000,
+      "reductionPercent": 41.18
+    },
+    {
+      "scenario": "pv-adjust",
+      "metric": "previewPlans",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "settings",
+      "metric": "uiCalls",
+      "before": 7400,
+      "after": 200,
+      "reductionPercent": 97.3
+    },
+    {
+      "scenario": "settings",
+      "metric": "attributeAttempts",
+      "before": 7400,
+      "after": 7400,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "settings",
+      "metric": "attributeSets",
+      "before": 400,
+      "after": 400,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "settings",
+      "metric": "loadingReads",
+      "before": 7400,
+      "after": 400,
+      "reductionPercent": 94.59
+    },
+    {
+      "scenario": "settings",
+      "metric": "xmlSets",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "settings",
+      "metric": "renderPasses",
+      "before": 200,
+      "after": 200,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "settings",
+      "metric": "copyTables",
+      "before": 1600,
+      "after": 1000,
+      "reductionPercent": 37.5
+    },
+    {
+      "scenario": "settings",
+      "metric": "previewPlans",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "auto-spend",
+      "metric": "uiCalls",
+      "before": 7600,
+      "after": 200,
+      "reductionPercent": 97.37
+    },
+    {
+      "scenario": "auto-spend",
+      "metric": "attributeAttempts",
+      "before": 7600,
+      "after": 7400,
+      "reductionPercent": 2.63
+    },
+    {
+      "scenario": "auto-spend",
+      "metric": "attributeSets",
+      "before": 7800,
+      "after": 200,
+      "reductionPercent": 97.44
+    },
+    {
+      "scenario": "auto-spend",
+      "metric": "loadingReads",
+      "before": 8400,
+      "after": 200,
+      "reductionPercent": 97.62
+    },
+    {
+      "scenario": "auto-spend",
+      "metric": "xmlSets",
+      "before": 200,
+      "after": 0,
+      "reductionPercent": 100.0
+    },
+    {
+      "scenario": "auto-spend",
+      "metric": "renderPasses",
+      "before": 200,
+      "after": 200,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "auto-spend",
+      "metric": "copyTables",
+      "before": 1600,
+      "after": 1000,
+      "reductionPercent": 37.5
+    },
+    {
+      "scenario": "auto-spend",
+      "metric": "previewPlans",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "burst-input",
+      "metric": "uiCalls",
+      "before": 3700,
+      "after": 100,
+      "reductionPercent": 97.3
+    },
+    {
+      "scenario": "burst-input",
+      "metric": "attributeAttempts",
+      "before": 3700,
+      "after": 3700,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "burst-input",
+      "metric": "attributeSets",
+      "before": 100,
+      "after": 100,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "burst-input",
+      "metric": "loadingReads",
+      "before": 3700,
+      "after": 100,
+      "reductionPercent": 97.3
+    },
+    {
+      "scenario": "burst-input",
+      "metric": "xmlSets",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "burst-input",
+      "metric": "renderPasses",
+      "before": 100,
+      "after": 100,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "burst-input",
+      "metric": "copyTables",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "burst-input",
+      "metric": "previewPlans",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "export",
+      "metric": "uiCalls",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "export",
+      "metric": "attributeAttempts",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "export",
+      "metric": "attributeSets",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "export",
+      "metric": "loadingReads",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "export",
+      "metric": "xmlSets",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "export",
+      "metric": "renderPasses",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "export",
+      "metric": "copyTables",
+      "before": 800,
+      "after": 500,
+      "reductionPercent": 37.5
+    },
+    {
+      "scenario": "export",
+      "metric": "previewPlans",
+      "before": 0,
+      "after": 0,
+      "reductionPercent": null
+    }
+  ]
+}
