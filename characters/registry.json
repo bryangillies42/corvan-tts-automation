@@ -6,7 +6,7 @@
       "id": "corvan",
       "displayName": "Corvan Duras",
       "shortName": "Corvan",
-      "version": "0.2.3",
+      "version": "0.2.4",
       "status": "active",
       "sourceDir": "characters/corvan",
       "sourceFiles": {
@@ -47,7 +47,7 @@
         "pvCurrent", "pvMax", "pv_adjust", "pv_subtract", "pv_add",
         "pmCurrent", "pmMax", "pm_adjust", "pm_subtract", "pm_add",
         "automatic_resource_spending", "panelBoardArt", "defenseValue", "rdValue",
-        "weapon_sword", "weapon_shield", "roll_attack", "roll_damage", "roll_critical",
+        "weapon_sword", "weapon_shield", "roll_attack", "roll_damage", "roll_critical", "roll_fortification",
         "power_combat_defensive", "power_duel", "power_baluarte", "power_baluarte_allies",
         "passive_duelist_shielded", "power_provocacao",
         "skill_cavalgar", "skill_diplomacia", "skill_guerra", "skill_pontaria",

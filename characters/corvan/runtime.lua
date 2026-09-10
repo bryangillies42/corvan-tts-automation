@@ -32,11 +32,11 @@ local clamp = RuntimeCore.clamp
 local DEFAULT_CHARACTER = {
     schemaVersion = 1,
     id = "corvan",
-    version = "0.2.3",
+    version = "0.2.4",
     name = "Corvan Duras",
     shortName = "Corvan",
     resources = {hp = {max = 78}, mp = {max = 21}},
-    defense = 24,
+    defense = 27,
     damageReduction = 10,
     weapons = {
         sword = {
@@ -45,7 +45,7 @@ local DEFAULT_CHARACTER = {
             critical = {min = 18, multiplier = 2}
         },
         shield = {
-            name = "Escudo Pesado", chatName = "Escudo", attack = 12, defenseModifier = 4,
+            name = "Escudo Pesado Reforçado", chatName = "Escudo", attack = 12, defenseModifier = 5,
             damage = {count = 1, sides = 6, bonus = 5},
             critical = {min = 20, multiplier = 2}
         }
@@ -55,9 +55,9 @@ local DEFAULT_CHARACTER = {
         fight = {name = "Luta", modifier = 12},
         intimidation = {name = "Intimidação", modifier = 6},
         perception = {name = "Percepção", modifier = 8},
-        fortitude = {name = "Fortitude", modifier = 15, resistance = true},
-        reflex = {name = "Reflexos", modifier = 7, resistance = true},
-        will = {name = "Vontade", modifier = 8, resistance = true},
+        fortitude = {name = "Fortitude", modifier = 18, resistance = true},
+        reflex = {name = "Reflexos", modifier = 10, resistance = true},
+        will = {name = "Vontade", modifier = 11, resistance = true},
         riding = {name = "Cavalgar", modifier = 7},
         diplomacy = {name = "Diplomacia", modifier = 10},
         warfare = {name = "Guerra", modifier = 8},
@@ -76,15 +76,15 @@ local DEFAULT_CHARACTER = {
             upgradedDefenseModifier = 4, upgradedResistanceModifier = 4
         },
         provocation = {cost = 2, willDifficulty = 16},
-        solidity = {resistanceModifier = 4},
+        solidity = {resistanceModifier = 5},
         duelistShielded = {damageReduction = 2, upgradedDamageReduction = 3},
-        weaponAndShieldStyle = {shieldDefenseModifier = 4}
+        weaponAndShieldStyle = {shieldDefenseModifier = 5}
     },
     diceOffset = {x = 0, y = 3.2, z = 0}
 }
 
 local EXPECTED_CHARACTER_ID = "corvan"
-local EXPECTED_RUNTIME_VERSION = "0.2.3"
+local EXPECTED_RUNTIME_VERSION = "0.2.4"
 local characterLoaded = false
 local configurationError = nil
 local function decodeCharacter()
@@ -289,7 +289,8 @@ local function normalizeSnapshot(source)
     if (CHARACTER.version == "0.1.6" or CHARACTER.version == "0.1.7"
             or CHARACTER.version == "0.1.8" or CHARACTER.version == "0.1.9"
             or CHARACTER.version == "0.2.0" or CHARACTER.version == "0.2.1"
-            or CHARACTER.version == "0.2.2" or CHARACTER.version == "0.2.3")
+            or CHARACTER.version == "0.2.2" or CHARACTER.version == "0.2.3"
+            or CHARACTER.version == "0.2.4")
         and source.runtimeVersion ~= "0.1.6"
         and source.runtimeVersion ~= "0.1.7"
         and source.runtimeVersion ~= "0.1.8"
@@ -297,28 +298,33 @@ local function normalizeSnapshot(source)
         and source.runtimeVersion ~= "0.2.0"
         and source.runtimeVersion ~= "0.2.1"
         and source.runtimeVersion ~= "0.2.2"
-        and source.runtimeVersion ~= "0.2.3" then
+        and source.runtimeVersion ~= "0.2.3"
+        and source.runtimeVersion ~= "0.2.4" then
         if finiteNumber(source.hp or source.pv, 0) == 47 then normalized.hp = 55 end
         if finiteNumber(source.mp or source.pm, 0) == 12 then normalized.mp = 15 end
     end
     if (CHARACTER.version == "0.1.8" or CHARACTER.version == "0.1.9"
             or CHARACTER.version == "0.2.0" or CHARACTER.version == "0.2.1"
-            or CHARACTER.version == "0.2.2" or CHARACTER.version == "0.2.3")
+            or CHARACTER.version == "0.2.2" or CHARACTER.version == "0.2.3"
+            or CHARACTER.version == "0.2.4")
         and source.runtimeVersion ~= "0.1.8"
         and source.runtimeVersion ~= "0.1.9"
         and source.runtimeVersion ~= "0.2.0"
         and source.runtimeVersion ~= "0.2.1"
         and source.runtimeVersion ~= "0.2.2"
-        and source.runtimeVersion ~= "0.2.3" then
+        and source.runtimeVersion ~= "0.2.3"
+        and source.runtimeVersion ~= "0.2.4" then
         if normalized.hp == 55 then normalized.hp = 69 end
         if normalized.mp == 15 then normalized.mp = 18 end
     end
     if (CHARACTER.version == "0.2.0" or CHARACTER.version == "0.2.1"
-            or CHARACTER.version == "0.2.2" or CHARACTER.version == "0.2.3")
+            or CHARACTER.version == "0.2.2" or CHARACTER.version == "0.2.3"
+            or CHARACTER.version == "0.2.4")
         and source.runtimeVersion ~= "0.2.0"
         and source.runtimeVersion ~= "0.2.1"
         and source.runtimeVersion ~= "0.2.2"
-        and source.runtimeVersion ~= "0.2.3" then
+        and source.runtimeVersion ~= "0.2.3"
+        and source.runtimeVersion ~= "0.2.4" then
         if normalized.hp == 69 then normalized.hp = 78 end
         if normalized.mp == 18 then normalized.mp = 21 end
     end
@@ -931,7 +937,7 @@ local function clearOwnedDice()
 end
 
 local function diceType(sides)
-    local types = {[6] = "Die_6", [8] = "Die_8", [20] = "Die_20"}
+    local types = {[4] = "Die_4", [6] = "Die_6", [8] = "Die_8", [20] = "Die_20"}
     return types[sides]
 end
 
@@ -1044,6 +1050,12 @@ local function completeRoll(token)
             "Calibração", values[1], roll.count, roll.sides, values, 0)
         publicRollResult("Calibração", values[1], roll.count, roll.sides,
             values, 0, nil, roll.playerColor)
+    elseif roll.kind == "fortification" then
+        local outcome = values[1] == 1 and "SUCESSO" or "FALHA"
+        state.lastResult = CorvanRules.formatRollResult(
+            "Fortificação", values[1], roll.count, roll.sides, values, 0, outcome)
+        publicRollResult("Fortificação", values[1], roll.count, roll.sides,
+            values, 0, outcome, roll.playerColor)
     end
     cacheAndRender()
 end
@@ -1313,6 +1325,12 @@ local function rollSkill(playerColor, skillKey)
         label = skill.name, playerColor = playerColor})
 end
 
+local function rollFortification(playerColor)
+    if not canRoll(playerColor) then return false end
+    return startPhysicalRoll({kind = "fortification", count = 1, sides = 4,
+        playerColor = playerColor})
+end
+
 local function canSpendPowerResource(playerColor, power, cost)
     if not state.automaticResourceSpending then return true end
     local resource = power and power.resource or "mp"
@@ -1563,6 +1581,7 @@ function handleUiEvent(payload)
     if id == "roll_attack" then return rollAttack(playerColor) end
     if id == "roll_damage" then return rollDamage(playerColor, false) end
     if id == "roll_critical" then return rollDamage(playerColor, true) end
+    if id == "roll_fortification" then return rollFortification(playerColor) end
     if SKILL_IDS[id] then return rollSkill(playerColor, SKILL_IDS[id]) end
     if id == "power_combat_defensive" then return activateCombatDefensive(playerColor) end
     if id == "power_duel" then return activateDuel(playerColor) end

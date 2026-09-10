@@ -683,7 +683,7 @@ function createGenericManifest(profile, version, commitSha, runtime, previousVer
   };
 }
 
-function createGenericSavedObject(profile, bootstrap, ui, version, imageUrl, savedObjectName) {
+function createGenericSavedObject(profile, bootstrap, ui, version, commitSha, imageUrl, savedObjectName) {
   const name = savedObjectName || `${profile.displayName} Console`;
   return {
     SaveName: name,
@@ -709,6 +709,7 @@ function createGenericSavedObject(profile, bootstrap, ui, version, imageUrl, sav
         project: "corvan-tts-automation",
         characterId: profile.id,
         version,
+        commitSha,
         ...(profile.aspectRatio ? { aspectRatio: profile.aspectRatio } : {}),
       }).trim(),
       ColorDiffuse: { r: 1, g: 1, b: 1 },
@@ -862,7 +863,15 @@ async function buildRegisteredCharacter({
   assert(unresolvedBootstrap === null, `${profile.id} bootstrap ainda contém ${unresolvedBootstrap?.[0]}.`);
   assert(unresolvedUi === null, `${profile.id} UI ainda contém ${unresolvedUi?.[0]}.`);
   const manifest = createGenericManifest(profile, profile.version, validatedCommitSha, runtime, validatePreviousVersion(previousVersion, profile.version), files);
-  const savedObject = createGenericSavedObject(profile, generatedBootstrap, ui, profile.version, savedImageUrl, savedObjectName || profile.savedObjectName);
+  const savedObject = createGenericSavedObject(
+    profile,
+    generatedBootstrap,
+    ui,
+    profile.version,
+    validatedCommitSha,
+    savedImageUrl,
+    savedObjectName || profile.savedObjectName,
+  );
   const output = {
     [files.runtime]: runtime,
     [files.manifest]: stableJson(manifest),

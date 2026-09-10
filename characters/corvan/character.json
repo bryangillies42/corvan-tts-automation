@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "corvan",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "name": "Corvan Duras",
   "shortName": "Corvan",
   "resources": {
@@ -14,7 +14,7 @@
       "max": 21
     }
   },
-  "defense": 24,
+  "defense": 27,
   "damageReduction": 10,
   "weapons": {
     "sword": {
@@ -34,10 +34,10 @@
       "range": "Corpo a corpo"
     },
     "shield": {
-      "name": "Escudo Pesado",
+      "name": "Escudo Pesado Reforçado",
       "chatName": "Escudo",
       "attack": 12,
-      "defenseModifier": 4,
+      "defenseModifier": 5,
       "damage": {
         "count": 1,
         "sides": 6,
@@ -74,17 +74,17 @@
     },
     "fortitude": {
       "name": "Fortitude",
-      "modifier": 15,
+      "modifier": 18,
       "resistance": true
     },
     "reflex": {
       "name": "Reflexos",
-      "modifier": 7,
+      "modifier": 10,
       "resistance": true
     },
     "will": {
       "name": "Vontade",
-      "modifier": 8,
+      "modifier": 11,
       "resistance": true
     },
     "riding": {
@@ -146,7 +146,7 @@
     "solidity": {
       "name": "Solidez",
       "passive": true,
-      "resistanceModifier": 4
+      "resistanceModifier": 5
     },
     "duelistShielded": {
       "name": "Duelista Escudado",
@@ -157,7 +157,7 @@
     "weaponAndShieldStyle": {
       "name": "Estilo de Arma e Escudo",
       "passive": true,
-      "shieldDefenseModifier": 4
+      "shieldDefenseModifier": 5
     },
     "ambitionWeapons": {
       "name": "Armas da Ambição",

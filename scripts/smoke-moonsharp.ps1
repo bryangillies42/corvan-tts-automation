@@ -438,7 +438,7 @@ local function bootstrapEnvironment(source, label, characterId, panelGuid, versi
 end
 
 local corvan = bootstrapEnvironment(
-    corvanBootstrapSource, 'corvan-bootstrap', 'corvan', 'corvan-panel', '0.2.3', 'CORVAN_RUNTIME')
+    corvanBootstrapSource, 'corvan-bootstrap', 'corvan', 'corvan-panel', '0.2.4', 'CORVAN_RUNTIME')
 local arcane = bootstrapEnvironment(
     arcaneBootstrapSource, 'arcane-bootstrap', 'arcane-test', 'arcane-panel', '0.1.0', 'ARCANE_TEST_RUNTIME')
 
@@ -482,7 +482,7 @@ if ($sharedBootstrapResult -ne $expectedSharedBootstrap) {
 
 $rulesHarness = @'
 local character = {
-    defense = 24,
+    defense = 27,
     damageReduction = 10,
     weapons = {
         sword = {
@@ -490,9 +490,9 @@ local character = {
             damage = {count = 2, sides = 8, bonus = 10},
             critical = {min = 18, multiplier = 2}
         },
-        shield = {defenseModifier = 4}
+        shield = {defenseModifier = 5}
     },
-    skills = {fortitude = {modifier = 15, resistance = true}},
+    skills = {fortitude = {modifier = 18, resistance = true}},
     powers = {
         duel = {
             attackModifier = 2, damageModifier = 2,
@@ -500,7 +500,7 @@ local character = {
         },
         combatDefensive = {attackModifier = -2, defenseModifier = 5},
         baluarte = {defenseModifier = 2, resistanceModifier = 2},
-        solidity = {resistanceModifier = 4},
+        solidity = {resistanceModifier = 5},
         duelistShielded = {damageReduction = 2, upgradedDamageReduction = 3}
     }
 }
@@ -565,7 +565,7 @@ return CorvanRules.calculateAttackModifier(character, state, 'sword'),
 
 $runner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $actual = $runner.DoString($runtimeConfigPrelude + "`n" + $runtime + "`n" + $rulesHarness).ToString()
-$expected = '14, 29, 15, 13, 4, 8, 13, true'
+$expected = '14, 31, 17, 13, 4, 8, 13, true'
 if ($actual -ne $expected) {
     throw "Smoke de regras retornou '$actual'; esperado '$expected'."
 }
@@ -603,6 +603,7 @@ local parentObject = nil
 local globalChatCalls = 0
 local panelPosition = {x = 20, y = 1, z = 30}
 local spawnPositions = {}
+local spawnedTypes = {}
 local launchCalls = 0
 local torqueCalls = 0
 local velocityFallbackCalls = 0
@@ -743,6 +744,7 @@ spawnObject = function(params)
     local guid = 'die' .. tostring(dieSequence)
     local value = table.remove(dieValues, 1)
     table.insert(spawnPositions, params.position)
+    table.insert(spawnedTypes, params.type)
     local notes = ''
     local die = {
         resting = true,
@@ -899,6 +901,17 @@ assert(migrated021.diceOffset.x == -1.5 and migrated021.diceOffset.y == 5.25
 assert(migrated021.lastResult == 'resultado 0.2.1 preservado')
 assert(#migrated021.ownedDiceGuids == 1 and migrated021.ownedDiceGuids[1] == 'legacy-021-die')
 assert(migrated021.undo ~= nil and migrated021.undo.hp == 38 and migrated021.undo.mp == 8)
+local previousRelease = deepCopy(migrated021)
+previousRelease.runtimeVersion = '0.2.3'
+previousRelease.hp = 28
+previousRelease.mp = 3
+previousRelease.lastResult = 'resultado 0.2.3 preservado'
+assert(importState(previousRelease))
+local migrated023 = exportState()
+assert(migrated023.hp == 28 and migrated023.mp == 3)
+assert(migrated023.effects.duel == 2 and migrated023.effects.baluarte == 4
+    and migrated023.effects.provocation)
+assert(migrated023.lastResult == 'resultado 0.2.3 preservado')
 local legacyState = defaultState()
 legacyState.runtimeVersion = '0.1.5'
 legacyState.hp = 47
@@ -955,8 +968,8 @@ assert(exportState().effects.baluarte == 4 and exportState().mp == 16)
 assert(handleUiEvent({id = 'power_baluarte_allies', playerColor = 'White'}))
 assert(exportState().effects.baluarteShared and exportState().mp == 14)
 assert(not handleUiEvent({id = 'power_baluarte_allies', playerColor = 'White'}))
-assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 28)
-assert(CorvanRules.calculateSkillModifier(CHARACTER, exportState(), 'fortitude') == 19)
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 31)
+assert(CorvanRules.calculateSkillModifier(CHARACTER, exportState(), 'fortitude') == 22)
 assert(not handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
 assert(exportState().mp == 14)
 assert(handleUiEvent({id = 'end_turn', playerColor = 'White'}))
@@ -1007,17 +1020,17 @@ assert(#afterDamage.ownedDiceGuids == 2)
 
 assert(handleUiEvent({id = 'power_combat_defensive', playerColor = 'White'}))
 assert(CorvanRules.calculateAttackModifier(CHARACTER, exportState(), 'sword') == 11)
-assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 29)
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 32)
 assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
-assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 31)
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 34)
 assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
-assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 33)
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 36)
 dieValues = {18}
 assert(handleUiEvent({id = 'roll_attack', playerColor = 'White'}))
 local afterAttack = exportState()
 assert(afterAttack.effects.combatDefensiveDefense and not afterAttack.effects.combatDefensiveArmed)
 assert(afterAttack.pendingThreat and afterAttack.pendingThreat.natural == 18)
-assert(CorvanRules.calculateDefense(CHARACTER, afterAttack) == 33)
+assert(CorvanRules.calculateDefense(CHARACTER, afterAttack) == 36)
 assert(afterAttack.lastResult == 'Espada - 29 (d20[18] + 11) • crítico')
 assert(publicChat[#publicChat] == expectedPublicRoll('Espada', 29, 'd20(18) + 11')
     .. '  │ [FF6464]CRÍTICO[-]')
@@ -1041,6 +1054,37 @@ assert(state.undo == undoBeforeClear)
 assert(#publicChat == publicBeforeClear and #privateChat == privateBeforeClear)
 assert(attributes.clear_dice == 'false')
 
+local undoBeforeFortification = state.undo
+local hpBeforeFortification = exportState().hp
+local mpBeforeFortification = exportState().mp
+dieValues = {1}
+assert(handleUiEvent({id = 'roll_fortification', playerColor = 'White'}))
+local fortificationSuccess = exportState()
+assert(fortificationSuccess.lastResult == 'Fortificação - 1 (d4[1]) • SUCESSO')
+assert(publicChat[#publicChat] == expectedPublicRoll('Fortificação', 1, 'd4(1)') .. '  │ SUCESSO')
+assert(fortificationSuccess.pendingThreat and fortificationSuccess.pendingThreat.natural == 18)
+assert(fortificationSuccess.hp == hpBeforeFortification and fortificationSuccess.mp == mpBeforeFortification)
+assert(fortificationSuccess.effects.combatDefensiveDefense
+    and fortificationSuccess.effects.baluarte == 4
+    and not fortificationSuccess.effects.duel)
+assert(state.undo == undoBeforeFortification and spawnedTypes[#spawnedTypes] == 'Die_4')
+for _, failureFace in ipairs({2, 3, 4}) do
+    dieValues = {failureFace}
+    assert(handleUiEvent({id = 'roll_fortification', playerColor = 'White'}))
+    local fortificationFailure = exportState()
+    assert(fortificationFailure.lastResult == 'Fortificação - ' .. tostring(failureFace)
+        .. ' (d4[' .. tostring(failureFace) .. ']) • FALHA')
+    assert(publicChat[#publicChat] == expectedPublicRoll(
+        'Fortificação', failureFace, 'd4(' .. tostring(failureFace) .. ')') .. '  │ FALHA')
+    assert(fortificationFailure.pendingThreat and fortificationFailure.pendingThreat.natural == 18)
+    assert(fortificationFailure.hp == hpBeforeFortification and fortificationFailure.mp == mpBeforeFortification)
+    assert(fortificationFailure.effects.combatDefensiveDefense
+        and fortificationFailure.effects.baluarte == 4
+        and not fortificationFailure.effects.duel)
+    assert(state.undo == undoBeforeFortification and #fortificationFailure.ownedDiceGuids == 1)
+    assert(spawnedTypes[#spawnedTypes] == 'Die_4')
+end
+
 dieValues = {6, 3, 8, 1}
 assert(handleUiEvent({id = 'roll_critical', playerColor = 'White'}))
 local afterCritical = exportState()
@@ -1056,7 +1100,7 @@ assert(diceByGuid[criticalDieOne] == nil and diceByGuid[criticalDieTwo] == nil
     and diceByGuid[criticalDieThree] == nil and diceByGuid[criticalDieFour] == nil)
 assert(#exportState().ownedDiceGuids == 0 and exportState().lastResult == afterCritical.lastResult)
 assert(handleUiEvent({id = 'end_turn', playerColor = 'White'}))
-assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 24)
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 27)
 
 local rollbackState = normalizeState(exportState())
 rollbackState.effects.combatDefensiveArmed = true
@@ -1070,14 +1114,15 @@ rollInProgress = true
 finishRollFailure(998, 'falha simulada.')
 assert(exportState().effects.combatDefensiveArmed and exportState().effects.combatDefensiveDefense
     and not exportState().effects.shieldGuardSuppressed)
-assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 29)
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 32)
 assert(handleUiEvent({id = 'end_turn', playerColor = 'White'}))
 
 local privateBeforeBusyActions = #privateChat
 rollInProgress = true
 assert(not handleUiEvent({id = 'clear_dice', playerColor = 'White'}))
 assert(not handleUiEvent({id = 'reset_state', playerColor = 'White'}))
-assert(#privateChat == privateBeforeBusyActions + 2)
+assert(not handleUiEvent({id = 'roll_fortification', playerColor = 'White'}))
+assert(#privateChat == privateBeforeBusyActions + 3)
 rollInProgress = false
 
 dieValues = {7}
@@ -1109,17 +1154,17 @@ assert(exportState().lastResult == 'Guerra - 20 (d20[12] + 8)')
 dieValues = {13}
 assert(handleUiEvent({id = 'skill_pontaria', playerColor = 'White'}))
 assert(exportState().lastResult == 'Pontaria - 20 (d20[13] + 7)')
-assert(#publicChat == 11 and #spectatorChat == 11 and globalChatCalls == 0)
+assert(#publicChat == 15 and #spectatorChat == 15 and globalChatCalls == 0)
 local latestSpawn = spawnPositions[#spawnPositions]
 assert(latestSpawn.x == 35 and math.abs(latestSpawn.y - 7.2) < 0.001 and latestSpawn.z == 42,
     'spawn did not follow panel: ' .. tostring(latestSpawn.x) .. ','
         .. tostring(latestSpawn.y) .. ',' .. tostring(latestSpawn.z))
-assert(launchCalls == 1 and torqueCalls == 1 and frameCalls == 14
-        and velocityFallbackCalls == 13 and angularFallbackCalls == 13,
+assert(launchCalls == 1 and torqueCalls == 1 and frameCalls == 18
+        and velocityFallbackCalls == 17 and angularFallbackCalls == 17,
     'unexpected launch counts: ' .. tostring(launchCalls) .. ','
         .. tostring(torqueCalls) .. ',' .. tostring(frameCalls) .. ','
         .. tostring(velocityFallbackCalls) .. ',' .. tostring(angularFallbackCalls))
-assert(#appliedVelocities == 14)
+assert(#appliedVelocities == 18)
 for _, velocity in ipairs(appliedVelocities) do
     assert(velocity.y >= DICE_VERTICAL_SPEED_MIN and velocity.y <= DICE_VERTICAL_SPEED_MAX)
     assert(math.abs(velocity.x) <= 1.4 and math.abs(velocity.z) <= 1.4)
@@ -1131,17 +1176,17 @@ assert(handleUiEvent({id = 'roll_attack', playerColor = 'White'}))
 local afterShieldAttack = exportState()
 assert(afterShieldAttack.lastResult == 'Escudo - 24 (d20[12] + 12)')
 assert(afterShieldAttack.effects.shieldGuardSuppressed)
-assert(CorvanRules.calculateDefense(CHARACTER, afterShieldAttack) == 20)
-assert(CorvanRules.calculateSkillModifier(CHARACTER, afterShieldAttack, 'fortitude') == 11)
-assert(CorvanRules.calculateSkillModifier(CHARACTER, afterShieldAttack, 'reflex') == 3)
-assert(CorvanRules.calculateSkillModifier(CHARACTER, afterShieldAttack, 'will') == 4)
+assert(CorvanRules.calculateDefense(CHARACTER, afterShieldAttack) == 22)
+assert(CorvanRules.calculateSkillModifier(CHARACTER, afterShieldAttack, 'fortitude') == 13)
+assert(CorvanRules.calculateSkillModifier(CHARACTER, afterShieldAttack, 'reflex') == 5)
+assert(CorvanRules.calculateSkillModifier(CHARACTER, afterShieldAttack, 'will') == 6)
 assert(CorvanRules.calculateDamageReduction(CHARACTER, afterShieldAttack) == 10)
 assert(handleUiEvent({id = 'end_turn', playerColor = 'White'}))
 assert(not exportState().effects.shieldGuardSuppressed)
-assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 24)
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 27)
 
 local chatBeforeFailure = #publicChat
-currentRoll = {token = 999, playerColor = 'White'}
+currentRoll = {token = 999, kind = 'fortification', playerColor = 'White'}
 rollInProgress = true
 finishRollFailure(999, 'a rolagem expirou.')
 assert(#publicChat == chatBeforeFailure)
@@ -1231,7 +1276,7 @@ assert(#exportState().ownedDiceGuids == 0)
 assert(#privateChat >= 5)
 local nativeEnvelope = nativeExportState()
 assert(nativeEnvelope.characterId == 'corvan'
-    and nativeEnvelope.runtimeVersion == '0.2.3'
+    and nativeEnvelope.runtimeVersion == '0.2.4'
     and type(nativeEnvelope.core) == 'table'
     and type(nativeEnvelope.character) == 'table')
 
@@ -1249,7 +1294,7 @@ try {
     }
     throw
 }
-$expectedRuntimeFlow = '19, 14, "Dano - 20 (2d8[6,4] + 10)", 18, "Crítico - 28 (4d8[6,3,8,1] + 10)", 14, 0, 12'
+$expectedRuntimeFlow = '19, 14, "Dano - 20 (2d8[6,4] + 10)", 18, "Crítico - 28 (4d8[6,3,8,1] + 10)", 18, 0, 13'
 if ($runtimeFlowResult -ne $expectedRuntimeFlow) {
     throw "Smoke do fluxo de combate retornou '$runtimeFlowResult'; esperado '$expectedRuntimeFlow'."
 }
@@ -1462,7 +1507,7 @@ $legacyIntegrityRunner.Globals.Set('HASH_SIZE', [MoonSharp.Interpreter.DynValue]
 $legacyIntegrityRunner.Globals.Set('HASH_EXPECTED', [MoonSharp.Interpreter.DynValue]::NewString($manifest.runtime.sha256))
 $legacyIntegrityResult = $legacyIntegrityRunner.DoString($legacyBootstrap + "`n" + $integrityHarness)
 if (-not $legacyIntegrityResult.Tuple[0].Boolean) {
-    throw "Bootstrap congelado 1.0.2 rejeitou a integridade do runtime v0.2.3: $($legacyIntegrityResult.Tuple[1])"
+    throw "Bootstrap congelado 1.0.2 rejeitou a integridade do runtime v0.2.4: $($legacyIntegrityResult.Tuple[1])"
 }
 
 $legacyManifestHarness = @"
@@ -1488,7 +1533,7 @@ $legacyManifestRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpret
 $legacyManifestRunner.Globals.Set('ACTUAL_RUNTIME_SOURCE', [MoonSharp.Interpreter.DynValue]::NewString($runtime))
 $legacyManifestResult = $legacyManifestRunner.DoString($legacyBootstrap + "`n" + $legacyManifestHarness).ToString()
 if ($legacyManifestResult -ne 'true, true') {
-    throw "Contrato do manifesto v0.2.3 falhou no bootstrap congelado 1.0.2: '$legacyManifestResult'."
+    throw "Contrato do manifesto v0.2.4 falhou no bootstrap congelado 1.0.2: '$legacyManifestResult'."
 }
 
 $onLoadHarness = @'
@@ -1555,15 +1600,15 @@ spawnObject = function(params)
                 xml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
             })
             if not accepted then error('bootstrap rejected valid UI') end
-            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.2.3'})
+            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.2.4'})
             setRuntimeUiAttribute({id = 'missing', attribute = 'text', value = 'must stay queued'})
             return helper
         end,
         call = function(name, _)
             if name == 'healthCheck' then
-                return {ok = true, version = '0.2.3', parentGuid = 'panel1'}
+                return {ok = true, version = '0.2.4', parentGuid = 'panel1'}
             elseif name == 'exportState' then
-                return {schemaVersion = 1, runtimeVersion = '0.2.3'}
+                return {schemaVersion = 1, runtimeVersion = '0.2.4'}
             end
             return true
         end
@@ -1601,7 +1646,7 @@ return xmlSetCalls, attributeCalls, invalidAttributeCalls, info.helperGuid, info
 
 $onLoadRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $onLoadResult = $onLoadRunner.DoString($bootstrap + "`n" + $onLoadHarness).ToString()
-$expectedOnLoad = '2, 5, 0, "helper1", "0.2.3"'
+$expectedOnLoad = '2, 5, 0, "helper1", "0.2.4"'
 if ($onLoadResult -ne $expectedOnLoad) {
     throw "Smoke de onLoad retornou '$onLoadResult'; esperado '$expectedOnLoad'."
 }
@@ -1610,7 +1655,7 @@ $copyPersistenceHarness = @'
 local timeQueue = {}
 local helper = nil
 local helperState = nil
-local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.2.3', mp = 21, effects = {duel = false}}
+local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.2.4', mp = 21, effects = {duel = false}}
 local persistedRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.2', mp = 10, effects = {duel = true}}
 
 JSON = {
@@ -1659,7 +1704,7 @@ spawnObject = function(params)
                 cacheRuntimeState({state = helperState or defaultRuntimeState})
                 return true
             elseif name == 'healthCheck' then
-                return {ok = true, version = '0.2.3', parentGuid = 'panel-copy'}
+                return {ok = true, version = '0.2.4', parentGuid = 'panel-copy'}
             elseif name == 'importState' then
                 helperState = payload
                 return true
@@ -1738,7 +1783,7 @@ if ($webRequestResult -ne $expectedWebRequest) {
 $transactionHarness = @'
 local oldXml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
 local candidateXml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/><Text id="activeWeaponLabel"/></Panel>'
-local candidateSource = '-- CORVAN_RUNTIME candidate v0.2.3'
+local candidateSource = '-- CORVAN_RUNTIME candidate v0.2.4'
 local oldSource = SEED_RUNTIME
 local timers = {}
 local currentGuid = 'helper1'
@@ -1789,7 +1834,7 @@ helper = {
     reload = function()
         if loadedSource == candidateSource then
             currentGuid = 'candidate-guid'
-            activeVersion = CANDIDATE_HEALTH_OK and '0.2.3' or 'broken'
+            activeVersion = CANDIDATE_HEALTH_OK and '0.2.4' or 'broken'
             applyRuntimeUi({xml = candidateXml})
         else
             currentGuid = 'rollback-guid'
@@ -1826,7 +1871,7 @@ update.playerColor = 'White'
 update.phase = 'install'
 
 installCandidate(9, {
-    manifest = {version = '0.2.3', commitSha = '0123456789abcdef0123456789abcdef01234567'},
+    manifest = {version = '0.2.4', commitSha = '0123456789abcdef0123456789abcdef01234567'},
     source = candidateSource,
     etag = 'etag-2'
 })
@@ -1856,7 +1901,7 @@ function Invoke-TransactionSmoke([bool]$healthy, [string]$bootstrapSource = $boo
 }
 
 $updateSuccess = Invoke-TransactionSmoke $true
-$expectedUpdateSuccess = '"0.2.3", true, false, false, "candidate-guid", 23, true, false'
+$expectedUpdateSuccess = '"0.2.4", true, false, false, "candidate-guid", 23, true, false'
 if ($updateSuccess -ne $expectedUpdateSuccess) {
     throw "Smoke de update retornou '$updateSuccess'; esperado '$expectedUpdateSuccess'."
 }
@@ -1869,7 +1914,7 @@ if ($updateRollback -ne $expectedUpdateRollback) {
 
 $legacyUpdateSuccess = Invoke-TransactionSmoke $true $legacyBootstrap
 if ($legacyUpdateSuccess -ne $expectedUpdateSuccess) {
-    throw "Bootstrap congelado 1.0.2 não instalou a transação v0.2.3: '$legacyUpdateSuccess'."
+    throw "Bootstrap congelado 1.0.2 não instalou a transação v0.2.4: '$legacyUpdateSuccess'."
 }
 
 $legacyLatestShortCircuitHarness = @'
