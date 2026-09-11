@@ -44,9 +44,11 @@ for _, scenario in ipairs(scenarios) do
                 scenario.name .. '/' .. variant .. ': unexpected startup reload/hash '
                 .. tostring(w.reloads) .. '/' .. tostring(w.hashBlocks))
         end
-        equal(worlds.before.runtime.exportState(), worlds.after.runtime.exportState(), scenario.name .. '.state')
-        for key, value in pairs(worlds.before.attributes) do
-            equal(value, worlds.after.attributes[key], scenario.name .. '.UI.' .. key)
+        if COMPARE_VARIANTS then
+            equal(worlds.before.runtime.exportState(), worlds.after.runtime.exportState(), scenario.name .. '.state')
+            for key, value in pairs(worlds.before.attributes) do
+                equal(value, worlds.after.attributes[key], scenario.name .. '.UI.' .. key)
+            end
         end
     end
     for _, metric in ipairs(metrics) do

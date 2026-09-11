@@ -5,9 +5,13 @@ param(
     [string] $CandidateRoot = (Split-Path -Parent $PSScriptRoot),
     [ValidateRange(1, 1000)][int] $Iterations = 100,
     [switch] $Startup,
+    [switch] $AllowCharacterChanges,
     [string] $ReportPath
 )
 $ErrorActionPreference = 'Stop'
+if ($AllowCharacterChanges -and -not $Startup) {
+    throw '-AllowCharacterChanges é válido somente com -Startup.'
+}
 . (Join-Path $PSScriptRoot 'lua-test-utils.ps1')
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $candidateSha = (& git -C $CandidateRoot rev-parse HEAD).Trim()
@@ -66,6 +70,7 @@ foreach ($element in $xml.SelectNodes('//*[@id]')) {
 }
 $null = $runner.DoString('UI_PAGES = ' + (ConvertTo-LuaLiteral $pages))
 $runner.Globals.Set('ITERATIONS', [MoonSharp.Interpreter.DynValue]::NewNumber($Iterations))
+$runner.Globals.Set('COMPARE_VARIANTS', [MoonSharp.Interpreter.DynValue]::NewBoolean(-not $AllowCharacterChanges))
 $null = $runner.DoString((Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'tests/lua/runtime-world.lua')))
 try {
     $harness = if ($Startup) { 'tests/lua/startup-benchmark.lua' } else { 'tests/lua/runtime-benchmark.lua' }
@@ -82,8 +87,8 @@ $rows = @($result | ConvertFrom-Csv -Delimiter "`t" | ForEach-Object {
         reductionPercent=if ($before -gt 0) { [math]::Round(100 * ($before - $after) / $before, 2) } else { $null }}
 })
 $report = [ordered]@{characterId=$CharacterId; baselineCommit=$baselineSha; candidateCommit=$candidateSha;
-    candidateDirty=$dirty; iterations=$Iterations; semanticEquivalence=$true; startup=[bool]$Startup;
-    methodology=if ($Startup) { 'Offline MoonSharp, real built sources, fresh Lua environments per load, restored host XML and helper. Two warmup pairs per scenario; alternating before/after order. luaHarnessMs measures wall-clock execution of harness setup, Lua compilation and startup including mock host/JSON and instrumentation; scheduled waits run on a simulated clock. Excludes Unity XML/layout, assets and disk I/O. Not TTS loading time. State and baseline dynamic UI attributes compared after every startup; equivalence exports excluded from counters/timing.' } else { 'Offline MoonSharp, real built sources, deterministic queued host, warm caches; counts are not FPS or wall-clock speed. copyTables counts table allocations inside Core.deepCopy; equivalence-check exports are excluded.' };
+    candidateDirty=$dirty; iterations=$Iterations; semanticEquivalence=(-not $AllowCharacterChanges); startup=[bool]$Startup;
+    methodology=if ($Startup) { 'Offline MoonSharp, real built sources, fresh Lua environments per load, restored host XML and helper. Two warmup pairs per scenario; alternating before/after order. luaHarnessMs measures wall-clock execution of harness setup, Lua compilation and startup including mock host/JSON and instrumentation; scheduled waits run on a simulated clock. Excludes Unity XML/layout, assets and disk I/O. Not TTS loading time. ' + $(if ($AllowCharacterChanges) { 'The variants intentionally contain different character values; cross-version state/UI equality is skipped while startup safety invariants remain enforced.' } else { 'State and baseline dynamic UI attributes are compared after every startup; equivalence exports are excluded from counters/timing.' }) } else { 'Offline MoonSharp, real built sources, deterministic queued host, warm caches; counts are not FPS or wall-clock speed. copyTables counts table allocations inside Core.deepCopy; equivalence-check exports are excluded.' };
     sourceHashes=@{runtime=(Get-FileHash -LiteralPath (Join-Path $benchmarkRoot ('after/' + $profile.files.runtime)) -Algorithm SHA256).Hash;
         bootstrap=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($specs.after.bootstrap)))};
     results=$rows}
@@ -94,4 +99,8 @@ if ($ReportPath) {
     [IO.File]::WriteAllText($reportFullPath, $json + "`n")
 }
 $rows | ForEach-Object { [pscustomobject] $_ } | Format-Table -AutoSize
-Write-Output "Semantic equivalence passed. Baseline: $baselineSha. Sources: $benchmarkRoot"
+if ($AllowCharacterChanges) {
+    Write-Output "Startup safety invariants passed; character values intentionally differ. Baseline: $baselineSha. Sources: $benchmarkRoot"
+} else {
+    Write-Output "Semantic equivalence passed. Baseline: $baselineSha. Sources: $benchmarkRoot"
+}

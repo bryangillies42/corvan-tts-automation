@@ -4,23 +4,40 @@
   "version": "0.2.5",
   "name": "Corvan Duras",
   "shortName": "Corvan",
+  "identity": {
+    "ancestry": "Humano",
+    "origin": "Soldado",
+    "class": "Cavaleiro",
+    "level": 9,
+    "deity": "Valkaria"
+  },
+  "attributes": {
+    "strength": 5,
+    "dexterity": 0,
+    "constitution": 4,
+    "intelligence": 1,
+    "wisdom": 1,
+    "charisma": 3
+  },
+  "movementMeters": 6,
+  "armorPenalty": -8,
   "resources": {
     "hp": {
       "label": "PV",
-      "max": 78
+      "max": 96
     },
     "mp": {
       "label": "PM",
-      "max": 21
+      "max": 27
     }
   },
-  "defense": 27,
-  "damageReduction": 10,
+  "defense": 31,
+  "damageReduction": 13,
   "weapons": {
     "sword": {
       "name": "Espada Maculada pela Ira",
       "chatName": "Espada",
-      "attack": 13,
+      "attack": 14,
       "damage": {
         "count": 2,
         "sides": 8,
@@ -36,7 +53,7 @@
     "shield": {
       "name": "Escudo Pesado Reforçado",
       "chatName": "Escudo",
-      "attack": 12,
+      "attack": 13,
       "defenseModifier": 5,
       "damage": {
         "count": 1,
@@ -54,57 +71,57 @@
   "skills": {
     "initiative": {
       "name": "Iniciativa",
-      "modifier": 3,
+      "modifier": 4,
       "resistance": false
     },
     "fight": {
       "name": "Luta",
-      "modifier": 12,
+      "modifier": 13,
       "resistance": false
     },
     "intimidation": {
       "name": "Intimidação",
-      "modifier": 6,
+      "modifier": 7,
       "resistance": false
     },
     "perception": {
       "name": "Percepção",
-      "modifier": 8,
+      "modifier": 9,
       "resistance": false
     },
     "fortitude": {
       "name": "Fortitude",
-      "modifier": 18,
+      "modifier": 21,
       "resistance": true
     },
     "reflex": {
       "name": "Reflexos",
-      "modifier": 10,
+      "modifier": 13,
       "resistance": true
     },
     "will": {
       "name": "Vontade",
-      "modifier": 11,
+      "modifier": 14,
       "resistance": true
     },
     "riding": {
       "name": "Cavalgar",
-      "modifier": 7,
+      "modifier": 8,
       "resistance": false
     },
     "diplomacy": {
       "name": "Diplomacia",
-      "modifier": 10,
+      "modifier": 11,
       "resistance": false
     },
     "warfare": {
       "name": "Guerra",
-      "modifier": 8,
+      "modifier": 9,
       "resistance": false
     },
     "aim": {
       "name": "Pontaria",
-      "modifier": 7,
+      "modifier": 8,
       "resistance": false
     }
   },
@@ -129,18 +146,27 @@
     "baluarte": {
       "name": "Baluarte",
       "cost": 1,
-      "upgradeCost": 1,
       "sharedCost": 2,
-      "defenseModifier": 2,
-      "resistanceModifier": 2,
-      "upgradedDefenseModifier": 4,
-      "upgradedResistanceModifier": 4,
+      "tiers": [
+        {
+          "modifier": 2,
+          "totalCost": 1
+        },
+        {
+          "modifier": 4,
+          "totalCost": 2
+        },
+        {
+          "modifier": 6,
+          "totalCost": 3
+        }
+      ],
       "duration": "turn"
     },
     "provocation": {
       "name": "Provocação",
       "cost": 2,
-      "willDifficulty": 16,
+      "willDifficulty": 17,
       "duration": "scene"
     },
     "solidity": {
@@ -166,7 +192,17 @@
     "armored": {
       "name": "Encouraçado",
       "passive": true,
-      "defenseModifier": 2
+      "defenseModifier": 6
+    },
+    "impregnable": {
+      "name": "Inexpugnável",
+      "passive": true,
+      "resistanceModifier": 2
+    },
+    "entrenched": {
+      "name": "Encastelado",
+      "passive": true,
+      "damageReduction": 3
     },
     "platesOfWrath": {
       "name": "Placas da Ira",
@@ -177,6 +213,16 @@
       "name": "Bastião",
       "passive": true,
       "damageReduction": 5
+    },
+    "codeOfHonor": {
+      "name": "Código de Honra",
+      "passive": true,
+      "reminder": "Violação: perde todos os PM até o próximo dia; arbitragem manual."
+    },
+    "paddedArmor": {
+      "name": "Veste Acolchoada",
+      "passive": true,
+      "reminder": "Opção contra críticos x3/x4; arbitragem manual."
     }
   },
   "diceOffset": {

@@ -209,6 +209,19 @@ export function validateCharacter(character, expectedVersion) {
   assert(character.version === expectedVersion, "character.version deve ser igual à versão do package.json.");
   assertString(character.name, "character.name");
 
+  assert(isObject(character.identity), "character.identity deve ser um objeto.");
+  for (const field of ["ancestry", "origin", "class", "deity"]) {
+    assertString(character.identity[field], `character.identity.${field}`);
+  }
+  assertInteger(character.identity.level, "character.identity.level", 1);
+  assert(isObject(character.attributes), "character.attributes deve ser um objeto.");
+  for (const field of ["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"]) {
+    assertNumber(character.attributes[field], `character.attributes.${field}`);
+  }
+  assertNumber(character.movementMeters, "character.movementMeters");
+  assert(character.movementMeters >= 0, "character.movementMeters não pode ser negativo.");
+  assertNumber(character.armorPenalty, "character.armorPenalty");
+
   assert(isObject(character.resources), "character.resources deve ser um objeto.");
   for (const id of ["hp", "mp"]) {
     const resource = character.resources[id];
@@ -261,7 +274,8 @@ export function validateCharacter(character, expectedVersion) {
   assert(isObject(character.powers), "character.powers deve ser um objeto.");
   for (const id of [
     "combatDefensive", "duel", "baluarte", "provocation", "solidity",
-    "duelistShielded", "weaponAndShieldStyle", "ambitionWeapons", "armored", "platesOfWrath", "bastion",
+    "duelistShielded", "weaponAndShieldStyle", "ambitionWeapons", "armored", "impregnable",
+    "entrenched", "platesOfWrath", "bastion", "codeOfHonor", "paddedArmor",
   ]) {
     const power = character.powers[id];
     assert(isObject(power), `character.powers.${id} deve ser um objeto.`);
@@ -274,6 +288,7 @@ export function validateCharacter(character, expectedVersion) {
     if (power.passive !== undefined) {
       assert(typeof power.passive === "boolean", `character.powers.${id}.passive deve ser booleano.`);
     }
+    if (power.reminder !== undefined) assertString(power.reminder, `character.powers.${id}.reminder`);
     for (const field of [
       "attackModifier",
       "defenseModifier",
@@ -291,6 +306,22 @@ export function validateCharacter(character, expectedVersion) {
     ]) {
       if (power[field] !== undefined) assertNumber(power[field], `character.powers.${id}.${field}`);
     }
+  }
+  const baluarteTiers = character.powers.baluarte.tiers;
+  assert(Array.isArray(baluarteTiers) && baluarteTiers.length > 0,
+    "character.powers.baluarte.tiers deve ser uma lista não vazia.");
+  let previousModifier = 0;
+  let previousCost = 0;
+  for (const [index, tier] of baluarteTiers.entries()) {
+    assert(isObject(tier), `character.powers.baluarte.tiers[${index}] deve ser um objeto.`);
+    assertNumber(tier.modifier, `character.powers.baluarte.tiers[${index}].modifier`);
+    assertInteger(tier.totalCost, `character.powers.baluarte.tiers[${index}].totalCost`, 0);
+    assert(tier.modifier > previousModifier,
+      "character.powers.baluarte.tiers deve possuir modificadores crescentes.");
+    assert(tier.totalCost > previousCost,
+      "character.powers.baluarte.tiers deve possuir custos totais crescentes.");
+    previousModifier = tier.modifier;
+    previousCost = tier.totalCost;
   }
 
   assert(isObject(character.diceOffset), "character.diceOffset deve ser um objeto.");
