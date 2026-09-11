@@ -1761,6 +1761,7 @@ function healthCheck(_)
         version = tostring(CHARACTER.version or EXPECTED_RUNTIME_VERSION),
         error = configurationError,
         schemaVersion = STATE_SCHEMA_VERSION,
+        startupStateVersion = 1,
         parentGuid = parentGuid,
         rollInProgress = rollInProgress
     }
@@ -1772,6 +1773,7 @@ end
 
 local function notifyReady()
     safeParentCall("runtimeReady", {
+        helperGuid = safeObjectGuid(self),
         parentGuid = parentGuid,
         characterId = CHARACTER_ID,
         version = CHARACTER.version,
@@ -1806,7 +1808,7 @@ function registerParent(payload)
     if type(parentGuid) ~= "string" or parentGuid == "" then return false end
     parent = nil
     if not resolveParent() then return false end
-    persistParentNotes()
+    if type(payload) ~= "table" or payload.parentNotesConfigured ~= true then persistParentNotes() end
     if type(payload) == "table" and type(payload.state) == "table" then
         local unwrapped = unwrapStatePayload(payload.state)
         if unwrapped == nil then return false end
@@ -1834,6 +1836,12 @@ end
 local function bindWithRetry(remaining)
     if not characterLoaded then return end
     if resolveParent() then
+        local ok, info = safeParentCall("getBootstrapInfo", {})
+        if ok and type(info) == "table" and info.characterId == CHARACTER_ID
+            and info.startupBindingVersion == 1 then
+            notifyReady()
+            return
+        end
         applyUi()
         cacheAndRender()
         notifyReady()

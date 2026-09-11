@@ -10,7 +10,9 @@ for _, helperFirst in ipairs({false, true}) do
         assert(w.xmlSets == 1, 'healthy startup rebuilt identical XML')
         assert(#w.requests == 1, 'healthy startup duplicated the image request')
         assert(w.registrations == 1 and w.reloads == 0, 'healthy helper registered twice or reloaded')
-        assert(w.renderPasses == 2, 'startup renders were not coalesced per frame')
+        assert(w.renderPasses == 1, 'startup should render only after authoritative binding')
+        assert(w.imports == 0 and w.exports == 0, 'state was restored/exported again after binding')
+        assert(w.helperConfigurations == 1, 'helper configured more than once')
         local state = w.runtime.exportState()
         assert(state.character.hp == 47 and state.character.mp == 12, 'spent resources changed')
         assert(state.character.effects.duel == 2 and state.core.settingsOpen, 'effects/settings changed')
@@ -101,4 +103,46 @@ local legacy = world(false, false, LEGACY_BOOTSTRAP_SOURCE)
 assert(#legacy.requests == 1 and legacy.xmlSets == 2)
 assert(legacy.runtime.exportState().character.hp == 47)
 assert(legacy.runtime.exportState().character.automaticResourceSpending == false)
-return 'startup: 1 XML, 1 HTTP, 1 registration, 2 renders; recovery, offline and legacy OK'
+-- A restored XML can be adopted, but stale layouts and missing trees rebuild.
+local function restored(extra)
+    local options = {config = CHARACTER_CONFIG, bootstrapSource = BOOTSTRAP_SOURCE,
+        runtimeSource = RUNTIME_SOURCE, ui = SEED_UI_SOURCE, restoredUi = true}
+    for key, value in pairs(extra or {}) do options[key] = value end
+    return RuntimeTestWorld.create(options)
+end
+local reused = restored()
+assert(reused.xmlSets == 0 and reused.renderPasses == 1, 'restored UI was rebuilt')
+assert(reused.runtime.exportState().character.hp == 47)
+assert(reused.savedPanelState().uiAttributeValues.pvCurrent.text == '47', 'mutable UI attributes were not persisted')
+reused.bootstrap.recoverUi(nil, 'White')
+reused.flush()
+assert(reused.xmlSets == 1, 'explicit recovery did not rebuild adopted UI')
+local changed = SEED_UI_SOURCE:gsub('id="pvCurrent"', 'id="pvCurrent" tooltip="changed-layout"', 1)
+assert(restored({installedXml = changed}).xmlSets == 1, 'stale static layout was adopted')
+assert(restored({installedXml = ''}).xmlSets == 1, 'missing UI was adopted')
+local dynamic = SEED_UI_SOURCE:gsub('<[^>]+>', function(tag)
+    if tag:find('id="pvCurrent"', 1, true) then return (tag:gsub('text="[^"]*"', 'text="1"', 1)) end
+    return tag
+end)
+assert(restored({installedXml = dynamic, savedUiAttributes = {pvCurrent = {text = '1'}}}).xmlSets == 0)
+local serialized = SEED_UI_SOURCE:gsub('<([^>]+)>', function(content)
+    local tag = content:match('^([%w_:%-]+)')
+    if tag and content:sub(-1) == '/' then return '<' .. content:sub(1, -2) .. '></' .. tag .. '>' end
+    return '<' .. content .. '>'
+end)
+assert(restored({installedXml = serialized}).xmlSets == 0, 'equivalent empty XML tags were not adopted')
+local announced = restored({staleGuid = true, unrelatedObjects = 1000})
+assert(announced.tableScans == 0 and announced.reloads == 0, 'announced owned helper was not reused')
+local delayed = restored({helperDelay = 10, unrelatedObjects = 1000})
+assert(delayed.tableScans == 0 and delayed.reloads == 0, 'delayed saved helper triggered a scan/reload')
+local fallback = restored({staleGuid = true, unrelatedObjects = 1000, noAnnouncement = true, instrument = true})
+assert(fallback.tableScans == 1 and fallback.noteDecodes == 2, 'fallback decoded unrelated object notes')
+for _, helperFirst in ipairs({false, true}) do
+    local staleState = reused.runtime.exportState()
+    staleState.character.hp = 1
+    local authoritative = restored({helperFirst=helperFirst, helperSavedRuntime=staleState})
+    assert(authoritative.runtime.exportState().character.hp == 47, 'helper overwrote authoritative panel state')
+end
+local foreignAccepted = pcall(function() restored({foreignHelper=true}) end)
+assert(not foreignAccepted, 'foreign helper was taken over instead of requesting a separate helper')
+return 'startup: 0 XML on restored UI, 1 render, 1 binding, no duplicate import; stale UI, recovery, delayed helper and legacy OK'
