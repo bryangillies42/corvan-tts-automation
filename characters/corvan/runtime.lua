@@ -7,6 +7,7 @@ local PANEL_IMAGE_URL = __PANEL_IMAGE_URL_LITERAL__
 local PANEL_UI_IMAGE_URL = __PANEL_UI_IMAGE_URL_LITERAL__
 
 local STATE_SCHEMA_VERSION = 1
+local RESOURCE_REVISION = 4
 local ROLL_TIMEOUT_SECONDS = 15
 local SPAWN_TIMEOUT_SECONDS = 4
 local DICE_STABLE_FRAMES = 12
@@ -32,36 +33,40 @@ local clamp = RuntimeCore.clamp
 local DEFAULT_CHARACTER = {
     schemaVersion = 1,
     id = "corvan",
-    version = "0.2.4",
+    version = "0.2.5",
     name = "Corvan Duras",
     shortName = "Corvan",
-    resources = {hp = {max = 78}, mp = {max = 21}},
-    defense = 27,
-    damageReduction = 10,
+    identity = {ancestry = "Humano", origin = "Soldado", class = "Cavaleiro", level = 9, deity = "Valkaria"},
+    attributes = {strength = 5, dexterity = 0, constitution = 4, intelligence = 1, wisdom = 1, charisma = 3},
+    movementMeters = 6,
+    armorPenalty = -8,
+    resources = {hp = {max = 96}, mp = {max = 27}},
+    defense = 31,
+    damageReduction = 13,
     weapons = {
         sword = {
-            name = "Espada Maculada pela Ira", chatName = "Espada", attack = 13,
+            name = "Espada Maculada pela Ira", chatName = "Espada", attack = 14,
             damage = {count = 2, sides = 8, bonus = 10},
             critical = {min = 18, multiplier = 2}
         },
         shield = {
-            name = "Escudo Pesado Reforçado", chatName = "Escudo", attack = 12, defenseModifier = 5,
+            name = "Escudo Pesado Reforçado", chatName = "Escudo", attack = 13, defenseModifier = 5,
             damage = {count = 1, sides = 6, bonus = 5},
             critical = {min = 20, multiplier = 2}
         }
     },
     skills = {
-        initiative = {name = "Iniciativa", modifier = 3},
-        fight = {name = "Luta", modifier = 12},
-        intimidation = {name = "Intimidação", modifier = 6},
-        perception = {name = "Percepção", modifier = 8},
-        fortitude = {name = "Fortitude", modifier = 18, resistance = true},
-        reflex = {name = "Reflexos", modifier = 10, resistance = true},
-        will = {name = "Vontade", modifier = 11, resistance = true},
-        riding = {name = "Cavalgar", modifier = 7},
-        diplomacy = {name = "Diplomacia", modifier = 10},
-        warfare = {name = "Guerra", modifier = 8},
-        aim = {name = "Pontaria", modifier = 7}
+        initiative = {name = "Iniciativa", modifier = 4},
+        fight = {name = "Luta", modifier = 13},
+        intimidation = {name = "Intimidação", modifier = 7},
+        perception = {name = "Percepção", modifier = 9},
+        fortitude = {name = "Fortitude", modifier = 21, resistance = true},
+        reflex = {name = "Reflexos", modifier = 13, resistance = true},
+        will = {name = "Vontade", modifier = 14, resistance = true},
+        riding = {name = "Cavalgar", modifier = 8},
+        diplomacy = {name = "Diplomacia", modifier = 11},
+        warfare = {name = "Guerra", modifier = 9},
+        aim = {name = "Pontaria", modifier = 8}
     },
     powers = {
         combatDefensive = {cost = 0, attackModifier = -2, defenseModifier = 5},
@@ -71,20 +76,26 @@ local DEFAULT_CHARACTER = {
             upgradedAttackModifier = 3, upgradedDamageModifier = 3
         },
         baluarte = {
-            cost = 1, upgradeCost = 1, sharedCost = 2,
-            defenseModifier = 2, resistanceModifier = 2,
-            upgradedDefenseModifier = 4, upgradedResistanceModifier = 4
+            cost = 1, sharedCost = 2,
+            tiers = {
+                {modifier = 2, totalCost = 1},
+                {modifier = 4, totalCost = 2},
+                {modifier = 6, totalCost = 3}
+            }
         },
-        provocation = {cost = 2, willDifficulty = 16},
+        provocation = {cost = 2, willDifficulty = 17},
         solidity = {resistanceModifier = 5},
         duelistShielded = {damageReduction = 2, upgradedDamageReduction = 3},
-        weaponAndShieldStyle = {shieldDefenseModifier = 5}
+        weaponAndShieldStyle = {shieldDefenseModifier = 5},
+        armored = {defenseModifier = 6},
+        impregnable = {resistanceModifier = 2},
+        entrenched = {damageReduction = 3}
     },
     diceOffset = {x = 0, y = 3.2, z = 0}
 }
 
 local EXPECTED_CHARACTER_ID = "corvan"
-local EXPECTED_RUNTIME_VERSION = "0.2.4"
+local EXPECTED_RUNTIME_VERSION = "0.2.5"
 local characterLoaded = false
 local configurationError = nil
 local function decodeCharacter()
@@ -157,14 +168,15 @@ function CorvanRules.calculateAttackModifier(character, currentState, weaponKey)
     return result
 end
 
-local function baluarteModifier(character, currentState, upgradedField, baseField)
+local function baluarteModifier(character, currentState)
     local active = currentState.effects and currentState.effects.baluarte
-    if active == true then return finiteNumber(character.powers.baluarte[baseField], 0) end
+    local tiers = character.powers.baluarte.tiers or {}
+    if active == true then return finiteNumber(tiers[1] and tiers[1].modifier, 0) end
     local value = finiteNumber(active, 0)
-    local upgraded = finiteNumber(character.powers.baluarte[upgradedField], 4)
-    local base = finiteNumber(character.powers.baluarte[baseField], 2)
-    if value >= upgraded then return upgraded end
-    if value >= base then return base end
+    for index = #tiers, 1, -1 do
+        local modifier = finiteNumber(tiers[index].modifier, 0)
+        if value >= modifier then return modifier end
+    end
     return 0
 end
 
@@ -177,8 +189,7 @@ function CorvanRules.calculateDefense(character, currentState)
     if effects.combatDefensiveDefense then
         result = result + finiteNumber(character.powers.combatDefensive.defenseModifier, 0)
     end
-    result = result + baluarteModifier(character, currentState,
-        "upgradedDefenseModifier", "defenseModifier")
+    result = result + baluarteModifier(character, currentState)
     return result
 end
 
@@ -190,8 +201,7 @@ function CorvanRules.calculateSkillModifier(character, currentState, skillKey)
         if currentState.effects and currentState.effects.shieldGuardSuppressed then
             result = result - finiteNumber(character.powers.solidity.resistanceModifier, 0)
         end
-        result = result + baluarteModifier(character, currentState,
-            "upgradedResistanceModifier", "resistanceModifier")
+        result = result + baluarteModifier(character, currentState)
     end
     return result
 end
@@ -240,8 +250,9 @@ local function defaultState()
     return {
         schemaVersion = STATE_SCHEMA_VERSION,
         runtimeVersion = CHARACTER.version,
-        hp = finiteNumber(CHARACTER.resources.hp.max, 78),
-        mp = finiteNumber(CHARACTER.resources.mp.max, 21),
+        resourceRevision = RESOURCE_REVISION,
+        hp = finiteNumber(CHARACTER.resources.hp.max, 96),
+        mp = finiteNumber(CHARACTER.resources.mp.max, 27),
         activeWeapon = "sword",
         effects = defaultEffects(),
         pendingThreat = nil,
@@ -253,6 +264,40 @@ local function defaultState()
         automaticResourceSpending = true,
         settingsOpen = false
     }
+end
+
+local RESOURCE_MIGRATIONS = {
+    [0] = {hp = {47, 55}, mp = {12, 15}},
+    [1] = {hp = {55, 69}, mp = {15, 18}},
+    [2] = {hp = {69, 78}, mp = {18, 21}},
+    [3] = {hp = {78, 96}, mp = {21, 27}}
+}
+
+local function inferredResourceRevision(source)
+    local explicit = finiteNumber(source.resourceRevision, nil)
+    if explicit ~= nil then
+        return math.floor(clamp(explicit, 0, RESOURCE_REVISION))
+    end
+    local major, minor, patch = string.match(tostring(source.runtimeVersion or ""),
+        "^(%d+)%.(%d+)%.(%d+)$")
+    major, minor, patch = tonumber(major), tonumber(minor), tonumber(patch)
+    if major == nil then return 0 end
+    if major > 0 or minor >= 2 then return 3 end
+    if minor == 1 and patch >= 8 then return 2 end
+    if minor == 1 and patch >= 6 then return 1 end
+    return 0
+end
+
+local function migrateResources(source, normalized)
+    local revision = inferredResourceRevision(source)
+    while revision < RESOURCE_REVISION do
+        local migration = RESOURCE_MIGRATIONS[revision]
+        if migration == nil then break end
+        if normalized.hp == migration.hp[1] then normalized.hp = migration.hp[2] end
+        if normalized.mp == migration.mp[1] then normalized.mp = migration.mp[2] end
+        revision = revision + 1
+    end
+    normalized.resourceRevision = RESOURCE_REVISION
 end
 
 local function normalizeSnapshot(source)
@@ -272,62 +317,28 @@ local function normalizeSnapshot(source)
                 elseif finiteNumber(saved, 0) >= base then normalized.effects.duel = base end
             elseif key == "baluarte" then
                 local saved = source.effects.baluarte
-                local base = finiteNumber(CHARACTER.powers.baluarte.defenseModifier, 2)
-                local upgraded = finiteNumber(CHARACTER.powers.baluarte.upgradedDefenseModifier, 4)
-                if saved == true then normalized.effects.baluarte = base
-                elseif finiteNumber(saved, 0) >= upgraded then normalized.effects.baluarte = upgraded
-                elseif finiteNumber(saved, 0) >= base then normalized.effects.baluarte = base end
+                local tiers = CHARACTER.powers.baluarte.tiers or {}
+                if saved == true then
+                    normalized.effects.baluarte = finiteNumber(tiers[1] and tiers[1].modifier, 0)
+                else
+                    local value = finiteNumber(saved, 0)
+                    for index = #tiers, 1, -1 do
+                        local modifier = finiteNumber(tiers[index].modifier, 0)
+                        if value >= modifier then
+                            normalized.effects.baluarte = modifier
+                            break
+                        end
+                    end
+                end
             else
                 normalized.effects[key] = source.effects[key] == true
             end
         end
     end
-    -- Nas mudanças de nível, somente recursos que estavam cheios recebem o
-    -- novo máximo. Valores gastos ou ferimentos são preservados para não
-    -- curar nem restaurar PM silenciosamente. A ordem permite atualizar
-    -- diretamente da v0.1.5 (nível 4) até o nível 7.
-    if (CHARACTER.version == "0.1.6" or CHARACTER.version == "0.1.7"
-            or CHARACTER.version == "0.1.8" or CHARACTER.version == "0.1.9"
-            or CHARACTER.version == "0.2.0" or CHARACTER.version == "0.2.1"
-            or CHARACTER.version == "0.2.2" or CHARACTER.version == "0.2.3"
-            or CHARACTER.version == "0.2.4")
-        and source.runtimeVersion ~= "0.1.6"
-        and source.runtimeVersion ~= "0.1.7"
-        and source.runtimeVersion ~= "0.1.8"
-        and source.runtimeVersion ~= "0.1.9"
-        and source.runtimeVersion ~= "0.2.0"
-        and source.runtimeVersion ~= "0.2.1"
-        and source.runtimeVersion ~= "0.2.2"
-        and source.runtimeVersion ~= "0.2.3"
-        and source.runtimeVersion ~= "0.2.4" then
-        if finiteNumber(source.hp or source.pv, 0) == 47 then normalized.hp = 55 end
-        if finiteNumber(source.mp or source.pm, 0) == 12 then normalized.mp = 15 end
-    end
-    if (CHARACTER.version == "0.1.8" or CHARACTER.version == "0.1.9"
-            or CHARACTER.version == "0.2.0" or CHARACTER.version == "0.2.1"
-            or CHARACTER.version == "0.2.2" or CHARACTER.version == "0.2.3"
-            or CHARACTER.version == "0.2.4")
-        and source.runtimeVersion ~= "0.1.8"
-        and source.runtimeVersion ~= "0.1.9"
-        and source.runtimeVersion ~= "0.2.0"
-        and source.runtimeVersion ~= "0.2.1"
-        and source.runtimeVersion ~= "0.2.2"
-        and source.runtimeVersion ~= "0.2.3"
-        and source.runtimeVersion ~= "0.2.4" then
-        if normalized.hp == 55 then normalized.hp = 69 end
-        if normalized.mp == 15 then normalized.mp = 18 end
-    end
-    if (CHARACTER.version == "0.2.0" or CHARACTER.version == "0.2.1"
-            or CHARACTER.version == "0.2.2" or CHARACTER.version == "0.2.3"
-            or CHARACTER.version == "0.2.4")
-        and source.runtimeVersion ~= "0.2.0"
-        and source.runtimeVersion ~= "0.2.1"
-        and source.runtimeVersion ~= "0.2.2"
-        and source.runtimeVersion ~= "0.2.3"
-        and source.runtimeVersion ~= "0.2.4" then
-        if normalized.hp == 69 then normalized.hp = 78 end
-        if normalized.mp == 18 then normalized.mp = 21 end
-    end
+    -- Somente totais cheios acompanham cada aumento de nível. A revisão
+    -- opcional distingue o candidato antigo v0.2.5 da ficha nível 9 sem mudar
+    -- o schema público e impede que 78 PV sejam promovidos novamente em loads.
+    migrateResources(source, normalized)
     if type(source.pendingThreat) == "table" and CHARACTER.weapons[source.pendingThreat.weaponKey] then
         normalized.pendingThreat = {
             weaponKey = source.pendingThreat.weaponKey,
@@ -394,6 +405,10 @@ local chatAuditSequence = 0
 local panelBoardArtNeeded = false
 local panelBoardArtReady = false
 local panelBoardArtRequestSerial = 0
+local panelBoardArtRequestPending = false
+local renderPending = false
+local appliedUiXml = nil
+local appliedUiParentGuid = nil
 
 local function recordChatAudit(message, route, accepted)
     chatAuditSequence = chatAuditSequence + 1
@@ -427,14 +442,10 @@ local function safeParentCall(functionName, payload)
     return ok, result
 end
 
+local UiWriter = RuntimeCore.createUiWriter(CHARACTER_ID, safeParentCall, function() return parentGuid end)
+
 local function safeSetAttribute(id, attribute, value)
-    local ok, accepted = safeParentCall("setRuntimeUiAttribute", {
-        characterId = CHARACTER_ID,
-        id = id,
-        attribute = attribute,
-        value = tostring(value)
-    })
-    return ok and accepted ~= false
+    return UiWriter.set(id, attribute, value)
 end
 
 local function signed(value)
@@ -549,7 +560,7 @@ local function effectsLabel()
         table.insert(labels, "Baluarte +" .. tostring(baluarte) .. shared)
     end
     if state.effects.shieldGuardSuppressed then
-        table.insert(labels, "Escudo: −4 DEF e resistências")
+        table.insert(labels, "Escudo: −5 DEF e resistências")
     end
     if state.effects.provocation then table.insert(labels, "Provocação") end
     if #labels == 0 then return "Nenhum efeito ativo" end
@@ -569,12 +580,17 @@ local function panelBoardOverlayActive()
 end
 
 local function preparePanelBoardArt()
+    panelBoardArtNeeded = panelBoardOverlayNeeded()
+    if panelBoardArtReady or panelBoardArtRequestPending then
+        safeSetAttribute("panelBoardArt", "active", panelBoardOverlayActive() and "true" or "false")
+        return
+    end
     panelBoardArtRequestSerial = panelBoardArtRequestSerial + 1
     local serial = panelBoardArtRequestSerial
-    panelBoardArtNeeded = panelBoardOverlayNeeded()
     panelBoardArtReady = false
     safeSetAttribute("panelBoardArt", "active", "false")
     if not panelBoardArtNeeded or WebRequest == nil then return end
+    panelBoardArtRequestPending = true
 
     -- Uma URL direta inválida faz o Image do TTS ficar branco. Primeiro
     -- verificamos se o JPEG responde; em erro, a camada permanece inativa e a
@@ -582,6 +598,7 @@ local function preparePanelBoardArt()
     local started = pcall(function()
         WebRequest.get(PANEL_UI_IMAGE_URL, function(request)
             if serial ~= panelBoardArtRequestSerial then return end
+            panelBoardArtRequestPending = false
             local status = finiteNumber(request and request.response_code, 0)
             if request and not request.is_error and status >= 200 and status < 300 then
                 panelBoardArtReady = true
@@ -589,12 +606,16 @@ local function preparePanelBoardArt()
             end
         end)
     end)
-    if not started then panelBoardArtReady = false end
+    if not started then
+        panelBoardArtRequestPending = false
+        panelBoardArtReady = false
+    end
 end
 
 local function renderNow()
     if not characterLoaded then return end
     if not parent then return end
+    UiWriter.begin()
     local weapon = CHARACTER.weapons[state.activeWeapon]
     local attack = CorvanRules.calculateAttackModifier(CHARACTER, state, state.activeWeapon)
     local damage = CorvanRules.calculateDamageSpec(CHARACTER, state, state.activeWeapon, false)
@@ -626,12 +647,21 @@ local function renderNow()
     safeSetAttribute("roll_critical", "interactable", state.pendingThreat and "true" or "false")
     safeSetAttribute("clear_dice", "interactable",
         not rollInProgress and #(state.ownedDiceGuids or {}) > 0 and "true" or "false")
-    local baluarte = finiteNumber(state.effects.baluarte, state.effects.baluarte == true and 2 or 0)
-    local baluarteText = "BALUARTE  •  1/2 PM\n+2 ou +4 DEF e resistências\naté o próximo turno"
-    if baluarte == 2 then
-        baluarteText = "BALUARTE +2  •  ATIVO\nclique novamente: +4 (+1 PM)\naté o próximo turno"
-    elseif baluarte >= 4 then
-        baluarteText = "BALUARTE +4  •  ATIVO\nDEF e resistências\naté o próximo turno"
+    local baluarte = baluarteModifier(CHARACTER, state)
+    local baluarteText = "BALUARTE  •  1/2/3 PM\n+2, +4 ou +6 DEF/resistências\naté o próximo turno"
+    local nextBaluarte = nil
+    for _, tier in ipairs(CHARACTER.powers.baluarte.tiers or {}) do
+        if finiteNumber(tier.modifier, 0) > baluarte then
+            nextBaluarte = tier
+            break
+        end
+    end
+    if baluarte > 0 and nextBaluarte ~= nil then
+        baluarteText = "BALUARTE +" .. tostring(baluarte) .. "  •  ATIVO\nclique novamente: +"
+            .. tostring(nextBaluarte.modifier) .. " (+1 PM)\naté o próximo turno"
+    elseif baluarte > 0 then
+        baluarteText = "BALUARTE +" .. tostring(baluarte)
+            .. "  •  ATIVO\nDEF e resistências\naté o próximo turno"
     end
     safeSetAttribute("power_baluarte", "text", baluarteText)
     local sharedText = "ALIADOS  •  +2 PM\ncompartilha o Baluarte\ncom adjacentes"
@@ -662,14 +692,25 @@ local function renderNow()
     for id, active in pairs(powerColors) do
         safeSetAttribute(id, "colors", active and "#73402F|#93543D|#4E2B20|#22222288" or "#1C252C|#2B373F|#11171B|#22222288")
     end
+    UiWriter.flush()
 end
 
 local function scheduleRender()
-    if not parent then return end
+    if not parent or renderPending then return end
     -- O bootstrap mantém o último valor de cada atributo e o aplica somente
     -- depois que o XML termina de carregar. Assim o runtime nunca toca
     -- diretamente em parent.UI, cuja exceção Unity não é capturada por pcall.
-    renderNow()
+    renderPending = true
+    local scheduled = pcall(function()
+        Wait.frames(function()
+            renderPending = false
+            if parent then renderNow() end
+        end, 1)
+    end)
+    if not scheduled then
+        renderPending = false
+        renderNow()
+    end
 end
 
 local function applyUi()
@@ -688,11 +729,18 @@ local function applyUi()
     renderedXml = renderedXml:gsub(
         'id="panelBoardArt" active="[^"]*"',
         'id="panelBoardArt" active="' .. overlayValue .. '"', 1)
-    local ok, accepted = safeParentCall("applyRuntimeUi", {
-        xml = renderedXml,
-        characterId = CHARACTER_ID,
-        version = CHARACTER.version
-    })
+    local ok, accepted = true, true
+    if appliedUiXml ~= renderedXml or appliedUiParentGuid ~= parentGuid then
+        ok, accepted = safeParentCall("applyRuntimeUi", {
+            xml = renderedXml,
+            characterId = CHARACTER_ID,
+            version = CHARACTER.version
+        })
+        if ok and accepted ~= false then
+            appliedUiXml = renderedXml
+            appliedUiParentGuid = parentGuid
+        end
+    end
     preparePanelBoardArt()
     scheduleRender()
     return ok and accepted ~= false
@@ -1371,21 +1419,24 @@ end
 
 local function activateBaluarte(playerColor)
     local power = CHARACTER.powers.baluarte
-    local base = finiteNumber(power.defenseModifier, 2)
-    local upgraded = finiteNumber(power.upgradedDefenseModifier, 4)
-    local current = finiteNumber(state.effects.baluarte, state.effects.baluarte == true and base or 0)
-    local cost
-    local target
-    if current <= 0 then
-        cost = finiteNumber(power.cost, 1)
-        target = base
-    elseif current < upgraded then
-        cost = finiteNumber(power.upgradeCost, 1)
-        target = upgraded
-    else
-        privateError(playerColor, "Baluarte +4 já está ativo.")
+    local tiers = power.tiers or {}
+    local current = baluarteModifier(CHARACTER, state)
+    local currentCost = 0
+    local nextTier = nil
+    for _, tier in ipairs(tiers) do
+        local modifier = finiteNumber(tier.modifier, 0)
+        if current >= modifier then
+            currentCost = finiteNumber(tier.totalCost, currentCost)
+        elseif nextTier == nil then
+            nextTier = tier
+        end
+    end
+    if nextTier == nil then
+        privateError(playerColor, "Baluarte +" .. tostring(current) .. " já está ativo.")
         return false
     end
+    local target = finiteNumber(nextTier.modifier, current)
+    local cost = math.max(0, finiteNumber(nextTier.totalCost, currentCost) - currentCost)
     if not canSpendPowerResource(playerColor, power, cost) then return false end
     pushUndo()
     spendPowerResource(power, cost)
@@ -1396,8 +1447,7 @@ end
 
 local function activateBaluarteAllies(playerColor)
     local power = CHARACTER.powers.baluarte
-    local base = finiteNumber(power.defenseModifier, 2)
-    local current = finiteNumber(state.effects.baluarte, state.effects.baluarte == true and base or 0)
+    local current = baluarteModifier(CHARACTER, state)
     if current <= 0 then
         privateError(playerColor, "ative Baluarte antes de compartilhar com os aliados.")
         return false
@@ -1607,7 +1657,7 @@ function handleUiEvent(payload)
         local enabled = value == true or tostring(value):lower() == "true" or tostring(value) == "1"
         state.automaticResourceSpending = enabled
         safeParentCall("cacheRuntimeState", {characterId = CHARACTER_ID, state = exportState()})
-        applyUi()
+        if UiWriter.supportsBatch() then scheduleRender() else applyUi() end
         return true
     end
     if id == "end_turn" then return endTurn() end
@@ -1678,7 +1728,7 @@ local function unwrapStatePayload(payload)
     if stateError ~= nil then return nil end
     local flattened = characterState
     for key in pairs(CORE_STATE_FIELDS) do
-        if coreState[key] ~= nil then flattened[key] = deepCopy(coreState[key]) end
+        if coreState[key] ~= nil then flattened[key] = coreState[key] end
     end
     flattened.runtimeVersion = payload.runtimeVersion or flattened.runtimeVersion
     flattened.schemaVersion = payload.characterStateSchemaVersion or flattened.schemaVersion
@@ -1690,8 +1740,8 @@ function exportState()
     local core = {}
     local character = {}
     for key, value in pairs(state) do
-        if CORE_STATE_FIELDS[key] then core[key] = deepCopy(value)
-        else character[key] = deepCopy(value) end
+        if CORE_STATE_FIELDS[key] then core[key] = value
+        else character[key] = value end
     end
     local envelope = AdapterApi.state.envelope(character, core)
     envelope.schemaVersion = 1
@@ -1730,6 +1780,7 @@ function healthCheck(_)
         version = tostring(CHARACTER.version or EXPECTED_RUNTIME_VERSION),
         error = configurationError,
         schemaVersion = STATE_SCHEMA_VERSION,
+        startupStateVersion = 1,
         parentGuid = parentGuid,
         rollInProgress = rollInProgress
     }
@@ -1741,6 +1792,7 @@ end
 
 local function notifyReady()
     safeParentCall("runtimeReady", {
+        helperGuid = safeObjectGuid(self),
         parentGuid = parentGuid,
         characterId = CHARACTER_ID,
         version = CHARACTER.version,
@@ -1775,7 +1827,7 @@ function registerParent(payload)
     if type(parentGuid) ~= "string" or parentGuid == "" then return false end
     parent = nil
     if not resolveParent() then return false end
-    persistParentNotes()
+    if type(payload) ~= "table" or payload.parentNotesConfigured ~= true then persistParentNotes() end
     if type(payload) == "table" and type(payload.state) == "table" then
         local unwrapped = unwrapStatePayload(payload.state)
         if unwrapped == nil then return false end
@@ -1803,6 +1855,12 @@ end
 local function bindWithRetry(remaining)
     if not characterLoaded then return end
     if resolveParent() then
+        local ok, info = safeParentCall("getBootstrapInfo", {})
+        if ok and type(info) == "table" and info.characterId == CHARACTER_ID
+            and info.startupBindingVersion == 1 then
+            notifyReady()
+            return
+        end
         applyUi()
         cacheAndRender()
         notifyReady()

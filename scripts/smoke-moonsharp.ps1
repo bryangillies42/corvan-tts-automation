@@ -2,41 +2,8 @@ $ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 
-function ConvertTo-LuaLiteral($value) {
-    if ($null -eq $value) { return 'nil' }
-    if ($value -is [bool]) { return $(if ($value) { 'true' } else { 'false' }) }
-    if ($value -is [string]) {
-        return "'" + $value.Replace('\', '\\').Replace("'", "\'").Replace("`r", '\r').Replace("`n", '\n') + "'"
-    }
-    if ($value -is [System.Collections.IDictionary]) {
-        $pairs = foreach ($key in $value.Keys) {
-            "[" + (ConvertTo-LuaLiteral ([string]$key)) + "] = " + (ConvertTo-LuaLiteral $value[$key])
-        }
-        return '{' + ($pairs -join ', ') + '}'
-    }
-    if ($value -is [System.Collections.IEnumerable] -and $value -isnot [string]) {
-        $items = foreach ($item in $value) { ConvertTo-LuaLiteral $item }
-        return '{' + ($items -join ', ') + '}'
-    }
-    if ($value -is [pscustomobject]) {
-        $pairs = foreach ($property in $value.PSObject.Properties) {
-            "[" + (ConvertTo-LuaLiteral $property.Name) + "] = " + (ConvertTo-LuaLiteral $property.Value)
-        }
-        return '{' + ($pairs -join ', ') + '}'
-    }
-    return ([System.Convert]::ToString($value, [System.Globalization.CultureInfo]::InvariantCulture))
-}
+. (Join-Path $PSScriptRoot "lua-test-utils.ps1")
 
-function ConvertTo-LuaLongString([string]$value) {
-    for ($level = 0; $level -le 16; $level++) {
-        $equals = '=' * $level
-        $close = "]$equals]"
-        if (-not $value.Contains($close)) {
-            return "[$equals[$value$close"
-        }
-    }
-    throw 'Não foi possível criar um literal Lua longo sem colisão.'
-}
 $candidateDlls = @()
 if (${env:ProgramFiles(x86)}) {
     $candidateDlls += Join-Path ${env:ProgramFiles(x86)} 'Steam\steamapps\common\Tabletop Simulator\Tabletop Simulator_Data\Managed\MoonSharp.Interpreter.dll'
@@ -332,7 +299,7 @@ local world = {helpers = {}, json = {}, jsonSerial = 0, crossBindings = 0}
 
 local function jsonEncode(value)
     world.jsonSerial = world.jsonSerial + 1
-    local token = 'JSON:' .. tostring(world.jsonSerial)
+    local token = 'JSON:' .. tostring(world.jsonSerial) .. ':' .. tostring(value.parentGuid or '')
     world.json[token] = value
     return token
 end
@@ -438,7 +405,7 @@ local function bootstrapEnvironment(source, label, characterId, panelGuid, versi
 end
 
 local corvan = bootstrapEnvironment(
-    corvanBootstrapSource, 'corvan-bootstrap', 'corvan', 'corvan-panel', '0.2.4', 'CORVAN_RUNTIME')
+    corvanBootstrapSource, 'corvan-bootstrap', 'corvan', 'corvan-panel', '0.2.5', 'CORVAN_RUNTIME')
 local arcane = bootstrapEnvironment(
     arcaneBootstrapSource, 'arcane-bootstrap', 'arcane-test', 'arcane-panel', '0.1.0', 'ARCANE_TEST_RUNTIME')
 
@@ -482,24 +449,28 @@ if ($sharedBootstrapResult -ne $expectedSharedBootstrap) {
 
 $rulesHarness = @'
 local character = {
-    defense = 27,
-    damageReduction = 10,
+    defense = 31,
+    damageReduction = 13,
     weapons = {
         sword = {
-            attack = 13,
+            attack = 14,
             damage = {count = 2, sides = 8, bonus = 10},
             critical = {min = 18, multiplier = 2}
         },
         shield = {defenseModifier = 5}
     },
-    skills = {fortitude = {modifier = 18, resistance = true}},
+    skills = {fortitude = {modifier = 21, resistance = true}},
     powers = {
         duel = {
             attackModifier = 2, damageModifier = 2,
             upgradedAttackModifier = 3, upgradedDamageModifier = 3
         },
         combatDefensive = {attackModifier = -2, defenseModifier = 5},
-        baluarte = {defenseModifier = 2, resistanceModifier = 2},
+        baluarte = {tiers = {
+            {modifier = 2, totalCost = 1},
+            {modifier = 4, totalCost = 2},
+            {modifier = 6, totalCost = 3}
+        }},
         solidity = {resistanceModifier = 5},
         duelistShielded = {damageReduction = 2, upgradedDamageReduction = 3}
     }
@@ -565,7 +536,7 @@ return CorvanRules.calculateAttackModifier(character, state, 'sword'),
 
 $runner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $actual = $runner.DoString($runtimeConfigPrelude + "`n" + $runtime + "`n" + $rulesHarness).ToString()
-$expected = '14, 31, 17, 13, 4, 8, 13, true'
+$expected = '15, 35, 20, 16, 4, 8, 13, true'
 if ($actual -ne $expected) {
     throw "Smoke de regras retornou '$actual'; esperado '$expected'."
 }
@@ -734,6 +705,7 @@ Wait = {
     end,
     time = function(callback, _) callback() end,
     frames = function(callback, frames)
+        if frames == 1 then callback(); return end
         assert(frames == 3)
         frameCalls = frameCalls + 1
         callback()
@@ -816,10 +788,15 @@ customObjectInspectionFails = false
 panelPhysicalImage = 'legacy-panel.png'
 panelArtRequestFails = true
 assert(registerParent({parentGuid = 'panel1', characterId = 'corvan'}))
+assert(attributes.panelBoardArt == 'true' and panelArtRequests == 1,
+    'a successful preflight must be reused across registrations')
+-- Simulate a cold image cache to exercise failure and retry independently.
+panelBoardArtReady = false
+preparePanelBoardArt()
 assert(attributes.panelBoardArt == 'false', 'network failure exposed the white image fallback')
 panelArtRequestFails = false
 assert(registerParent({parentGuid = 'panel1', characterId = 'corvan'}))
-assert(attributes.panelBoardArt == 'true' and panelArtRequests == 5)
+assert(attributes.panelBoardArt == 'true' and panelArtRequests == 3)
 assert(not handleUiEvent({
     id = 'power_duel', playerColor = 'White',
     characterId = 'arcane-test', parentGuid = 'panel1'
@@ -914,25 +891,28 @@ assert(migrated023.effects.duel == 2 and migrated023.effects.baluarte == 4
 assert(migrated023.lastResult == 'resultado 0.2.3 preservado')
 local legacyState = defaultState()
 legacyState.runtimeVersion = '0.1.5'
+legacyState.resourceRevision = nil
 legacyState.hp = 47
 legacyState.mp = 12
 legacyState.diceOffset = {x = 0, y = 2.5, z = -5}
 assert(importState(legacyState))
 local migratedOffset = exportState().diceOffset
-assert(exportState().hp == 78 and exportState().mp == 21,
-    'direct level 4 to 7 full-resource migration failed')
+assert(exportState().hp == 96 and exportState().mp == 27,
+    'direct level 4 to 9 full-resource migration failed')
 assert(migratedOffset.x == 0 and migratedOffset.y == 3.2 and migratedOffset.z == 0,
     'legacy offset migration failed: ' .. tostring(migratedOffset.x) .. ','
         .. tostring(migratedOffset.y) .. ',' .. tostring(migratedOffset.z))
 local level5State = exportState()
 level5State.runtimeVersion = '0.1.7'
+level5State.resourceRevision = nil
 level5State.hp = 55
 level5State.mp = 15
 assert(importState(level5State))
-assert(exportState().hp == 78 and exportState().mp == 21,
-    'level 5 to 7 full-resource migration failed')
+assert(exportState().hp == 96 and exportState().mp == 27,
+    'level 5 to 9 full-resource migration failed')
 local woundedLevel5State = exportState()
 woundedLevel5State.runtimeVersion = '0.1.7'
+woundedLevel5State.resourceRevision = nil
 woundedLevel5State.hp = 54
 woundedLevel5State.mp = 14
 assert(importState(woundedLevel5State))
@@ -940,54 +920,86 @@ assert(exportState().hp == 54 and exportState().mp == 14,
     'spent level 5 resources were restored during migration')
 local level6State = exportState()
 level6State.runtimeVersion = '0.1.9'
+level6State.resourceRevision = nil
 level6State.hp = 69
 level6State.mp = 18
 assert(importState(level6State))
-assert(exportState().hp == 78 and exportState().mp == 21,
-    'level 6 to 7 full-resource migration failed')
+assert(exportState().hp == 96 and exportState().mp == 27,
+    'level 6 to 9 full-resource migration failed')
 local woundedLevel6State = exportState()
 woundedLevel6State.runtimeVersion = '0.1.9'
+woundedLevel6State.resourceRevision = nil
 woundedLevel6State.hp = 68
 woundedLevel6State.mp = 17
 assert(importState(woundedLevel6State))
 assert(exportState().hp == 68 and exportState().mp == 17,
     'spent level 6 resources were restored during migration')
+local oldCandidate = defaultState()
+oldCandidate.runtimeVersion = '0.2.5'
+oldCandidate.resourceRevision = nil
+oldCandidate.hp = 78
+oldCandidate.mp = 21
+oldCandidate.effects.baluarte = 4
+oldCandidate.effects.provocation = true
+assert(importState(oldCandidate))
+assert(exportState().hp == 96 and exportState().mp == 27
+    and exportState().resourceRevision == 4,
+    'old v0.2.5 full resources did not migrate to level 9')
+assert(exportState().effects.baluarte == 4 and exportState().effects.provocation,
+    'old v0.2.5 effects were lost during level 9 migration')
+local currentLevel9 = exportState()
+currentLevel9.hp = 78
+currentLevel9.mp = 21
+assert(importState(currentLevel9))
+assert(exportState().hp == 78 and exportState().mp == 21,
+    'level 9 resources were promoted more than once')
+local woundedLevel7State = exportState()
+woundedLevel7State.runtimeVersion = '0.2.4'
+woundedLevel7State.resourceRevision = nil
+woundedLevel7State.hp = 77
+woundedLevel7State.mp = 20
+assert(importState(woundedLevel7State))
+assert(exportState().hp == 77 and exportState().mp == 20,
+    'spent level 7 resources were restored during migration')
 level5State.runtimeVersion = '0.1.7'
+level5State.resourceRevision = nil
 assert(importState(level5State))
 assert(handleUiEvent({id = 'power_duel', playerColor = 'White'}))
 local afterDuel = exportState()
-assert(afterDuel.mp == 19 and afterDuel.effects.duel == 2)
+assert(afterDuel.mp == 25 and afterDuel.effects.duel == 2)
 assert(handleUiEvent({id = 'power_duel', playerColor = 'White'}))
-assert(exportState().mp == 18 and exportState().effects.duel == 3)
+assert(exportState().mp == 24 and exportState().effects.duel == 3)
 assert(not handleUiEvent({id = 'power_duel', playerColor = 'White'}))
-assert(exportState().mp == 18)
+assert(exportState().mp == 24)
 assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
-assert(exportState().effects.baluarte == 2 and exportState().mp == 17)
+assert(exportState().effects.baluarte == 2 and exportState().mp == 23)
 assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
-assert(exportState().effects.baluarte == 4 and exportState().mp == 16)
+assert(exportState().effects.baluarte == 4 and exportState().mp == 22)
+assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
+assert(exportState().effects.baluarte == 6 and exportState().mp == 21)
 assert(handleUiEvent({id = 'power_baluarte_allies', playerColor = 'White'}))
-assert(exportState().effects.baluarteShared and exportState().mp == 14)
+assert(exportState().effects.baluarteShared and exportState().mp == 19)
 assert(not handleUiEvent({id = 'power_baluarte_allies', playerColor = 'White'}))
-assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 31)
-assert(CorvanRules.calculateSkillModifier(CHARACTER, exportState(), 'fortitude') == 22)
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 37)
+assert(CorvanRules.calculateSkillModifier(CHARACTER, exportState(), 'fortitude') == 27)
 assert(not handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
-assert(exportState().mp == 14)
+assert(exportState().mp == 19)
 assert(handleUiEvent({id = 'end_turn', playerColor = 'White'}))
 local afterTurn = exportState()
 assert(afterTurn.effects.duel == 3 and not afterTurn.effects.baluarte
     and not afterTurn.effects.baluarteShared)
 assert(handleUiEvent({id = 'end_scene', playerColor = 'White'}))
-assert(not exportState().effects.duel and exportState().mp == 14)
+assert(not exportState().effects.duel and exportState().mp == 19)
 
 assert(handleUiEvent({id = 'pv_adjust', value = '10', playerColor = 'White'}))
 assert(handleUiEvent({id = 'pv_subtract', playerColor = 'White'}))
-assert(exportState().hp == 68 and attributes.pv_adjust == '')
+assert(exportState().hp == 86 and attributes.pv_adjust == '')
 assert(handleUiEvent({id = 'pv_adjust', value = '5', playerColor = 'White'}))
 assert(handleUiEvent({id = 'pv_add', playerColor = 'White'}))
-assert(exportState().hp == 73 and attributes.pv_adjust == '')
+assert(exportState().hp == 91 and attributes.pv_adjust == '')
 assert(handleUiEvent({id = 'pv_adjust', value = 'texto', playerColor = 'White'}))
 assert(not handleUiEvent({id = 'pv_subtract', playerColor = 'White'}))
-assert(exportState().hp == 73 and attributes.pv_adjust == 'texto')
+assert(exportState().hp == 91 and attributes.pv_adjust == 'texto')
 assert(handleUiEvent({id = 'pv_adjust', value = '0', playerColor = 'White'}))
 assert(not handleUiEvent({id = 'pv_add', playerColor = 'White'}))
 assert(attributes.pv_adjust == '0')
@@ -999,17 +1011,17 @@ assert(not handleUiEvent({id = 'pv_add', playerColor = 'White'}))
 assert(attributes.pv_adjust == '10.5')
 assert(handleUiEvent({id = 'pv_adjust', value = '-5', playerColor = 'White'}))
 assert(handleUiEvent({id = 'pv_add', playerColor = 'White'}))
-assert(exportState().hp == 78 and attributes.pv_adjust == '')
+assert(exportState().hp == 96 and attributes.pv_adjust == '')
 local undoAtMaximum = state.undo
 assert(handleUiEvent({id = 'pv_adjust', value = '999', playerColor = 'White'}))
 assert(handleUiEvent({id = 'pv_add', playerColor = 'White'}))
-assert(exportState().hp == 78 and attributes.pv_adjust == '' and state.undo == undoAtMaximum)
+assert(exportState().hp == 96 and attributes.pv_adjust == '' and state.undo == undoAtMaximum)
 assert(handleUiEvent({id = 'pm_adjust', value = '-5', playerColor = 'White'}))
 assert(handleUiEvent({id = 'pm_subtract', playerColor = 'White'}))
-assert(exportState().mp == 9 and attributes.pm_adjust == '')
+assert(exportState().mp == 14 and attributes.pm_adjust == '')
 assert(handleUiEvent({id = 'pm_adjust', value = '999', playerColor = 'White'}))
 assert(handleUiEvent({id = 'pm_add', playerColor = 'White'}))
-assert(exportState().mp == 21)
+assert(exportState().mp == 27)
 dieValues = {6, 4}
 assert(handleUiEvent({id = 'roll_damage', playerColor = 'White'}))
 local afterDamage = exportState()
@@ -1019,20 +1031,22 @@ assert(publicChatRichText[#publicChatRichText] == true)
 assert(#afterDamage.ownedDiceGuids == 2)
 
 assert(handleUiEvent({id = 'power_combat_defensive', playerColor = 'White'}))
-assert(CorvanRules.calculateAttackModifier(CHARACTER, exportState(), 'sword') == 11)
-assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 32)
-assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
-assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 34)
-assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
+assert(CorvanRules.calculateAttackModifier(CHARACTER, exportState(), 'sword') == 12)
 assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 36)
+assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 38)
+assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 40)
+assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 42)
 dieValues = {18}
 assert(handleUiEvent({id = 'roll_attack', playerColor = 'White'}))
 local afterAttack = exportState()
 assert(afterAttack.effects.combatDefensiveDefense and not afterAttack.effects.combatDefensiveArmed)
 assert(afterAttack.pendingThreat and afterAttack.pendingThreat.natural == 18)
-assert(CorvanRules.calculateDefense(CHARACTER, afterAttack) == 36)
-assert(afterAttack.lastResult == 'Espada - 29 (d20[18] + 11) • crítico')
-assert(publicChat[#publicChat] == expectedPublicRoll('Espada', 29, 'd20(18) + 11')
+assert(CorvanRules.calculateDefense(CHARACTER, afterAttack) == 42)
+assert(afterAttack.lastResult == 'Espada - 30 (d20[18] + 12) • crítico')
+assert(publicChat[#publicChat] == expectedPublicRoll('Espada', 30, 'd20(18) + 12')
     .. '  │ [FF6464]CRÍTICO[-]')
 assert(publicChatTints[#publicChatTints][1] == 0.92
     and publicChatTints[#publicChatTints][2] == 0.94
@@ -1065,7 +1079,7 @@ assert(publicChat[#publicChat] == expectedPublicRoll('Fortificação', 1, 'd4(1)
 assert(fortificationSuccess.pendingThreat and fortificationSuccess.pendingThreat.natural == 18)
 assert(fortificationSuccess.hp == hpBeforeFortification and fortificationSuccess.mp == mpBeforeFortification)
 assert(fortificationSuccess.effects.combatDefensiveDefense
-    and fortificationSuccess.effects.baluarte == 4
+    and fortificationSuccess.effects.baluarte == 6
     and not fortificationSuccess.effects.duel)
 assert(state.undo == undoBeforeFortification and spawnedTypes[#spawnedTypes] == 'Die_4')
 for _, failureFace in ipairs({2, 3, 4}) do
@@ -1079,7 +1093,7 @@ for _, failureFace in ipairs({2, 3, 4}) do
     assert(fortificationFailure.pendingThreat and fortificationFailure.pendingThreat.natural == 18)
     assert(fortificationFailure.hp == hpBeforeFortification and fortificationFailure.mp == mpBeforeFortification)
     assert(fortificationFailure.effects.combatDefensiveDefense
-        and fortificationFailure.effects.baluarte == 4
+        and fortificationFailure.effects.baluarte == 6
         and not fortificationFailure.effects.duel)
     assert(state.undo == undoBeforeFortification and #fortificationFailure.ownedDiceGuids == 1)
     assert(spawnedTypes[#spawnedTypes] == 'Die_4')
@@ -1100,7 +1114,7 @@ assert(diceByGuid[criticalDieOne] == nil and diceByGuid[criticalDieTwo] == nil
     and diceByGuid[criticalDieThree] == nil and diceByGuid[criticalDieFour] == nil)
 assert(#exportState().ownedDiceGuids == 0 and exportState().lastResult == afterCritical.lastResult)
 assert(handleUiEvent({id = 'end_turn', playerColor = 'White'}))
-assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 27)
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 31)
 
 local rollbackState = normalizeState(exportState())
 rollbackState.effects.combatDefensiveArmed = true
@@ -1114,7 +1128,7 @@ rollInProgress = true
 finishRollFailure(998, 'falha simulada.')
 assert(exportState().effects.combatDefensiveArmed and exportState().effects.combatDefensiveDefense
     and not exportState().effects.shieldGuardSuppressed)
-assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 32)
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 36)
 assert(handleUiEvent({id = 'end_turn', playerColor = 'White'}))
 
 local privateBeforeBusyActions = #privateChat
@@ -1129,31 +1143,31 @@ dieValues = {7}
 panelPosition = {x = 35, y = 4, z = 42}
 assert(handleUiEvent({id = 'skill_iniciativa', playerColor = 'White'}))
 local afterInitiative = exportState()
-assert(afterInitiative.lastResult == 'Iniciativa - 10 (d20[7] + 3)')
-assert(publicChat[#publicChat] == expectedPublicRoll('Iniciativa', 10, 'd20(7) + 3'))
+assert(afterInitiative.lastResult == 'Iniciativa - 11 (d20[7] + 4)')
+assert(publicChat[#publicChat] == expectedPublicRoll('Iniciativa', 11, 'd20(7) + 4'))
 
 dieValues = {11}
 assert(handleUiEvent({id = 'skill_luta', playerColor = 'White'}))
-assert(exportState().lastResult == 'Luta - 23 (d20[11] + 12)')
-assert(publicChat[#publicChat] == expectedPublicRoll('Luta', 23, 'd20(11) + 12'))
+assert(exportState().lastResult == 'Luta - 24 (d20[11] + 13)')
+assert(publicChat[#publicChat] == expectedPublicRoll('Luta', 24, 'd20(11) + 13'))
 
 dieValues = {9}
 assert(handleUiEvent({id = 'skill_percepcao', playerColor = 'White'}))
-assert(exportState().lastResult == 'Percepção - 17 (d20[9] + 8)')
-assert(publicChat[#publicChat] == expectedPublicRoll('Percepção', 17, 'd20(9) + 8'))
+assert(exportState().lastResult == 'Percepção - 18 (d20[9] + 9)')
+assert(publicChat[#publicChat] == expectedPublicRoll('Percepção', 18, 'd20(9) + 9'))
 
 dieValues = {8}
 assert(handleUiEvent({id = 'skill_cavalgar', playerColor = 'White'}))
-assert(exportState().lastResult == 'Cavalgar - 15 (d20[8] + 7)')
+assert(exportState().lastResult == 'Cavalgar - 16 (d20[8] + 8)')
 dieValues = {6}
 assert(handleUiEvent({id = 'skill_diplomacia', playerColor = 'White'}))
-assert(exportState().lastResult == 'Diplomacia - 16 (d20[6] + 10)')
+assert(exportState().lastResult == 'Diplomacia - 17 (d20[6] + 11)')
 dieValues = {12}
 assert(handleUiEvent({id = 'skill_guerra', playerColor = 'White'}))
-assert(exportState().lastResult == 'Guerra - 20 (d20[12] + 8)')
+assert(exportState().lastResult == 'Guerra - 21 (d20[12] + 9)')
 dieValues = {13}
 assert(handleUiEvent({id = 'skill_pontaria', playerColor = 'White'}))
-assert(exportState().lastResult == 'Pontaria - 20 (d20[13] + 7)')
+assert(exportState().lastResult == 'Pontaria - 21 (d20[13] + 8)')
 assert(#publicChat == 15 and #spectatorChat == 15 and globalChatCalls == 0)
 local latestSpawn = spawnPositions[#spawnPositions]
 assert(latestSpawn.x == 35 and math.abs(latestSpawn.y - 7.2) < 0.001 and latestSpawn.z == 42,
@@ -1174,16 +1188,16 @@ assert(handleUiEvent({id = 'weapon_shield', playerColor = 'White'}))
 dieValues = {12}
 assert(handleUiEvent({id = 'roll_attack', playerColor = 'White'}))
 local afterShieldAttack = exportState()
-assert(afterShieldAttack.lastResult == 'Escudo - 24 (d20[12] + 12)')
+assert(afterShieldAttack.lastResult == 'Escudo - 25 (d20[12] + 13)')
 assert(afterShieldAttack.effects.shieldGuardSuppressed)
-assert(CorvanRules.calculateDefense(CHARACTER, afterShieldAttack) == 22)
-assert(CorvanRules.calculateSkillModifier(CHARACTER, afterShieldAttack, 'fortitude') == 13)
-assert(CorvanRules.calculateSkillModifier(CHARACTER, afterShieldAttack, 'reflex') == 5)
-assert(CorvanRules.calculateSkillModifier(CHARACTER, afterShieldAttack, 'will') == 6)
-assert(CorvanRules.calculateDamageReduction(CHARACTER, afterShieldAttack) == 10)
+assert(CorvanRules.calculateDefense(CHARACTER, afterShieldAttack) == 26)
+assert(CorvanRules.calculateSkillModifier(CHARACTER, afterShieldAttack, 'fortitude') == 16)
+assert(CorvanRules.calculateSkillModifier(CHARACTER, afterShieldAttack, 'reflex') == 8)
+assert(CorvanRules.calculateSkillModifier(CHARACTER, afterShieldAttack, 'will') == 9)
+assert(CorvanRules.calculateDamageReduction(CHARACTER, afterShieldAttack) == 13)
 assert(handleUiEvent({id = 'end_turn', playerColor = 'White'}))
 assert(not exportState().effects.shieldGuardSuppressed)
-assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 27)
+assert(CorvanRules.calculateDefense(CHARACTER, exportState()) == 31)
 
 local chatBeforeFailure = #publicChat
 currentRoll = {token = 999, kind = 'fortification', playerColor = 'White'}
@@ -1202,11 +1216,12 @@ assert(handleUiEvent({id = 'power_duel', playerColor = 'White'}))
 assert(handleUiEvent({id = 'power_provocacao', playerColor = 'White'}))
 assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
 assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
+assert(handleUiEvent({id = 'power_baluarte', playerColor = 'White'}))
 assert(handleUiEvent({id = 'power_baluarte_allies', playerColor = 'White'}))
-assert(exportState().mp == 0 and exportState().effects.baluarte == 4
+assert(exportState().mp == 0 and exportState().effects.baluarte == 6
     and exportState().effects.baluarteShared)
 assert(handleUiEvent({id = 'undo', playerColor = 'White'}))
-assert(not exportState().automaticResourceSpending and exportState().effects.baluarte == 4
+assert(not exportState().automaticResourceSpending and exportState().effects.baluarte == 6
     and not exportState().effects.baluarteShared)
 local persistedAutomation = exportState()
 assert(importState(persistedAutomation) and not exportState().automaticResourceSpending)
@@ -1224,7 +1239,7 @@ state.ownedDiceOwnerGuid = 'panel1'
 state.mp = 3
 assert(handleUiEvent({id = 'reset_state', playerColor = 'White'}))
 assert(diceByGuid[legacyGuid] == nil and #exportState().ownedDiceGuids == 0)
-assert(exportState().mp == 21 and exportState().undo ~= nil
+assert(exportState().mp == 27 and exportState().undo ~= nil
     and not exportState().automaticResourceSpending)
 assert(handleUiEvent({id = 'undo', playerColor = 'White'}))
 assert(exportState().mp == 3 and #exportState().ownedDiceGuids == 0
@@ -1276,7 +1291,7 @@ assert(#exportState().ownedDiceGuids == 0)
 assert(#privateChat >= 5)
 local nativeEnvelope = nativeExportState()
 assert(nativeEnvelope.characterId == 'corvan'
-    and nativeEnvelope.runtimeVersion == '0.2.4'
+    and nativeEnvelope.runtimeVersion == '0.2.5'
     and type(nativeEnvelope.core) == 'table'
     and type(nativeEnvelope.character) == 'table')
 
@@ -1294,7 +1309,7 @@ try {
     }
     throw
 }
-$expectedRuntimeFlow = '19, 14, "Dano - 20 (2d8[6,4] + 10)", 18, "Crítico - 28 (4d8[6,3,8,1] + 10)", 18, 0, 13'
+$expectedRuntimeFlow = '25, 19, "Dano - 20 (2d8[6,4] + 10)", 18, "Crítico - 28 (4d8[6,3,8,1] + 10)", 18, 0, 13'
 if ($runtimeFlowResult -ne $expectedRuntimeFlow) {
     throw "Smoke do fluxo de combate retornou '$runtimeFlowResult'; esperado '$expectedRuntimeFlow'."
 }
@@ -1507,7 +1522,7 @@ $legacyIntegrityRunner.Globals.Set('HASH_SIZE', [MoonSharp.Interpreter.DynValue]
 $legacyIntegrityRunner.Globals.Set('HASH_EXPECTED', [MoonSharp.Interpreter.DynValue]::NewString($manifest.runtime.sha256))
 $legacyIntegrityResult = $legacyIntegrityRunner.DoString($legacyBootstrap + "`n" + $integrityHarness)
 if (-not $legacyIntegrityResult.Tuple[0].Boolean) {
-    throw "Bootstrap congelado 1.0.2 rejeitou a integridade do runtime v0.2.4: $($legacyIntegrityResult.Tuple[1])"
+    throw "Bootstrap congelado 1.0.2 rejeitou a integridade do runtime v0.2.5: $($legacyIntegrityResult.Tuple[1])"
 }
 
 $legacyManifestHarness = @"
@@ -1533,7 +1548,7 @@ $legacyManifestRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpret
 $legacyManifestRunner.Globals.Set('ACTUAL_RUNTIME_SOURCE', [MoonSharp.Interpreter.DynValue]::NewString($runtime))
 $legacyManifestResult = $legacyManifestRunner.DoString($legacyBootstrap + "`n" + $legacyManifestHarness).ToString()
 if ($legacyManifestResult -ne 'true, true') {
-    throw "Contrato do manifesto v0.2.4 falhou no bootstrap congelado 1.0.2: '$legacyManifestResult'."
+    throw "Contrato do manifesto v0.2.5 falhou no bootstrap congelado 1.0.2: '$legacyManifestResult'."
 }
 
 $onLoadHarness = @'
@@ -1600,15 +1615,15 @@ spawnObject = function(params)
                 xml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
             })
             if not accepted then error('bootstrap rejected valid UI') end
-            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.2.4'})
+            setRuntimeUiAttribute({id = 'versionLabel', attribute = 'text', value = 'v0.2.5'})
             setRuntimeUiAttribute({id = 'missing', attribute = 'text', value = 'must stay queued'})
             return helper
         end,
         call = function(name, _)
             if name == 'healthCheck' then
-                return {ok = true, version = '0.2.4', parentGuid = 'panel1'}
+                return {ok = true, version = '0.2.5', parentGuid = 'panel1'}
             elseif name == 'exportState' then
-                return {schemaVersion = 1, runtimeVersion = '0.2.4'}
+                return {schemaVersion = 1, runtimeVersion = '0.2.5'}
             end
             return true
         end
@@ -1646,7 +1661,7 @@ return xmlSetCalls, attributeCalls, invalidAttributeCalls, info.helperGuid, info
 
 $onLoadRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $onLoadResult = $onLoadRunner.DoString($bootstrap + "`n" + $onLoadHarness).ToString()
-$expectedOnLoad = '2, 5, 0, "helper1", "0.2.4"'
+$expectedOnLoad = '2, 5, 0, "helper1", "0.2.5"'
 if ($onLoadResult -ne $expectedOnLoad) {
     throw "Smoke de onLoad retornou '$onLoadResult'; esperado '$expectedOnLoad'."
 }
@@ -1655,7 +1670,7 @@ $copyPersistenceHarness = @'
 local timeQueue = {}
 local helper = nil
 local helperState = nil
-local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.2.4', mp = 21, effects = {duel = false}}
+local defaultRuntimeState = {schemaVersion = 1, runtimeVersion = '0.2.5', mp = 21, effects = {duel = false}}
 local persistedRuntimeState = {schemaVersion = 1, runtimeVersion = '0.1.2', mp = 10, effects = {duel = true}}
 
 JSON = {
@@ -1704,7 +1719,7 @@ spawnObject = function(params)
                 cacheRuntimeState({state = helperState or defaultRuntimeState})
                 return true
             elseif name == 'healthCheck' then
-                return {ok = true, version = '0.2.4', parentGuid = 'panel-copy'}
+                return {ok = true, version = '0.2.5', parentGuid = 'panel-copy'}
             elseif name == 'importState' then
                 helperState = payload
                 return true
@@ -1783,7 +1798,7 @@ if ($webRequestResult -ne $expectedWebRequest) {
 $transactionHarness = @'
 local oldXml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/></Panel>'
 local candidateXml = '<Panel id="root"><Button id="refresh"/><Text id="refreshStatus"/><Text id="versionLabel"/><Text id="activeWeaponLabel"/></Panel>'
-local candidateSource = '-- CORVAN_RUNTIME candidate v0.2.4'
+local candidateSource = '-- CORVAN_RUNTIME candidate v0.2.5'
 local oldSource = SEED_RUNTIME
 local timers = {}
 local currentGuid = 'helper1'
@@ -1792,9 +1807,10 @@ local loadedSource = oldSource
 local installedXml = oldXml
 local currentState = {schemaVersion = 1, runtimeVersion = '0.1.2', hp = 23}
 local helper = nil
+local encodedState = nil
 
 JSON = {
-    encode = function(_) return '{"parentGuid":"panel1"}' end,
+    encode = function(value) encodedState = value; return '{"parentGuid":"panel1"}' end,
     decode = function(_) return {parentGuid = 'panel1'} end
 }
 Wait = {
@@ -1834,7 +1850,7 @@ helper = {
     reload = function()
         if loadedSource == candidateSource then
             currentGuid = 'candidate-guid'
-            activeVersion = CANDIDATE_HEALTH_OK and '0.2.4' or 'broken'
+            activeVersion = CANDIDATE_HEALTH_OK and '0.2.5' or 'broken'
             applyRuntimeUi({xml = candidateXml})
         else
             currentGuid = 'rollback-guid'
@@ -1871,7 +1887,7 @@ update.playerColor = 'White'
 update.phase = 'install'
 
 installCandidate(9, {
-    manifest = {version = '0.2.4', commitSha = '0123456789abcdef0123456789abcdef01234567'},
+    manifest = {version = '0.2.5', commitSha = '0123456789abcdef0123456789abcdef01234567'},
     source = candidateSource,
     etag = 'etag-2'
 })
@@ -1884,6 +1900,8 @@ while #timers > 0 do
     callback()
 end
 
+onSave()
+
 return state.runtimeVersion,
     state.runtimeSource == candidateSource,
     state.runtimeSource == oldSource,
@@ -1891,7 +1909,9 @@ return state.runtimeVersion,
     currentGuid,
     currentState.hp,
     state.uiXml == candidateXml,
-    state.uiXml == oldXml
+    state.uiXml == oldXml,
+    encodedState.runtimeSource == state.runtimeSource,
+    encodedState.uiXml == state.uiXml
 '@
 
 function Invoke-TransactionSmoke([bool]$healthy, [string]$bootstrapSource = $bootstrap) {
@@ -1901,20 +1921,20 @@ function Invoke-TransactionSmoke([bool]$healthy, [string]$bootstrapSource = $boo
 }
 
 $updateSuccess = Invoke-TransactionSmoke $true
-$expectedUpdateSuccess = '"0.2.4", true, false, false, "candidate-guid", 23, true, false'
+$expectedUpdateSuccess = '"0.2.5", true, false, false, "candidate-guid", 23, true, false, true, true'
 if ($updateSuccess -ne $expectedUpdateSuccess) {
     throw "Smoke de update retornou '$updateSuccess'; esperado '$expectedUpdateSuccess'."
 }
 
 $updateRollback = Invoke-TransactionSmoke $false
-$expectedUpdateRollback = '"0.1.2", false, true, false, "rollback-guid", 23, false, true'
+$expectedUpdateRollback = '"0.1.2", false, true, false, "rollback-guid", 23, false, true, true, true'
 if ($updateRollback -ne $expectedUpdateRollback) {
     throw "Smoke de rollback retornou '$updateRollback'; esperado '$expectedUpdateRollback'."
 }
 
 $legacyUpdateSuccess = Invoke-TransactionSmoke $true $legacyBootstrap
 if ($legacyUpdateSuccess -ne $expectedUpdateSuccess) {
-    throw "Bootstrap congelado 1.0.2 não instalou a transação v0.2.4: '$legacyUpdateSuccess'."
+    throw "Bootstrap congelado 1.0.2 não instalou a transação v0.2.5: '$legacyUpdateSuccess'."
 }
 
 $legacyLatestShortCircuitHarness = @'
@@ -2100,4 +2120,26 @@ if ($releaseDiscoveryResult -ne '"arcane-test-v2.0.0", true') {
     throw "Smoke de descoberta retornou '$releaseDiscoveryResult'."
 }
 
+$startupRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
+$startupRunner.Globals.Set('BOOTSTRAP_SOURCE', [MoonSharp.Interpreter.DynValue]::NewString($bootstrap))
+$startupRunner.Globals.Set('LEGACY_BOOTSTRAP_SOURCE', [MoonSharp.Interpreter.DynValue]::NewString($legacyBootstrap))
+$startupRunner.Globals.Set('RUNTIME_SOURCE', [MoonSharp.Interpreter.DynValue]::NewString($runtime))
+$startupRunner.Globals.Set('SEED_UI_SOURCE', [MoonSharp.Interpreter.DynValue]::NewString($savedObject.ObjectStates[0].XmlUI))
+$null = $startupRunner.DoString("CHARACTER_CONFIG = $characterConfigLiteral")
+$null = $startupRunner.DoString((Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'tests/lua/runtime-world.lua')))
+$startupHarness = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'tests/lua/startup-performance.lua')
+try {
+    $startupResult = $startupRunner.DoString($startupHarness).String
+} catch {
+    $moonSharpError = $_.Exception.InnerException
+    if ($moonSharpError -and $moonSharpError.DecoratedMessage) {
+        throw $moonSharpError.DecoratedMessage
+    }
+    throw
+}
+Write-Output $startupResult
+$writerRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
+$writerSource = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'shared/runtime-core.lua')
+$writerAssertions = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'tests/lua/ui-writer.lua')
+Write-Output $writerRunner.DoString($writerSource + "`n" + $writerAssertions).String
 Write-Output "MoonSharp OK: runtime/bootstrap compilam; runtimes e helpers Corvan+Arcane isolados; combate $runtimeFlowResult; SHA-256 em $integrityFrames frames; onLoad, cópia persistente, watchdog, update e rollback seguros"

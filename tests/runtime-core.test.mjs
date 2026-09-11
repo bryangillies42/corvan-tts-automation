@@ -10,7 +10,7 @@ test("core compartilhado não contém regras, callbacks TTS ou execução dinâm
   assert.match(core, /CharacterRuntimeCore = \{\}/);
   for (const contract of [
     "deepCopy", "chatSafeRichText", "formatChatRollResult", "envelopeState",
-    "unwrapState", "metadata", "metadataMatches", "createRuntimeApi",
+    "unwrapState", "metadata", "metadataMatches", "createRuntimeApi", "createUiWriter",
   ]) {
     assert.match(core, new RegExp(`function Core\\.${contract}\\(`));
   }

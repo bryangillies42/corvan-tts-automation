@@ -12,6 +12,7 @@ Este documento concentra o comportamento do produto Corvan. A documentação rai
 - `globalLatest`: verdadeiro para releases estáveis do Corvan
 - Marker legado do runtime: `CORVAN_RUNTIME`
 - Bootstrap mínimo legado: `1.0.2`
+- Bootstrap incluído no candidato v0.2.5: `1.0.6`
 
 Os nomes dos artefatos publicados continuam compatíveis com os objetos já distribuídos:
 
@@ -67,6 +68,14 @@ Na v0.2.3, a RD concedida por **Placas da Ira** sobe de 3 para 5. Com Bastião, 
 
 Na v0.2.4, os equipamentos defensivos da ficha passam a ser refletidos nos totais: Defesa 27, Fortitude +18, Reflexos +10, Vontade +11 e Escudo Pesado Reforçado +5. O painel também oferece **Fortificação 25%**, que lança um d4 físico e considera o resultado 1 como sucesso, sem custo ou efeito persistente.
 
+O candidato v0.2.5 leva Corvan ao nível 9: 96 PV, 27 PM, Defesa 31, RD 13, espada +14, escudo +13, Fortitude +21, Reflexos +13, Vontade +14 e Provocação CD 17. Baluarte passa a ter três níveis, +2/+4/+6 por 1/2/3 PM totais. Encouraçado concede Defesa +6; Inexpugnável acrescenta +2 às resistências; Encastelado acrescenta RD 3. Código de Honra e Veste Acolchoada aparecem como lembretes para arbitragem manual.
+
+O mesmo candidato reduz trabalho na inicialização. O bootstrap compartilhado reaproveita XML idêntico, aplica apenas atributos alterados e registra o helper saudável uma vez. O runtime reutiliza a verificação da imagem e agrupa renderizações no próximo frame; mutações e persistência continuam imediatas. O botão de recuperação força uma nova montagem da interface e reaplica os valores atuais.
+
+O bootstrap 1.0.6 também recebe atributos em um único lote por renderização. Alterar o gasto automático atualiza somente o toggle, e exportar o estado faz uma única cópia defensiva dos campos. O build compacta os artefatos entregues ao TTS, e o save omite runtime/UI quando são idênticos aos seeds já embutidos. O caminho legado conserva chamadas individuais e a atualização do toggle por XML. Os [benchmarks offline](../../docs/benchmarks/startup-performance.md) verificam equivalência de estado e controles visíveis.
+
+Objetos anteriores à v0.2.5 continuam compatíveis com o runtime v0.2.5 pelo Refresh, mas conservam o bootstrap 1.0.2. Recursos cheios acompanham os novos máximos; ferimentos e PM gastos são preservados. Um candidato local antigo que já informa v0.2.5 não baixa outra build com o mesmo SemVer, então deve ser substituído pelo Saved Object final com bootstrap 1.0.6. O [roteiro v0.2.5](../../docs/testing/corvan-v0.2.5.md) descreve a validação manual antes de publicar.
+
 ## Histórico resumido
 
 - **v0.1.7** — moldura alinhada ao painel passou a ser camada visual da UI, mantendo fallback da textura física.
@@ -77,6 +86,7 @@ Na v0.2.4, os equipamentos defensivos da ficha passam a ser refletidos nos totai
 - **v0.2.2** — Espada Maculada pela Ira como arma ativa, com dano `2d8+10` e crítico `4d8+10`, preservando nível, recursos e estado.
 - **v0.2.3** — Placas da Ira passa a conceder RD 5; RD passiva total passa a 10.
 - **v0.2.4** — equipamentos defensivos sincronizados; Defesa e resistências atualizadas; Fortificação 25% em d4 físico.
+- **v0.2.5 (candidato)** — ficha nível 9, Baluarte +6, Inexpugnável e Encastelado; inicialização com XML, imagem e renderização deduplicados, artefatos compactos e estado sem seeds duplicados; bootstrap 1.0.6, mantendo compatibilidade com 1.0.2 e schema de estado 1.
 
 ## Teste e release
 

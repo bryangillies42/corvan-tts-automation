@@ -10,6 +10,8 @@ import {
   buildAllCharacters,
   buildFixture,
   buildProject,
+  compactLua,
+  compactXml,
   loadCharacterRegistry,
   luaLongString,
   replaceSinglePlaceholder,
@@ -30,7 +32,7 @@ const PLACEHOLDERS = [
   "__SEED_RUNTIME_LITERAL__",
 ];
 
-test("a v0.2.4 preserva a política de canal e Latest definida no registry", async () => {
+test("a v0.2.5 preserva a política de canal e Latest definida no registry", async () => {
   const packageJson = JSON.parse(await readFile(join(ROOT, "package.json"), "utf8"));
   const registry = await loadCharacterRegistry(ROOT);
   const corvan = registry.characters.find((profile) => profile.id === "corvan");
@@ -38,7 +40,7 @@ test("a v0.2.4 preserva a política de canal e Latest definida no registry", asy
 
   assert.equal(packageJson.version, undefined);
   assert.equal(packageJson.release, undefined);
-  assert.equal(corvan.version, "0.2.4");
+  assert.equal(corvan.version, "0.2.5");
   assert.equal(corvan.prerelease, false);
   assert.equal(corvan.globalLatest, true);
   assert.equal(corvan.tagMode, "legacy");
@@ -122,22 +124,53 @@ test("literal Lua escolhe delimitador sem colidir com o conteúdo", () => {
   assert.equal(luaLongString("\ncomeça em nova linha").startsWith('"\\n" .. ['), true);
 });
 
+test("compactação preserva strings Lua e remove somente comentários e whitespace", () => {
+  const source = [
+    "-- comentário de linha",
+    "local quoted = \"texto -- literal\\\"\"",
+    "--[=[ comentário de bloco ]=]",
+    "local long = [==[linha 1\n-- continua literal]==]",
+    "return quoted .. long",
+  ].join("\n");
+  const compacted = compactLua(source);
+
+  assert.doesNotMatch(compacted, /comentário/);
+  assert.match(compacted, /\"texto -- literal\\\"\"/);
+  assert.match(compacted, /\[==\[linha 1\n-- continua literal\]==\]/);
+  assert.match(compacted, /return quoted \.\. long/);
+  assert.ok(compacted.endsWith("\n"));
+});
+
+test("compactação XML preserva atributos e remove comentários e intervalos entre tags", () => {
+  const compacted = compactXml(`<!-- comentário -->\n<Panel text="a  b">\n  <Text text="x" />\n</Panel>`);
+  assert.equal(compacted, '<Panel text="a  b"><Text text="x" /></Panel>\n');
+});
+
 test("a ficha possui o schema e os valores canônicos do Corvan", async () => {
   const character = JSON.parse(await readFile(join(ROOT, "characters", "corvan", "character.json"), "utf8"));
-  validateCharacter(character, "0.2.4");
+  validateCharacter(character, "0.2.5");
 
   assert.equal(character.schemaVersion, 1);
   assert.equal(character.name, "Corvan Duras");
+  assert.deepEqual(character.identity, {
+    ancestry: "Humano", origin: "Soldado", class: "Cavaleiro", level: 9, deity: "Valkaria",
+  });
+  assert.deepEqual(character.attributes, {
+    strength: 5, dexterity: 0, constitution: 4,
+    intelligence: 1, wisdom: 1, charisma: 3,
+  });
+  assert.equal(character.movementMeters, 6);
+  assert.equal(character.armorPenalty, -8);
   assert.deepEqual(
     { hp: character.resources.hp.max, mp: character.resources.mp.max },
-    { hp: 78, mp: 21 },
+    { hp: 96, mp: 27 },
   );
-  assert.equal(character.defense, 27);
-  assert.equal(character.damageReduction, 10);
+  assert.equal(character.defense, 31);
+  assert.equal(character.damageReduction, 13);
   assert.deepEqual(character.weapons.sword, {
     name: "Espada Maculada pela Ira",
     chatName: "Espada",
-    attack: 13,
+    attack: 14,
     damage: { count: 2, sides: 8, bonus: 10 },
     critical: { min: 18, multiplier: 2 },
     type: "Corte",
@@ -146,7 +179,7 @@ test("a ficha possui o schema e os valores canônicos do Corvan", async () => {
   assert.deepEqual(character.weapons.shield, {
     name: "Escudo Pesado Reforçado",
     chatName: "Escudo",
-    attack: 12,
+    attack: 13,
     defenseModifier: 5,
     damage: { count: 1, sides: 6, bonus: 5 },
     critical: { min: 20, multiplier: 2 },
@@ -156,9 +189,9 @@ test("a ficha possui o schema e os valores canônicos do Corvan", async () => {
   assert.deepEqual(
     Object.fromEntries(Object.entries(character.skills).map(([id, skill]) => [id, skill.modifier])),
     {
-      initiative: 3, fight: 12, intimidation: 6, perception: 8,
-      fortitude: 18, reflex: 10, will: 11, riding: 7,
-      diplomacy: 10, warfare: 8, aim: 7,
+      initiative: 4, fight: 13, intimidation: 7, perception: 9,
+      fortitude: 21, reflex: 13, will: 14, riding: 8,
+      diplomacy: 11, warfare: 9, aim: 8,
     },
   );
   assert.deepEqual(
@@ -166,12 +199,14 @@ test("a ficha possui o schema e os valores canônicos do Corvan", async () => {
     {
       combatDefensive: 0, duel: 2, baluarte: 1, provocation: 2,
       solidity: 0, duelistShielded: 0, weaponAndShieldStyle: 0,
-      ambitionWeapons: 0, armored: 0,
-      platesOfWrath: 0, bastion: 0,
+      ambitionWeapons: 0, armored: 0, impregnable: 0, entrenched: 0,
+      platesOfWrath: 0, bastion: 0, codeOfHonor: 0, paddedArmor: 0,
     },
   );
   assert.equal(
-    character.powers.bastion.damageReduction + character.powers.platesOfWrath.damageReduction,
+    character.powers.bastion.damageReduction
+      + character.powers.platesOfWrath.damageReduction
+      + character.powers.entrenched.damageReduction,
     character.damageReduction,
   );
   assert.equal(character.powers.platesOfWrath.damageReduction, 5);
@@ -179,6 +214,11 @@ test("a ficha possui o schema e os valores canônicos do Corvan", async () => {
   assert.equal(character.powers.duelistShielded.upgradedDamageReduction, 3);
   assert.equal(character.powers.solidity.resistanceModifier, 5);
   assert.equal(character.powers.weaponAndShieldStyle.shieldDefenseModifier, 5);
+  assert.equal(character.powers.armored.defenseModifier, 6);
+  assert.equal(character.powers.impregnable.resistanceModifier, 2);
+  assert.equal(character.powers.entrenched.damageReduction, 3);
+  assert.match(character.powers.codeOfHonor.reminder, /arbitragem manual/);
+  assert.match(character.powers.paddedArmor.reminder, /críticos x3\/x4/);
   assert.deepEqual(
     {
       base: character.powers.duel.attackModifier,
@@ -187,27 +227,26 @@ test("a ficha possui o schema e os valores canônicos do Corvan", async () => {
     },
     { base: 2, upgraded: 3, totalUpgradeCost: 3 },
   );
-  assert.deepEqual(
-    {
-      base: character.powers.baluarte.defenseModifier,
-      upgraded: character.powers.baluarte.upgradedDefenseModifier,
-      totalUpgradeCost: character.powers.baluarte.cost + character.powers.baluarte.upgradeCost,
-    },
-    { base: 2, upgraded: 4, totalUpgradeCost: 2 },
-  );
+  assert.deepEqual(character.powers.baluarte.tiers, [
+    { modifier: 2, totalCost: 1 },
+    { modifier: 4, totalCost: 2 },
+    { modifier: 6, totalCost: 3 },
+  ]);
   assert.equal(character.powers.baluarte.sharedCost, 2);
   const ui = await readFile(join(ROOT, "characters", "corvan", "ui.xml"), "utf8");
-  assert.match(ui, /id="pvCurrent" text="78"/);
-  assert.match(ui, /id="pmCurrent" text="21"/);
-  assert.match(ui, /id="defenseValue" text="27"/);
-  assert.match(ui, /id="attackValue" text="\+13"/);
+  assert.match(ui, /VANGUARDA  \/\/  CAVALEIRO 9/);
+  assert.match(ui, /id="pvCurrent" text="96"/);
+  assert.match(ui, /id="pmCurrent" text="27"/);
+  assert.match(ui, /id="defenseValue" text="31"/);
+  assert.match(ui, /id="attackValue" text="\+14"/);
   assert.match(ui, /id="damageValue" text="2d8\+10"/);
   assert.match(ui, /ESPADA MACULADA PELA IRA/);
   assert.match(ui, /CRÍTICO 18–20\/x2/);
-  assert.match(ui, /id="rdValue" text="10"/);
-  assert.match(ui, /RD 5 \+ 5 = 10/);
-  assert.match(ui, /id="versionLabel" text="v0\.2\.4/);
-  assert.match(ui, /id="calculatedDefenseValue" text="27"/);
+  assert.match(ui, /id="rdValue" text="13"/);
+  assert.match(ui, /RD 3 • RD total 13/);
+  assert.match(ui, /CÓDIGO DE HONRA • VESTE ACOLCHOADA/);
+  assert.match(ui, /id="versionLabel" text="v0\.2\.5/);
+  assert.match(ui, /id="calculatedDefenseValue" text="31"/);
   assert.match(ui, /id="roll_fortification"[^>]*text="FORTIFICAÇÃO 25%&#10;d4 • sucesso no 1"/s);
 });
 
@@ -215,7 +254,7 @@ test("validadores rejeitam character e UI estruturalmente inválidos", async () 
   const character = JSON.parse(await readFile(join(ROOT, "characters", "corvan", "character.json"), "utf8"));
   const invalidCharacter = structuredClone(character);
   invalidCharacter.weapons.sword.damage.sides = 1;
-  assert.throws(() => validateCharacter(invalidCharacter, "0.2.4"), /damage\.sides/);
+  assert.throws(() => validateCharacter(invalidCharacter, "0.2.5"), /damage\.sides/);
 
   const prereleaseCharacter = structuredClone(character);
   prereleaseCharacter.version = "0.1.0-rc.1";
@@ -351,18 +390,18 @@ test("manifesto e Saved Object possuem o contrato publicável", async (t) => {
 
   assert.equal(manifest.schemaVersion, 1);
   assert.equal(manifest.characterId, "corvan");
-  assert.equal(manifest.releaseTag, "v0.2.4");
-  assert.equal(manifest.version, "0.2.4");
+  assert.equal(manifest.releaseTag, "v0.2.5");
+  assert.equal(manifest.version, "0.2.5");
   assert.equal(manifest.minBootstrapVersion, "1.0.2");
   assert.equal(manifest.commitSha, FIXED_SHA);
   assert.equal(
     manifest.runtime.url,
-    "https://github.com/bryangillies42/corvan-tts-automation/releases/download/v0.2.4/corvan-runtime.lua",
+    "https://github.com/bryangillies42/corvan-tts-automation/releases/download/v0.2.5/corvan-runtime.lua",
   );
   assert.equal(manifest.runtime.size, Buffer.byteLength(runtime, "utf8"));
   assert.equal(manifest.runtime.sha256, createHash("sha256").update(runtime, "utf8").digest("hex"));
   assert.equal(manifest.previousVersion, null);
-  assert.equal(savedMetadata.version, "0.2.4");
+  assert.equal(savedMetadata.version, "0.2.5");
   assert.equal(savedMetadata.commitSha, FIXED_SHA);
 
   for (const placeholder of PLACEHOLDERS) {
@@ -505,7 +544,7 @@ test("manifesto aceita somente uma versão anterior estável e realmente menor",
       rootDir: project,
       outDir: join(project, "dist-invalid-previous"),
       commitSha: FIXED_SHA,
-      previousVersion: "0.2.4",
+      previousVersion: "0.2.5",
     }),
     /deve ser anterior/,
   );
@@ -516,7 +555,7 @@ test("registry é a fonte única e recusa identidades, caminhos e canais conflit
   const corvan = registry.characters.find((profile) => profile.id === "corvan");
   const spentar = registry.characters.find((profile) => profile.id === "spentar");
 
-  assert.equal(corvan.version, "0.2.4");
+  assert.equal(corvan.version, "0.2.5");
   assert.equal(corvan.sourceDir, "characters/corvan");
   assert.equal(spentar.status, "scaffold");
   assert.equal(spentar.productionEnabled, false);
@@ -572,7 +611,7 @@ test("Corvan e fixture divergente geram produtos isolados sem colisão", async (
     "Arcane_Test_Console.json", "arcane-test-manifest.json", "arcane-test-runtime.lua",
   ]);
   assert.equal(corvan.manifest.characterId, "corvan");
-  assert.equal(corvan.manifest.releaseTag, "v0.2.4");
+  assert.equal(corvan.manifest.releaseTag, "v0.2.5");
   assert.equal(arcane.manifest.characterId, "arcane-test");
   assert.equal(arcane.manifest.releaseTag, "arcane-test-v0.1.0");
   assert.match(arcane.panelImageUrl, /fixtures\/characters\/arcane-test\/assets\/panel-board\.png\?sha256=[0-9a-f]{64}$/);

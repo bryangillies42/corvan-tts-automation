@@ -1,6 +1,6 @@
 # Saved Objects multi-personagem para Tabletop Simulator
 
-Este repositório contém os Saved Objects, runtimes e ferramentas de desenvolvimento para painéis de personagens no **Tabletop Simulator**. Desde a fundação multi-personagem da v0.2.1, identidade, estado, interface, regras, artefatos e releases são separados por personagem, permitindo que vários objetos coexistam na mesma mesa e no mesmo repositório sem compartilharem atualização ou estado por acidente. O Corvan está em desenvolvimento na v0.2.4, que sincroniza os equipamentos defensivos da ficha e adiciona o uso rápido da Fortificação 25% com um d4 físico.
+Este repositório contém os Saved Objects, runtimes e ferramentas de desenvolvimento para painéis de personagens no **Tabletop Simulator**. Desde a fundação multi-personagem da v0.2.1, identidade, estado, interface, regras, artefatos e releases são separados por personagem, permitindo que vários objetos coexistam na mesma mesa e no mesmo repositório sem compartilharem atualização ou estado por acidente. O candidato Corvan v0.2.5 reúne as otimizações de inicialização com a ficha nível 9 e mantém a compatibilidade com objetos antigos.
 
 O primeiro produto é o [Console do Corvan](characters/corvan/README.md). O próximo personagem planejado é o [Spentar](characters/spentar/README.md), que permanece apenas como scaffold até que sua ficha e referências sejam fornecidas.
 
@@ -83,7 +83,7 @@ Para novos personagens, os nomes são inequívocos:
 
 O manifesto continua em `schemaVersion: 1` e acrescenta, de forma compatível, `characterId`, `releaseTag`, `version`, `minBootstrapVersion`, `commitSha`, `runtime` e `previousVersion`. O bootstrap baixa e verifica o manifesto e o runtime antes de aplicar qualquer alteração; se uma etapa falhar, o runtime e o estado anteriores continuam ativos.
 
-Saved Objects antigos do Corvan devem poder atualizar pelo **Refresh**, sem reimportação e sem perder PV/PM gastos, efeitos, preferência, posição, rotação, escala ou GUIDs. A v0.2.1 estabeleceu a separação multi-personagem sem mudar as regras do Corvan; a v0.2.2 atualizou a arma ativa para a Espada Maculada pela Ira (`2d8+10`, crítico `18–20/x2`); a v0.2.3 elevou a RD de Placas da Ira para 5; e a v0.2.4 atualiza Defesa, escudo e resistências e adiciona a Fortificação 25% em d4. O schema de estado continua em `1`.
+Saved Objects antigos do Corvan devem poder atualizar pelo **Refresh**, sem reimportação e sem perder PV/PM gastos, efeitos, preferência, posição, rotação, escala ou GUIDs. A v0.2.1 estabeleceu a separação multi-personagem; a v0.2.2 introduziu a Espada Maculada pela Ira; a v0.2.3 atualizou Placas da Ira; e a v0.2.4 sincronizou equipamentos defensivos e Fortificação. A v0.2.5 leva Corvan ao nível 9 com 96 PV, 27 PM, Defesa 31, RD 13, Baluarte até +6, Inexpugnável e Encastelado. O schema de estado continua em `1`, com uma revisão interna que promove somente recursos antigos que estavam cheios.
 
 ## Criar um personagem
 
@@ -141,6 +141,7 @@ A listagem não depende do nome visível do objeto. Ela lê `characterId` e os m
 - [Roteiro manual do Corvan v0.2.2](docs/testing/corvan-v0.2.2.md)
 - [Roteiro manual do Corvan v0.2.3](docs/testing/corvan-v0.2.3.md)
 - [Roteiro manual do Corvan v0.2.4](docs/testing/corvan-v0.2.4.md)
+- [Roteiro manual do Corvan v0.2.5](docs/testing/corvan-v0.2.5.md)
 
 ## Limitações
 

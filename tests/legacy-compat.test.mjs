@@ -21,7 +21,7 @@ const normalizedFrozenBootstrap = frozenBootstrap
   .replace(/^\uFEFF/, "")
   .replace(/\r\n?/g, "\n");
 
-test("artefatos v0.2.4 preservam o protocolo congelado do bootstrap Corvan v0.2.0", async (t) => {
+test("artefatos v0.2.5 preservam o protocolo congelado do bootstrap Corvan v0.2.0", async (t) => {
   const outDir = await mkdtemp(join(tmpdir(), "corvan-legacy-contract-"));
   t.after(() => rm(outDir, {recursive: true, force: true}));
   const result = await buildProject({
@@ -41,7 +41,7 @@ test("artefatos v0.2.4 preservam o protocolo congelado do bootstrap Corvan v0.2.
   assert.match(frozenBootstrap, /releases\/latest/);
   assert.match(frozenBootstrap, /TRUSTED_RUNTIME_PREFIX \.\. "v" \.\. manifest\.version \.\. "\/corvan-runtime\.lua"/);
   assert.equal(result.manifest.schemaVersion, contract.manifestSchemaVersion);
-  assert.equal(result.manifest.releaseTag, contract.releaseTag);
+  assert.equal(result.manifest.releaseTag, `v${result.manifest.version}`);
   assert.equal(result.manifest.minBootstrapVersion, contract.bootstrapVersion);
   assert.equal(result.manifest.runtime.url.endsWith(`/${contract.runtimeAsset}`), true);
   assert.match(runtime, new RegExp(contract.runtimeMarker));

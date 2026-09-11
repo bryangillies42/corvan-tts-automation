@@ -10,11 +10,13 @@ const uiSource = await readFile(new URL('../characters/corvan/ui.xml', import.me
 test('keeps one build-time placeholder for the seed UI and runtime', () => {
   assert.equal((source.match(/__SEED_UI_LITERAL__/g) ?? []).length, 1);
   assert.equal((source.match(/__SEED_RUNTIME_LITERAL__/g) ?? []).length, 1);
-  assert.match(source, /local BOOTSTRAP_VERSION = "1\.0\.2"/);
+  assert.match(source, /local BOOTSTRAP_VERSION = "1\.0\.6"/);
   assert.match(source, /local SEED_RUNTIME_VERSION = __CHARACTER_VERSION_LITERAL__/);
   assert.match(source, /local SEED_UI = __SEED_UI_LITERAL__/);
   assert.match(source, /local SEED_RUNTIME = __SEED_RUNTIME_LITERAL__/);
   assert.match(source, /uiXml = SEED_UI/);
+  assert.match(source, /persisted\.runtimeSource = nil/);
+  assert.match(source, /persisted\.uiXml = nil/);
 });
 
 test('exposes the complete stable panel callback contract', () => {
@@ -28,6 +30,7 @@ test('exposes the complete stable panel callback contract', () => {
     'cacheRuntimeState',
     'applyRuntimeUi',
     'setRuntimeUiAttribute',
+    'setRuntimeUiAttributes',
   ]) {
     assert.match(source, new RegExp(`function ${callback}\\(`), callback);
   }
@@ -38,7 +41,7 @@ test('exposes the complete stable panel callback contract', () => {
   assert.match(source, /id = id/);
   assert.match(source, /active = true/);
   assert.match(runtimeSource, /safeParentCall\("applyRuntimeUi"/);
-  assert.match(runtimeSource, /safeParentCall\("setRuntimeUiAttribute"/);
+  assert.match(runtimeSource, /UiWriter\.set\(id, attribute, value\)/);
   assert.doesNotMatch(runtimeSource, /safeParentCall\("(?:setPanelArt|reloadPanel|updateCustomImage)"/);
 });
 
@@ -87,7 +90,7 @@ test('waits for object UI loading and only targets IDs declared by the XML', () 
   assert.match(source, /isOn = true/);
   assert.match(source, /if not uiReady or uiIds\[id\] ~= true then\s+return false/);
   assert.match(source, /return self\.UI\.loading/);
-  assert.match(source, /Wait\.frames\(function\(\)\s+Wait\.condition\(finishLoading, hasFinishedLoading/);
+  assert.match(source, /Wait\.frames\(function\(\)\s+if serial ~= uiLoadSerial then return end\s+Wait\.condition\(finishLoading, hasFinishedLoading/);
   assert.match(source, /Wait\.condition\(finishLoading, hasFinishedLoading/);
   assert.doesNotMatch(source, /type\(Wait\)\s*==\s*"table"/);
   assert.doesNotMatch(runtimeSource, /type\(Wait\)\s*==\s*"table"/);
@@ -96,7 +99,7 @@ test('waits for object UI loading and only targets IDs declared by the XML', () 
   assert.match(source, /self\.createButton\(\{/);
   assert.match(source, /label = "CARREGAR PAINEL"/);
   assert.match(source, /uiIds\[id\] ~= true/);
-  assert.match(runtimeSource, /safeParentCall\("setRuntimeUiAttribute"/);
+  assert.match(runtimeSource, /UiWriter\.set\(id, attribute, value\)/);
   assert.doesNotMatch(runtimeSource, /parent\.UI\.setAttribute/);
   assert.doesNotMatch(source, /setUiAttribute\("(?:update_status|settings_refresh)"/);
 });
@@ -217,7 +220,7 @@ test('blocks refresh during duplicate requests and physical rolls', () => {
   assert.match(source, /safeObjectCall\(helper, "handleUiEvent", \{\s*characterId = CHARACTER_ID,\s*parentGuid = self\.getGUID\(\),/);
   assert.match(source, /function cacheRuntimeState\(payload\)[\s\S]*payload\.characterId ~= CHARACTER_ID/);
   assert.match(runtimeSource, /payload\.characterId ~= CHARACTER_ID or payload\.parentGuid ~= parentGuid/);
-  assert.match(runtimeSource, /safeParentCall\("setRuntimeUiAttribute", \{\s*characterId = CHARACTER_ID,/);
+  assert.match(runtimeSource, /RuntimeCore\.createUiWriter\(CHARACTER_ID, safeParentCall/);
   assert.match(source, /local function chatSafeRichText\(value\)/);
   assert.match(source, /if colorOpen then return chatSafeText\(text\) end/);
   assert.match(source, /tag == "\[FF6464\]" or tag == "\[62B8FF\]"/);
