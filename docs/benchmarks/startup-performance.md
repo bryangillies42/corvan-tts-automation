@@ -10,12 +10,12 @@ Esta rodada compara o candidato compacto com `45cd049c9894cb350e922a39a0d4dcaed6
 
 | Medida | Bootstrap 1.0.5 | Bootstrap 1.0.6 | Redução |
 | --- | ---: | ---: | ---: |
-| Saved Object | 277.918 bytes | 215.608 bytes | 22,42% |
-| Script do painel | 229.633 caracteres | 180.113 caracteres | 21,56% |
-| Runtime do helper | 130.494 caracteres | 101.761 caracteres | 22,02% |
-| XML | 32.250 caracteres | 25.019 caracteres | 22,42% |
+| Saved Object | 277.918 bytes | 215.824 bytes | 22,34% |
+| Script do painel | 229.633 caracteres | 180.257 caracteres | 21,50% |
+| Runtime do helper | 130.494 caracteres | 101.869 caracteres | 21,94% |
+| XML | 32.250 caracteres | 25.055 caracteres | 22,31% |
 | Estado do painel após salvar sessão | 173.699 caracteres | 2.364 caracteres | 98,64% |
-| Save isolado estimado | 619.754 bytes | 339.591 bytes | 45,21% |
+| Save isolado estimado | 619.754 bytes | 339.879 bytes | 45,16% |
 
 O save estimado foi obtido substituindo, somente em memória, os artefatos e o estado do Corvan no save isolado usado na medição real. Não inclui Spentar. O TTS ainda precisa compilar painel e helper e montar 187 elementos da UI; a redução de bytes não equivale automaticamente à mesma redução em segundos.
 
@@ -23,12 +23,12 @@ No benchmark MoonSharp de 20 cargas por cenário, a equivalência funcional e to
 
 | Cenário | 1.0.5 → 1.0.6 | Redução |
 | --- | ---: | ---: |
-| Painel primeiro / UI restaurada | 86,52 → 62,76 ms | 27,46% |
-| Helper primeiro / UI restaurada | 73,02 → 60,82 ms | 16,71% |
-| UI dinâmica restaurada | 95,72 → 83,54 ms | 12,72% |
-| UI ausente | 67,64 → 56,58 ms | 16,36% |
-| GUID antigo / 1.000 objetos | 71,78 → 57,18 ms | 20,35% |
-| Busca sem anúncio / 1.000 objetos | 78,44 → 67,02 ms | 14,56% |
+| Painel primeiro / UI restaurada | 86,66 → 67,09 ms | 22,58% |
+| Helper primeiro / UI restaurada | 69,43 → 56,13 ms | 19,16% |
+| UI dinâmica restaurada | 94,83 → 80,43 ms | 15,18% |
+| UI ausente | 69,61 → 55,67 ms | 20,03% |
+| GUID antigo / 1.000 objetos | 69,59 → 56,85 ms | 18,31% |
+| Busca sem anúncio / 1.000 objetos | 78,10 → 63,41 ms | 18,81% |
 
 Esses tempos incluem compilação dos fontes Lua no MoonSharp local, mas continuam excluindo layout Unity, assets e I/O do TTS.
 
