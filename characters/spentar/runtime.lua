@@ -1498,7 +1498,8 @@ function healthCheck(_)
         rollInProgress = diceHost ~= nil and type(diceHost.isRolling) == "function"
             and diceHost.isRolling() or false,
         stateSchemaVersion = STATE_SCHEMA_VERSION,
-        error = configurationError
+        error = configurationError,
+        startupStateVersion = 1
     }
 end
 
@@ -1512,6 +1513,7 @@ function registerParent(payload)
     parentCall("applyRuntimeUi", {xml=UI_XML, characterId=CHARACTER_ID, version=CHARACTER_VERSION})
     cacheAndRender()
     parentCall("runtimeReady", {
+        helperGuid=self.getGUID(),
         characterId=CHARACTER_ID, version=CHARACTER_VERSION, parentGuid=parentGuid,
         health=healthCheck({})
     })
@@ -1524,6 +1526,15 @@ function onLoad(savedData)
     if type(savedData) == "string" and savedData ~= "" and type(JSON) == "table" then
         local ok, decoded = pcall(function() return JSON.decode(savedData) end)
         if ok and type(decoded) == "table" then acceptState(decoded) end
+    end
+    -- Announce the saved helper before the panel's deferred discovery. Binding
+    -- still validates ownership and restores the panel's authoritative state.
+    local ok, notes = pcall(function() return JSON.decode(self.getGMNotes()) end)
+    if ok and type(notes) == "table" and notes.characterId == CHARACTER_ID
+        and type(notes.parentGuid) == "string" then
+        parentGuid = notes.parentGuid
+        parentCall("runtimeReady", {characterId=CHARACTER_ID, parentGuid=parentGuid,
+            helperGuid=self.getGUID(), version=CHARACTER_VERSION, health=healthCheck({})})
     end
 end
 

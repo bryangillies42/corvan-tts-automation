@@ -19,6 +19,8 @@ function RuntimeTestWorld.create(options)
         reloads = 0, fallbackButtons = 0, failAttribute = false,
         attributes = {}, installedXml = '',
         uiCalls = 0, attributeAttempts = 0, loadingReads = 0, copyTables = 0, previewPlans = 0,
+        imports = 0, exports = 0, cacheCalls = 0, tableScans = 0, noteReads = 0, noteDecodes = 0,
+        helperConfigurations = 0, hashBlocks = 0,
     }
     local function enqueue(callback, frames)
         table.insert(w.queue, {callback = callback, tick = w.tick + frames})
@@ -40,11 +42,12 @@ function RuntimeTestWorld.create(options)
     local json = {
         encode = function(value)
             local token = 'JSON:' .. tostring(#w.json + 1)
+            if type(value) == 'table' and value.parentGuid then token = token .. ':' .. value.parentGuid end
             w.json[#w.json + 1] = copy(value)
             return token
         end,
         decode = function(text)
-            local index = tonumber(string.match(text, '^JSON:(%d+)$'))
+            local index = tonumber(string.match(text, '^JSON:(%d+)'))
             if index then return copy(w.json[index]) end
             return copy(config)
         end,
@@ -70,9 +73,20 @@ function RuntimeTestWorld.create(options)
         env.WebRequest = {get = function(_, callback) table.insert(w.requests, callback) end}
         env.getObjectFromGUID = function(guid)
             if guid == 'panel' then return w.panel end
-            if guid == 'helper' then return w.helper end
+            if guid == 'helper' and w.tick >= (options.helperDelay or 0) then return w.helper end
         end
-        env.getAllObjects = function() return {w.panel, w.helper} end
+        env.getAllObjects = function()
+            w.tableScans = w.tableScans + 1
+            local objects = {w.panel}
+            for i = 1, options.unrelatedObjects or 0 do
+                table.insert(objects, {getGMNotes = function()
+                    w.noteReads = w.noteReads + 1
+                    return 'unrelated notes'
+                end})
+            end
+            if w.tick >= (options.helperDelay or 0) then table.insert(objects, w.helper) end
+            return objects
+        end
         env.printToColor = function() end
         env.log = function() end
         env.Player = {getPlayers = function() return {} end}
@@ -80,6 +94,10 @@ function RuntimeTestWorld.create(options)
         if options.instrument then
             source = source:gsub('local copy = {}%s+seen%[value%] = copy',
                 'local copy = {}\n    BENCH_COUNTERS.copyTables = BENCH_COUNTERS.copyTables + 1\n    seen[value] = copy')
+            source = source:gsub('local function sha256ProcessBlock%(([^\n]+)%)',
+                'local function sha256ProcessBlock(%1)\n BENCH_COUNTERS.hashBlocks = BENCH_COUNTERS.hashBlocks + 1')
+            source = source:gsub('return safeDecode%(notes%)',
+                'BENCH_COUNTERS.noteDecodes = BENCH_COUNTERS.noteDecodes + 1\n return safeDecode(notes)')
         end
         local chunk, message = load(source, label, 't', env)
         assert(chunk, message)
@@ -121,8 +139,11 @@ function RuntimeTestWorld.create(options)
     })
     w.helper = {
         getGUID = function() return 'helper' end,
-        getGMNotes = function() return json.encode({characterId = characterId, parentGuid = 'panel'}) end,
-        setGMNotes = function() end, setName = function() end,
+        getGMNotes = function()
+            w.noteReads = w.noteReads + 1
+            return json.encode({characterId = characterId, parentGuid = options.foreignHelper and 'other' or 'panel'})
+        end,
+        setGMNotes = function() w.helperConfigurations = w.helperConfigurations + 1 end, setName = function() end,
         setDescription = function() end, setLock = function() end,
         setInvisibleTo = function() end, setLuaScript = function() end,
         reload = function() w.reloads = w.reloads + 1; return w.helper end,
@@ -137,6 +158,8 @@ function RuntimeTestWorld.create(options)
         end
     end
     w.panel.call = function(name, payload)
+        if name == 'runtimeReady' and options.noAnnouncement then return false end
+        if name == 'cacheRuntimeState' then w.cacheCalls = w.cacheCalls + 1 end
         if name == 'setRuntimeUiAttribute' or name == 'setRuntimeUiAttributes' then
             w.uiCalls = w.uiCalls + 1
             local attributes = name == 'setRuntimeUiAttributes' and payload.attributes
@@ -150,6 +173,8 @@ function RuntimeTestWorld.create(options)
     end
     w.helper.call = function(name, payload)
         if name == 'registerParent' then w.registrations = w.registrations + 1 end
+        if name == 'importState' then w.imports = w.imports + 1 end
+        if name == 'exportState' then w.exports = w.exports + 1 end
         return w.runtime[name](payload)
     end
     local savedRuntime = {
@@ -164,15 +189,33 @@ function RuntimeTestWorld.create(options)
     end
     local xml = options.ui:gsub('id="automatic_resource_spending" isOn="[^"]*"',
         'id="automatic_resource_spending" isOn="' .. tostring(automaticSpending) .. '"')
+    if options.dynamicUi then
+        local id = characterId == 'corvan' and 'pvCurrent' or 'resource_hp'
+        options.savedUiAttributes = {[id] = {text='1'}}
+        options.installedXml = xml:gsub('<[^>]+>', function(tag)
+            if tag:find('id="' .. id .. '"', 1, true) then
+                return (tag:gsub('text="[^"]*"', 'text="1"', 1))
+            end
+            return tag
+        end)
+    end
+    if options.savedRuntime then savedRuntime = copy(options.savedRuntime) end
+    if options.restoredUi then w.installedXml = options.installedXml or xml end
     local savedPanel = json.encode({
-        characterId = characterId, helperGuid = 'helper', runtimeVersion = config.version,
+        characterId = characterId, helperGuid = options.staleGuid and 'missing' or 'helper', runtimeVersion = config.version,
         runtimeSource = options.runtimeSource, runtimeState = savedRuntime, uiXml = xml,
+        uiAttributeValues = options.savedUiAttributes,
     })
-    if helperFirst then w.runtime.onLoad(json.encode(savedRuntime)) end
+    local helperSavedRuntime = options.helperSavedRuntime or savedRuntime
+    if helperFirst then w.runtime.onLoad(json.encode(helperSavedRuntime)) end
     w.bootstrap.onLoad(savedPanel)
-    if not helperFirst then w.runtime.onLoad(json.encode(savedRuntime)) end
+    if not helperFirst then
+        if options.helperDelay then enqueue(function() w.runtime.onLoad(json.encode(helperSavedRuntime)) end, options.helperDelay)
+        else w.runtime.onLoad(json.encode(helperSavedRuntime)) end
+    end
     w.flush()
     w.config = config
+    function w.savedPanelState() return json.decode(w.bootstrap.onSave()) end
     function w.event(id, value)
         if id == 'pv_adjust' or (id:match('^prepare_') and value ~= nil) then
             w.attributes[id .. ':text'] = tostring(value or '')

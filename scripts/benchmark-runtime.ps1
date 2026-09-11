@@ -4,6 +4,7 @@ param(
     [string] $BaselineRef = 'a8508135171fa42c2fef73d03e73060d2c342250',
     [string] $CandidateRoot = (Split-Path -Parent $PSScriptRoot),
     [ValidateRange(1, 1000)][int] $Iterations = 100,
+    [switch] $Startup,
     [string] $ReportPath
 )
 $ErrorActionPreference = 'Stop'
@@ -41,6 +42,11 @@ $dll = Join-Path ${env:ProgramFiles(x86)} 'Steam/steamapps/common/Tabletop Simul
 if (-not (Test-Path -LiteralPath $dll)) { throw 'Local MoonSharp interpreter DLL not found' }
 Add-Type -Path $dll
 $runner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
+if ($Startup) {
+    Add-Type -TypeDefinition 'public static class StartupBenchmarkClock { public static double Milliseconds() { return System.Diagnostics.Stopwatch.GetTimestamp() * 1000.0 / System.Diagnostics.Stopwatch.Frequency; } }'
+    $clockDelegate = [Delegate]::CreateDelegate([Func[double]], [StartupBenchmarkClock].GetMethod('Milliseconds'))
+    $runner.Globals.Set('BENCH_CLOCK_MS', [MoonSharp.Interpreter.DynValue]::FromObject($runner, $clockDelegate))
+}
 foreach ($variant in @('before', 'after')) {
     $prefix = $variant.ToUpperInvariant()
     foreach ($field in @('runtime', 'bootstrap', 'ui')) {
@@ -62,21 +68,22 @@ $null = $runner.DoString('UI_PAGES = ' + (ConvertTo-LuaLiteral $pages))
 $runner.Globals.Set('ITERATIONS', [MoonSharp.Interpreter.DynValue]::NewNumber($Iterations))
 $null = $runner.DoString((Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'tests/lua/runtime-world.lua')))
 try {
-    $result = $runner.DoString((Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'tests/lua/runtime-benchmark.lua'))).String
+    $harness = if ($Startup) { 'tests/lua/startup-benchmark.lua' } else { 'tests/lua/runtime-benchmark.lua' }
+    $result = $runner.DoString((Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot $harness))).String
 } catch {
     $cause = $_.Exception.InnerException
     if ($cause.DecoratedMessage) { throw $cause.DecoratedMessage }
     throw
 }
 $rows = @($result | ConvertFrom-Csv -Delimiter "`t" | ForEach-Object {
-    $before = [int] $_.before
-    $after = [int] $_.after
+    $before = [double]::Parse($_.before, [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture)
+    $after = [double]::Parse($_.after, [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture)
     [ordered]@{scenario=$_.scenario; metric=$_.metric; before=$before; after=$after;
         reductionPercent=if ($before -gt 0) { [math]::Round(100 * ($before - $after) / $before, 2) } else { $null }}
 })
 $report = [ordered]@{characterId=$CharacterId; baselineCommit=$baselineSha; candidateCommit=$candidateSha;
-    candidateDirty=$dirty; iterations=$Iterations; semanticEquivalence=$true;
-    methodology='Offline MoonSharp, real built sources, deterministic queued host, warm caches; counts are not FPS or wall-clock speed. copyTables counts table allocations inside Core.deepCopy; equivalence-check exports are excluded.';
+    candidateDirty=$dirty; iterations=$Iterations; semanticEquivalence=$true; startup=[bool]$Startup;
+    methodology=if ($Startup) { 'Offline MoonSharp, real built sources, fresh Lua environments per load, restored host XML and helper. Two warmup pairs per scenario; alternating before/after order. luaHarnessMs measures wall-clock execution of harness setup, Lua compilation and startup including mock host/JSON and instrumentation; scheduled waits run on a simulated clock. Excludes Unity XML/layout, assets and disk I/O. Not TTS loading time. State and baseline dynamic UI attributes compared after every startup; equivalence exports excluded from counters/timing.' } else { 'Offline MoonSharp, real built sources, deterministic queued host, warm caches; counts are not FPS or wall-clock speed. copyTables counts table allocations inside Core.deepCopy; equivalence-check exports are excluded.' };
     sourceHashes=@{runtime=(Get-FileHash -LiteralPath (Join-Path $benchmarkRoot ('after/' + $profile.files.runtime)) -Algorithm SHA256).Hash;
         bootstrap=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($specs.after.bootstrap)))};
     results=$rows}

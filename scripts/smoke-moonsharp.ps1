@@ -833,7 +833,7 @@ local world = {helpers = {}, json = {}, jsonSerial = 0, crossBindings = 0}
 
 local function jsonEncode(value)
     world.jsonSerial = world.jsonSerial + 1
-    local token = 'JSON:' .. tostring(world.jsonSerial)
+    local token = 'JSON:' .. tostring(world.jsonSerial) .. ':' .. tostring(value.parentGuid or '')
     world.json[token] = value
     return token
 end
@@ -2115,7 +2115,7 @@ return xmlSetCalls, attributeCalls, invalidAttributeCalls, info.helperGuid, info
 
 $onLoadRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
 $onLoadResult = $onLoadRunner.DoString($bootstrap + "`n" + $onLoadHarness).ToString()
-$expectedOnLoad = '2, 3, 0, "helper1", "0.2.2"'
+$expectedOnLoad = '2, 5, 0, "helper1", "0.2.2"'
 if ($onLoadResult -ne $expectedOnLoad) {
     throw "Smoke de onLoad retornou '$onLoadResult'; esperado '$expectedOnLoad'."
 }
