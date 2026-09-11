@@ -12,7 +12,7 @@ Este documento concentra o comportamento do produto Corvan. A documentação rai
 - `globalLatest`: verdadeiro para releases estáveis do Corvan
 - Marker legado do runtime: `CORVAN_RUNTIME`
 - Bootstrap mínimo legado: `1.0.2`
-- Bootstrap incluído no candidato v0.2.5: `1.0.4`
+- Bootstrap incluído no candidato v0.2.5: `1.0.6`
 
 Os nomes dos artefatos publicados continuam compatíveis com os objetos já distribuídos:
 
@@ -70,9 +70,9 @@ Na v0.2.4, os equipamentos defensivos da ficha passam a ser refletidos nos totai
 
 O candidato v0.2.5 preserva essas regras e reduz trabalho na inicialização. O bootstrap compartilhado reaproveita XML idêntico, aplica apenas atributos alterados e registra o helper saudável uma vez. O runtime reutiliza a verificação da imagem e agrupa renderizações no próximo frame; mutações e persistência continuam imediatas. O botão de recuperação força uma nova montagem da interface e reaplica os valores atuais.
 
-O bootstrap 1.0.5 também recebe atributos em um único lote por renderização. Alterar o gasto automático atualiza somente o toggle, e exportar o estado faz uma única cópia defensiva dos campos. O caminho legado conserva chamadas individuais e a atualização do toggle por XML. Os [benchmarks offline](../../docs/benchmarks/runtime-performance.md) verificam equivalência de estado e controles visíveis.
+O bootstrap 1.0.6 também recebe atributos em um único lote por renderização. Alterar o gasto automático atualiza somente o toggle, e exportar o estado faz uma única cópia defensiva dos campos. O build compacta os artefatos entregues ao TTS, e o save omite runtime/UI quando são idênticos aos seeds já embutidos. O caminho legado conserva chamadas individuais e a atualização do toggle por XML. Os [benchmarks offline](../../docs/benchmarks/startup-performance.md) verificam equivalência de estado e controles visíveis.
 
-Objetos antigos continuam compatíveis com o runtime v0.2.5 pelo Refresh, mas conservam o bootstrap 1.0.2. Para testar todas as otimizações é preciso importar o novo Saved Object com bootstrap 1.0.5. Isso cria um painel novo: não transfere automaticamente os recursos e efeitos de um painel antigo. O [roteiro v0.2.5](../../docs/testing/corvan-v0.2.5.md) descreve a comparação manual antes de publicar.
+Objetos antigos continuam compatíveis com o runtime v0.2.5 pelo Refresh, mas conservam o bootstrap 1.0.2. Para testar todas as otimizações é preciso importar o novo Saved Object com bootstrap 1.0.6. Isso cria um painel novo: não transfere automaticamente os recursos e efeitos de um painel antigo. O [roteiro v0.2.5](../../docs/testing/corvan-v0.2.5.md) descreve a comparação manual antes de publicar.
 
 ## Histórico resumido
 
@@ -84,7 +84,7 @@ Objetos antigos continuam compatíveis com o runtime v0.2.5 pelo Refresh, mas co
 - **v0.2.2** — Espada Maculada pela Ira como arma ativa, com dano `2d8+10` e crítico `4d8+10`, preservando nível, recursos e estado.
 - **v0.2.3** — Placas da Ira passa a conceder RD 5; RD passiva total passa a 10.
 - **v0.2.4** — equipamentos defensivos sincronizados; Defesa e resistências atualizadas; Fortificação 25% em d4 físico.
-- **v0.2.5 (candidato)** — inicialização com XML, imagem e renderização deduplicados; bootstrap 1.0.5, mantendo compatibilidade com 1.0.2 e schema de estado 1.
+- **v0.2.5 (candidato)** — inicialização com XML, imagem e renderização deduplicados, artefatos compactos e estado sem seeds duplicados; bootstrap 1.0.6, mantendo compatibilidade com 1.0.2 e schema de estado 1.
 
 ## Teste e release
 

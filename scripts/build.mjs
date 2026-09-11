@@ -56,6 +56,96 @@ function withFinalNewline(value) {
   return `${value.replace(/\n*$/, "")}\n`;
 }
 
+function luaLongBracket(source, index) {
+  if (source[index] !== "[") return null;
+  let cursor = index + 1;
+  while (source[cursor] === "=") cursor += 1;
+  if (source[cursor] !== "[") return null;
+  const equals = source.slice(index + 1, cursor);
+  return { openingLength: cursor - index + 1, closing: `]${equals}]` };
+}
+
+/**
+ * Remove comentários e compacta whitespace sem tocar no conteúdo de strings.
+ * Um espaço é mantido entre tokens separados para evitar ambiguidades léxicas
+ * como `- -`, concatenações e identificadores adjacentes.
+ */
+export function compactLua(input) {
+  const source = normalizeText(String(input));
+  let output = "";
+  let cursor = 0;
+  let pendingSpace = false;
+
+  const appendPendingSpace = () => {
+    if (pendingSpace && output.length > 0 && !output.endsWith(" ")) output += " ";
+    pendingSpace = false;
+  };
+
+  while (cursor < source.length) {
+    const character = source[cursor];
+    if (/\s/.test(character)) {
+      pendingSpace = true;
+      cursor += 1;
+      continue;
+    }
+
+    if (source.startsWith("--", cursor)) {
+      const block = luaLongBracket(source, cursor + 2);
+      if (block !== null) {
+        const end = source.indexOf(block.closing, cursor + 2 + block.openingLength);
+        cursor = end === -1 ? source.length : end + block.closing.length;
+      } else {
+        const end = source.indexOf("\n", cursor + 2);
+        cursor = end === -1 ? source.length : end + 1;
+      }
+      pendingSpace = true;
+      continue;
+    }
+
+    if (character === "\"" || character === "'") {
+      appendPendingSpace();
+      const quote = character;
+      const start = cursor;
+      cursor += 1;
+      while (cursor < source.length) {
+        if (source[cursor] === "\\") {
+          cursor += Math.min(2, source.length - cursor);
+        } else if (source[cursor] === quote) {
+          cursor += 1;
+          break;
+        } else {
+          cursor += 1;
+        }
+      }
+      output += source.slice(start, cursor);
+      continue;
+    }
+
+    const longString = luaLongBracket(source, cursor);
+    if (longString !== null) {
+      appendPendingSpace();
+      const end = source.indexOf(longString.closing, cursor + longString.openingLength);
+      const next = end === -1 ? source.length : end + longString.closing.length;
+      output += source.slice(cursor, next);
+      cursor = next;
+      continue;
+    }
+
+    appendPendingSpace();
+    output += character;
+    cursor += 1;
+  }
+
+  return withFinalNewline(output.trim());
+}
+
+export function compactXml(input) {
+  return withFinalNewline(normalizeText(String(input))
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/>\s+</g, "><")
+    .trim());
+}
+
 function escapeXmlAttribute(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -819,14 +909,14 @@ async function buildRegisteredCharacter({
   } else {
     assert(!uiSource.includes(PLACEHOLDERS.panelUiImageUrl), `${profile.id} UI generic não deve depender da moldura panel-board.`);
   }
-  const ui = withFinalNewline(validateUi(uiSource, {
+  const ui = compactXml(validateUi(uiSource, {
     uiContract: profile.uiContract,
     uiRootId: profile.uiRootId,
     panelArtId: profile.panelArtId,
     geometry: profile.geometry,
     requiredUiIds: profile.requiredUiIds,
   }));
-  const characterJson = stableJson(character);
+  const characterJson = JSON.stringify(sortJsonValue(character));
   const runtimeSharedPath = join(absoluteRoot, "shared", "runtime-core.lua");
   let runtime = sourceFiles.runtime;
   if (await pathExists(runtimeSharedPath)) {
@@ -846,12 +936,12 @@ async function buildRegisteredCharacter({
     runtime = replaceSinglePlaceholder(runtime, PLACEHOLDERS.panelUiImageUrlLiteral, luaLongString(panelUiImageUrl || ""), PLACEHOLDERS.panelUiImageUrlLiteral);
   }
   runtime = replaceOptionalPlaceholders(runtime, profile, files.manifest, files.runtime);
-  runtime = withFinalNewline(runtime);
+  runtime = compactLua(runtime);
   assert(runtime.includes(profile.runtimeMarker), `${profile.id} runtime não contém o marcador ${profile.runtimeMarker}.`);
   let generatedBootstrap = replaceSinglePlaceholder(bootstrap, PLACEHOLDERS.seedRuntime, luaLongString(runtime), PLACEHOLDERS.seedRuntime);
   generatedBootstrap = replaceSinglePlaceholder(generatedBootstrap, PLACEHOLDERS.seedUi, luaLongString(ui), PLACEHOLDERS.seedUi);
   generatedBootstrap = replaceOptionalPlaceholders(generatedBootstrap, profile, files.manifest, files.runtime);
-  generatedBootstrap = withFinalNewline(generatedBootstrap);
+  generatedBootstrap = compactLua(generatedBootstrap);
   for (const placeholder of Object.values(PLACEHOLDERS)) {
     assert(!runtime.includes(placeholder), `${profile.id} runtime ainda contém ${placeholder}.`);
     assert(!generatedBootstrap.includes(placeholder), `${profile.id} bootstrap ainda contém ${placeholder}.`);

@@ -113,7 +113,12 @@ end
 local reused = restored()
 assert(reused.xmlSets == 0 and reused.renderPasses == 1, 'restored UI was rebuilt')
 assert(reused.runtime.exportState().character.hp == 47)
-assert(reused.savedPanelState().uiAttributeValues.pvCurrent.text == '47', 'mutable UI attributes were not persisted')
+local compactState = reused.savedPanelState()
+assert(compactState.uiAttributeValues.pvCurrent.text == '47', 'mutable UI attributes were not persisted')
+assert(compactState.runtimeSource == nil and compactState.uiXml == nil,
+    'seed runtime/UI were duplicated in the persisted panel state')
+assert(compactState.runtimeVersion == CHARACTER_CONFIG.version,
+    'compact persisted state lost the runtime version')
 reused.bootstrap.recoverUi(nil, 'White')
 reused.flush()
 assert(reused.xmlSets == 1, 'explicit recovery did not rebuild adopted UI')

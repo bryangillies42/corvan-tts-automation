@@ -2,7 +2,7 @@
 -- This file deliberately contains no character rules. The replaceable runtime lives
 -- on an invisible helper so this visible panel never needs to be reloaded to update.
 
-local BOOTSTRAP_VERSION = "1.0.5"
+local BOOTSTRAP_VERSION = "1.0.6"
 local STATE_SCHEMA_VERSION = 1
 local MANIFEST_SCHEMA_VERSION = 1
 local CHARACTER_ID = __CHARACTER_ID_LITERAL__
@@ -1751,7 +1751,19 @@ function onSave()
     state.schemaVersion = STATE_SCHEMA_VERSION
     state.characterId = CHARACTER_ID
     state.uiAttributeValues = uiAttributeValues
-    return safeEncode(state)
+    -- O runtime e a UI seed já estão embutidos no bootstrap. Repeti-los no
+    -- LuaScriptState aumenta bastante o JSON que o TTS desserializa em todo
+    -- load. Versões baixadas continuam sendo persistidas integralmente, pois
+    -- diferem do seed e precisam sobreviver offline e ao salvar só o painel.
+    local persisted = shallowCopy(state)
+    if persisted.runtimeVersion == SEED_RUNTIME_VERSION
+        and persisted.runtimeSource == SEED_RUNTIME then
+        persisted.runtimeSource = nil
+    end
+    if persisted.uiXml == SEED_UI then
+        persisted.uiXml = nil
+    end
+    return safeEncode(persisted)
 end
 
 function onDestroy()

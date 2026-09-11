@@ -10,11 +10,13 @@ const uiSource = await readFile(new URL('../characters/corvan/ui.xml', import.me
 test('keeps one build-time placeholder for the seed UI and runtime', () => {
   assert.equal((source.match(/__SEED_UI_LITERAL__/g) ?? []).length, 1);
   assert.equal((source.match(/__SEED_RUNTIME_LITERAL__/g) ?? []).length, 1);
-  assert.match(source, /local BOOTSTRAP_VERSION = "1\.0\.5"/);
+  assert.match(source, /local BOOTSTRAP_VERSION = "1\.0\.6"/);
   assert.match(source, /local SEED_RUNTIME_VERSION = __CHARACTER_VERSION_LITERAL__/);
   assert.match(source, /local SEED_UI = __SEED_UI_LITERAL__/);
   assert.match(source, /local SEED_RUNTIME = __SEED_RUNTIME_LITERAL__/);
   assert.match(source, /uiXml = SEED_UI/);
+  assert.match(source, /persisted\.runtimeSource = nil/);
+  assert.match(source, /persisted\.uiXml = nil/);
 });
 
 test('exposes the complete stable panel callback contract', () => {

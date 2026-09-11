@@ -1765,9 +1765,10 @@ local loadedSource = oldSource
 local installedXml = oldXml
 local currentState = {schemaVersion = 1, runtimeVersion = '0.1.2', hp = 23}
 local helper = nil
+local encodedState = nil
 
 JSON = {
-    encode = function(_) return '{"parentGuid":"panel1"}' end,
+    encode = function(value) encodedState = value; return '{"parentGuid":"panel1"}' end,
     decode = function(_) return {parentGuid = 'panel1'} end
 }
 Wait = {
@@ -1857,6 +1858,8 @@ while #timers > 0 do
     callback()
 end
 
+onSave()
+
 return state.runtimeVersion,
     state.runtimeSource == candidateSource,
     state.runtimeSource == oldSource,
@@ -1864,7 +1867,9 @@ return state.runtimeVersion,
     currentGuid,
     currentState.hp,
     state.uiXml == candidateXml,
-    state.uiXml == oldXml
+    state.uiXml == oldXml,
+    encodedState.runtimeSource == state.runtimeSource,
+    encodedState.uiXml == state.uiXml
 '@
 
 function Invoke-TransactionSmoke([bool]$healthy, [string]$bootstrapSource = $bootstrap) {
@@ -1874,13 +1879,13 @@ function Invoke-TransactionSmoke([bool]$healthy, [string]$bootstrapSource = $boo
 }
 
 $updateSuccess = Invoke-TransactionSmoke $true
-$expectedUpdateSuccess = '"0.2.5", true, false, false, "candidate-guid", 23, true, false'
+$expectedUpdateSuccess = '"0.2.5", true, false, false, "candidate-guid", 23, true, false, true, true'
 if ($updateSuccess -ne $expectedUpdateSuccess) {
     throw "Smoke de update retornou '$updateSuccess'; esperado '$expectedUpdateSuccess'."
 }
 
 $updateRollback = Invoke-TransactionSmoke $false
-$expectedUpdateRollback = '"0.1.2", false, true, false, "rollback-guid", 23, false, true'
+$expectedUpdateRollback = '"0.1.2", false, true, false, "rollback-guid", 23, false, true, true, true'
 if ($updateRollback -ne $expectedUpdateRollback) {
     throw "Smoke de rollback retornou '$updateRollback'; esperado '$expectedUpdateRollback'."
 }

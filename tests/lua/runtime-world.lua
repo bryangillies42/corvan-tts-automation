@@ -94,7 +94,7 @@ function RuntimeTestWorld.create(options)
         if options.instrument then
             source = source:gsub('local copy = {}%s+seen%[value%] = copy',
                 'local copy = {}\n    BENCH_COUNTERS.copyTables = BENCH_COUNTERS.copyTables + 1\n    seen[value] = copy')
-            source = source:gsub('local function sha256ProcessBlock%(([^\n]+)%)',
+            source = source:gsub('local function sha256ProcessBlock%(([^%)]*)%)',
                 'local function sha256ProcessBlock(%1)\n BENCH_COUNTERS.hashBlocks = BENCH_COUNTERS.hashBlocks + 1')
             source = source:gsub('return safeDecode%(notes%)',
                 'BENCH_COUNTERS.noteDecodes = BENCH_COUNTERS.noteDecodes + 1\n return safeDecode(notes)')

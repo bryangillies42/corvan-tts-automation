@@ -40,7 +40,9 @@ for _, scenario in ipairs(scenarios) do
                 table.insert(durations[variant], w.luaHarnessMs)
                 for _, metric in ipairs(metrics) do totals[variant][metric] = totals[variant][metric] + w[metric] end
             end
-            assert(w.reloads == 0 and w.hashBlocks == 0, 'unexpected startup reload/hash')
+            assert(w.reloads == 0 and w.hashBlocks == 0,
+                scenario.name .. '/' .. variant .. ': unexpected startup reload/hash '
+                .. tostring(w.reloads) .. '/' .. tostring(w.hashBlocks))
         end
         equal(worlds.before.runtime.exportState(), worlds.after.runtime.exportState(), scenario.name .. '.state')
         for key, value in pairs(worlds.before.attributes) do

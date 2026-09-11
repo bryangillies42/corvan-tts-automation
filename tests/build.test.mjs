@@ -10,6 +10,8 @@ import {
   buildAllCharacters,
   buildFixture,
   buildProject,
+  compactLua,
+  compactXml,
   loadCharacterRegistry,
   luaLongString,
   replaceSinglePlaceholder,
@@ -120,6 +122,28 @@ test("literal Lua escolhe delimitador sem colidir com o conteúdo", () => {
   assert.match(literal, /^\[==\[/);
   assert.match(literal, /\]==\]$/);
   assert.equal(luaLongString("\ncomeça em nova linha").startsWith('"\\n" .. ['), true);
+});
+
+test("compactação preserva strings Lua e remove somente comentários e whitespace", () => {
+  const source = [
+    "-- comentário de linha",
+    "local quoted = \"texto -- literal\\\"\"",
+    "--[=[ comentário de bloco ]=]",
+    "local long = [==[linha 1\n-- continua literal]==]",
+    "return quoted .. long",
+  ].join("\n");
+  const compacted = compactLua(source);
+
+  assert.doesNotMatch(compacted, /comentário/);
+  assert.match(compacted, /\"texto -- literal\\\"\"/);
+  assert.match(compacted, /\[==\[linha 1\n-- continua literal\]==\]/);
+  assert.match(compacted, /return quoted \.\. long/);
+  assert.ok(compacted.endsWith("\n"));
+});
+
+test("compactação XML preserva atributos e remove comentários e intervalos entre tags", () => {
+  const compacted = compactXml(`<!-- comentário -->\n<Panel text="a  b">\n  <Text text="x" />\n</Panel>`);
+  assert.equal(compacted, '<Panel text="a  b"><Text text="x" /></Panel>\n');
 });
 
 test("a ficha possui o schema e os valores canônicos do Corvan", async () => {
