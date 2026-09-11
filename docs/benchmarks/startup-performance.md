@@ -28,3 +28,20 @@ pwsh -NoProfile -File scripts/benchmark-runtime.ps1 -Startup -Iterations 20 -Cha
 ## Teste manual necessário
 
 Substituir o arquivo em Saved Objects não altera um painel já inserido em um save. Insira novamente o candidato atualizado, gaste recursos/altere opções, salve em outro slot e reabra. Compare a travada e o tempo até responder usando a mesma mesa. O novo bootstrap não é instalado pelo botão Update. Também confira troca de páginas, Undo, rolagens, estado persistido e recuperação manual da UI.
+
+## Resultados: 20 cargas por cenário
+
+Em ambos os personagens, a UI equivalente passou de 1 reconstrução por carga para 0, e a importação adicional de estado passou de 1 para 0. No Corvan, renderizações passaram de 2 para 1 e tabelas alocadas por deepCopy de 36 para 16 (55,56% menos). No Spentar, as renderizações permaneceram em 1 e as tabelas passaram de 207 para 121 (41,55% menos). SHA-256 permaneceu em zero antes e depois.
+
+Tempos medianos do **harness Lua**, em milissegundos, pelo percentil empírico de posto mais próximo:
+
+| Cenário | Corvan antes → depois | Redução | Spentar antes → depois | Redução |
+| --- | ---: | ---: | ---: | ---: |
+| Painel primeiro / UI equivalente | 124,22 → 107,81 | 13,21% | 123,37 → 119,89 | 2,82% |
+| Auxiliar primeiro / UI equivalente | 109,54 → 103,96 | 5,09% | 147,02 → 131,41 | 10,62% |
+| UI salva com valores dinâmicos | 113,81 → 139,42 | -22,51% | 128,41 → 152,04 | -18,41% |
+| UI ausente | 112,74 → 108,53 | 3,73% | 116,83 → 111,50 | 4,57% |
+| GUID antigo / 1.000 objetos | 282,07 → 95,24 | 66,24% | 553,45 → 115,04 | 79,21% |
+| Busca sem anúncio / 1.000 objetos | 303,66 → 110,17 | 63,72% | 592,72 → 129,07 | 78,22% |
+
+A comparação estrutural de uma UI com valores dinâmicos aumenta o trabalho Lua nesse cenário (+22,51% no Corvan e +18,41% no Spentar), embora elimine a chamada de reconstrução ao engine. Não há evidência offline suficiente para afirmar que essa troca reduz o tempo total do TTS. O maior ganho do harness aparece na descoberta com GUID antigo/busca por objetos. A validação manual da travada continua necessária.
