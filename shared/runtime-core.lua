@@ -12,6 +12,66 @@ CharacterRuntimeCore = {}
 
 local Core = CharacterRuntimeCore
 
+-- One relay per render on modern panels. Old bootstraps retain the original
+-- single-attribute contract; capability negotiation is cached per parent.
+function Core.createUiWriter(characterId, callParent, getParentGuid)
+    local writer = {}
+    local pending = nil
+    local capabilityParent = nil
+    local protocol = 0
+
+    function writer.supportsBatch()
+        local parentGuid = getParentGuid()
+        if type(parentGuid) ~= "string" or parentGuid == "" then return false end
+        if capabilityParent ~= parentGuid then
+            local ok, info = callParent("getBootstrapInfo", {})
+            protocol = ok and type(info) == "table" and info.characterId == characterId
+                and info.uiProtocolVersion == 1 and 1 or 0
+            capabilityParent = parentGuid
+        end
+        return protocol == 1
+    end
+
+    function writer.begin()
+        pending = {}
+    end
+
+    function writer.set(id, attribute, value)
+        local text = tostring(value)
+        if pending ~= nil then
+            pending[id] = pending[id] or {}
+            pending[id][attribute] = text
+            return true
+        end
+        local ok, accepted = callParent("setRuntimeUiAttribute", {
+            characterId = characterId, id = id, attribute = attribute, value = text
+        })
+        return ok and accepted ~= false
+    end
+
+    function writer.flush()
+        local attributes = pending
+        pending = nil
+        if attributes == nil or next(attributes) == nil then return true end
+        if writer.supportsBatch() then
+            local ok, accepted = callParent("setRuntimeUiAttributes", {
+                characterId = characterId, parentGuid = getParentGuid(), attributes = attributes
+            })
+            if ok and accepted == true then return true end
+            -- Failed/unsupported batch delivery must not lose the current render.
+            protocol = 0
+        end
+        local accepted = true
+        for id, values in pairs(attributes) do
+            for attribute, value in pairs(values) do
+                if not writer.set(id, attribute, value) then accepted = false end
+            end
+        end
+        return accepted
+    end
+    return writer
+end
+
 local function configCharacterId(config)
     if type(config) ~= "table" then return nil end
     return config.characterId or config.id

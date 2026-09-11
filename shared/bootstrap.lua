@@ -2,7 +2,7 @@
 -- This file deliberately contains no character rules. The replaceable runtime lives
 -- on an invisible helper so this visible panel never needs to be reloaded to update.
 
-local BOOTSTRAP_VERSION = "1.0.2"
+local BOOTSTRAP_VERSION = "1.0.5"
 local STATE_SCHEMA_VERSION = 1
 local MANIFEST_SCHEMA_VERSION = 1
 local CHARACTER_ID = __CHARACTER_ID_LITERAL__
@@ -48,6 +48,10 @@ local uiReady = false
 local uiLoadSerial = 0
 local uiIds = {}
 local uiAttributeValues = {}
+local uiAppliedAttributeValues = {}
+local uiRequestedXml = nil
+local savedUiAttributes = {}
+local configuredHelper = nil
 local uiFallbackVisible = false
 local pendingRefreshText = ""
 local pendingRefreshBusy = false
@@ -413,6 +417,9 @@ local function sanitizePersistedState(decoded)
     if type(decoded.uiXml) == "string" then
         clean.uiXml = decoded.uiXml
     end
+    if type(decoded.uiAttributeValues) == "table" then
+        clean.uiAttributeValues = decoded.uiAttributeValues
+    end
     return clean
 end
 
@@ -559,19 +566,62 @@ local function installedUiMatches(xml)
     if not ok or type(installed) ~= "string" or installed == "" then
         return false
     end
-    for id in pairs(collectUiIds(xml)) do
-        if string.find(installed, 'id="' .. id .. '"', 1, true) == nil
-            and string.find(installed, "id='" .. id .. "'", 1, true) == nil
-        then
-            return false
-        end
+    local installedIds = collectUiIds(installed)
+    for id in pairs(uiIds) do
+        if installedIds[id] ~= true then return false end
     end
     return true
+end
+
+-- Match static structure, excluding only attributes actually written by this
+-- panel before saving. Identical IDs alone cannot prove that a UI is current.
+local function reusableUiXml(expected)
+    local ok, installed = pcall(function() return self.UI.getXml() end)
+    if not ok or type(installed) ~= "string" or installed == "" then return false end
+    if installed == expected then return true end
+    local function canonical(xml)
+        local parts, cursor = {}, 1
+        while true do
+            local first = xml:find("<!--", cursor, true)
+            if not first then table.insert(parts, xml:sub(cursor)); break end
+            local last = xml:find("-->", first + 4, true)
+            if not last then return xml end -- malformed XML never gets normalized
+            table.insert(parts, xml:sub(cursor, first - 1))
+            cursor = last + 3
+        end
+        xml = table.concat(parts)
+        return (xml:gsub("<([^>]+)>", function(content)
+            local tag = content:match("^([%w_:%-]+)")
+            if not tag then return "<" .. content .. ">" end
+            local body = content:sub(#tag + 1)
+            local empty = body:sub(-1) == "/"
+            if empty then body = body:sub(1, -2) end
+            local id = body:match('id%s*=%s*"([^"]*)"') or body:match("id%s*=%s*'([^']*)'")
+            local mutable = id and savedUiAttributes[id]
+            local attributes = {}
+            local function attribute(key, value)
+                if not (type(mutable) == "table" and mutable[key] ~= nil and UI_ATTRIBUTES[key]) then
+                    table.insert(attributes, key .. '="' .. value .. '"')
+                end
+                return ""
+            end
+            local remainder = body:gsub('([%w_:%-]+)%s*=%s*"([^"]*)"', attribute)
+                :gsub("([%w_:%-]+)%s*=%s*'([^']*)'", attribute)
+            table.sort(attributes)
+            return "<" .. tag .. " " .. table.concat(attributes, " ") .. remainder:gsub("%s", "") .. ">"
+                .. (empty and "</" .. tag .. ">" or "")
+        end):gsub(">%s+<", "><"):gsub("^%s+", ""):gsub("%s+$", ""))
+    end
+    return canonical(installed) == canonical(expected)
 end
 
 local function applyUiAttribute(id, attribute, value)
     if not uiReady or uiIds[id] ~= true then
         return false
+    end
+    local text = tostring(value)
+    if uiAppliedAttributeValues[id] and uiAppliedAttributeValues[id][attribute] == text then
+        return true
     end
     local loadingOk, loading = pcall(function()
         return self.UI.loading
@@ -580,8 +630,12 @@ local function applyUiAttribute(id, attribute, value)
         return false
     end
     local ok = pcall(function()
-        self.UI.setAttribute(id, attribute, tostring(value))
+        self.UI.setAttribute(id, attribute, text)
     end)
+    if ok then
+        uiAppliedAttributeValues[id] = uiAppliedAttributeValues[id] or {}
+        uiAppliedAttributeValues[id][attribute] = text
+    end
     return ok
 end
 
@@ -605,10 +659,13 @@ local function setRefreshFeedback(text, busy)
     setUiAttribute("refresh", "interactable", pendingRefreshBusy and "false" or "true")
 end
 
-local function installUiXml(xml)
+local function installUiXml(xml, force)
     if type(xml) ~= "string" or xml == "" then
         return false
     end
+    -- Repeated helper handshakes must not restart an identical UI load.
+    -- Explicit recovery bypasses this cache, including after external UI damage.
+    if not force and uiRequestedXml == xml then return true end
 
     local nextUiIds = collectUiIds(xml)
     if nextUiIds.refresh == nil or nextUiIds.refreshStatus == nil then
@@ -621,15 +678,10 @@ local function installUiXml(xml)
     uiReady = false
     uiLoadSerial = uiLoadSerial + 1
     local serial = uiLoadSerial
-    local installed = pcall(function()
-        self.UI.setXml(xml)
-    end)
-    if not installed then
-        uiIds = previousUiIds
-        uiReady = previousUiReady
-        return false
-    end
+    local mayReuse = not force and uiRequestedXml == nil
     uiIds = nextUiIds
+    uiRequestedXml = xml
+    uiAppliedAttributeValues = {}
 
     local function finishLoading()
         if serial ~= uiLoadSerial then
@@ -637,6 +689,7 @@ local function installUiXml(xml)
         end
         if not installedUiMatches(xml) then
             uiReady = false
+            uiRequestedXml = nil
             showUiFallback("a interface carregada não corresponde ao XML esperado.")
             return
         end
@@ -659,18 +712,43 @@ local function installUiXml(xml)
 
     -- Wait é um proxy do host no TTS, não uma table Lua. Uma checagem rígida de
     -- tipo desativa justamente o caminho real do jogo.
+    local function rebuild()
+        local installed = pcall(function() self.UI.setXml(xml) end)
+        if not installed then
+            uiIds = previousUiIds
+            uiReady = previousUiReady
+            uiRequestedXml = nil
+            showUiFallback("não foi possível montar a interface.")
+            return
+        end
+        Wait.frames(function()
+            if serial ~= uiLoadSerial then return end
+            Wait.condition(finishLoading, hasFinishedLoading, 5, function()
+                if serial ~= uiLoadSerial then return end
+                uiRequestedXml = nil
+                showUiFallback("a interface não terminou de carregar.")
+            end)
+        end, 2)
+    end
     local scheduled = pcall(function()
         -- setXml agenda o carregamento para um frame posterior. Consultar
         -- UI.loading no mesmo frame pode devolver false para a UI antiga e
         -- validar XML obsoleto. Dois frames cobrem tanto o início quanto um
         -- carregamento que já tenha terminado.
         Wait.frames(function()
-            Wait.condition(finishLoading, hasFinishedLoading, 5, function()
-                showUiFallback("a interface não terminou de carregar.")
+            if serial ~= uiLoadSerial then return end
+            if not mayReuse then rebuild(); return end
+            Wait.condition(function()
+                if serial ~= uiLoadSerial then return end
+                local checked, reusable = pcall(reusableUiXml, xml)
+                if checked and reusable then finishLoading() else rebuild() end
+            end, hasFinishedLoading, 5, function()
+                if serial == uiLoadSerial then rebuild() end
             end)
         end, 2)
     end)
     if not scheduled then
+        uiRequestedXml = nil
         showUiFallback("não foi possível aguardar o carregamento da interface.")
     end
     return true
@@ -816,7 +894,7 @@ local function helperNotes(helper)
     local ok, notes = pcall(function()
         return helper.getGMNotes()
     end)
-    if not ok then
+    if not ok or type(notes) ~= "string" or not string.find(notes, self.getGUID(), 1, true) then
         return nil
     end
     return safeDecode(notes)
@@ -846,6 +924,11 @@ local function findOwnedHelper()
     if current ~= nil then
         return current
     end
+    local announcedGuid = runtimeReadyPayload and runtimeReadyPayload.helperGuid
+    if type(announcedGuid) == "string" then
+        local announced = getObjectFromGUID(announcedGuid)
+        if announced ~= nil and ownsHelper(announced) then return announced end
+    end
     local objects = getAllObjects()
     for _, object in ipairs(objects) do
         if object ~= self and ownsHelper(object) then
@@ -870,7 +953,9 @@ local function configureHelper(helper)
     if helper == nil then
         return
     end
-    pcall(function()
+    state.helperGuid = helper.getGUID()
+    if configuredHelper == helper then return end
+    local configured = pcall(function()
         helper.setGMNotes(safeEncode({
             project = "corvan-tts-automation",
             characterId = CHARACTER_ID,
@@ -884,7 +969,7 @@ local function configureHelper(helper)
         helper.drag_selectable = false
         helper.tooltip = false
     end)
-    state.helperGuid = helper.getGUID()
+    if configured then configuredHelper = helper end
 end
 
 local function healthIsValid(health, expectedVersion)
@@ -917,14 +1002,15 @@ end
 
 local function registerHelper(helper, runtimeState)
     configureHelper(helper)
-    local payload = {parentGuid = self.getGUID(), characterId = CHARACTER_ID}
+    local payload = {parentGuid = self.getGUID(), characterId = CHARACTER_ID,
+        parentNotesConfigured = configuredHelper == helper}
     if type(runtimeState) == "table" then
         -- A freshly spawned/reloaded helper starts from its own default state and
         -- may report that state back immediately. Seed it atomically while binding
         -- the parent so a copied panel cannot lose its persisted resources/effects.
         payload.state = runtimeState
     end
-    safeObjectCall(helper, "registerParent", payload)
+    return safeObjectCall(helper, "registerParent", payload)
 end
 
 local function restoreRuntimeState(helper, runtimeState)
@@ -947,13 +1033,13 @@ local function cacheExportedState(helper)
     return nil
 end
 
-local function acceptStableHelper(helper, expectedVersion, runtimeState)
-    registerHelper(helper, runtimeState)
-    if not restoreRuntimeState(helper, runtimeState) then
+local function acceptStableHelper(helper, expectedVersion, runtimeState, restoredDuringBinding)
+    -- probeExistingHelper already bound this helper before checking its health.
+    if not restoredDuringBinding and not restoreRuntimeState(helper, runtimeState) then
         return false
     end
     startupInstallAttempts = 0
-    local exported = cacheExportedState(helper)
+    local exported = restoredDuringBinding and state.runtimeState or cacheExportedState(helper)
     if exported == nil and type(runtimeState) == "table" then
         state.runtimeState = runtimeState
     end
@@ -972,10 +1058,11 @@ local function probeExistingHelper(helperGuid, serial, attemptsRemaining, runtim
         ensureHelper(runtimeStateToRestore)
         return
     end
-    registerHelper(helper, runtimeStateToRestore)
+    local bound, accepted = registerHelper(helper, runtimeStateToRestore)
     local ok, health = safeObjectCall(helper, "healthCheck", {})
     if ok and healthIsValid(health, state.runtimeVersion) then
-        acceptStableHelper(helper, state.runtimeVersion, runtimeStateToRestore)
+        acceptStableHelper(helper, state.runtimeVersion, runtimeStateToRestore,
+            bound and accepted == true and type(health) == "table" and health.startupStateVersion == 1)
         return
     end
     if attemptsRemaining > 0 then
@@ -1075,6 +1162,11 @@ ensureHelper = function(runtimeStateToRestore)
     configureHelper(helper)
     startupSerial = startupSerial + 1
     local serial = startupSerial
+    if runtimeReadyPayload and runtimeReadyPayload.helperGuid == helper.getGUID()
+        and healthIsValid(runtimeReadyPayload.health, state.runtimeVersion) then
+        probeExistingHelper(helper.getGUID(), serial, 4, runtimeStateToRestore)
+        return helper
+    end
     Wait.time(function()
         probeExistingHelper(helper.getGUID(), serial, 4, runtimeStateToRestore)
     end, HELPER_PROBE_INTERVAL)
@@ -1628,17 +1720,19 @@ function onLoad(savedData)
     state.schemaVersion = STATE_SCHEMA_VERSION
     state.characterId = CHARACTER_ID
     startupInstallAttempts = 0
+    savedUiAttributes = state.uiAttributeValues or {}
     if type(state.uiXml) == "string" and state.uiXml ~= "" then
         installUiXml(state.uiXml)
     end
     setRefreshFeedback("", false)
-    ensureHelper()
+    -- Saved helpers can finish onLoad and announce themselves before discovery.
+    Wait.time(function() if not update.active then ensureHelper() end end, HELPER_PROBE_INTERVAL)
 end
 
 function recoverUi(_, playerColor, _)
     local color = playerColorOf(playerColor)
     local xml = state and state.uiXml or SEED_UI
-    if installUiXml(xml) then
+    if installUiXml(xml, true) then
         tell(color, "recarregando a interface...", {0.80, 0.68, 0.38})
     else
         tell(color, "não foi possível recarregar a interface.", {1.0, 0.38, 0.30})
@@ -1656,6 +1750,7 @@ function onSave()
     state.bootstrapVersion = BOOTSTRAP_VERSION
     state.schemaVersion = STATE_SCHEMA_VERSION
     state.characterId = CHARACTER_ID
+    state.uiAttributeValues = uiAttributeValues
     return safeEncode(state)
 end
 
@@ -1668,6 +1763,10 @@ end
 
 function dispatch(player, value, id)
     local playerColor = playerColorOf(player)
+    -- Native inputs/toggles can change their displayed value without going
+    -- through setAttribute. The next render must reconcile that control even
+    -- when the desired value equals the last value sent by the runtime.
+    if type(id) == "string" then uiAppliedAttributeValues[id] = nil end
     if id == "refresh" or id == "settings_refresh" or id == "bootstrap_refresh" then
         refresh(playerColor, value, id)
         return
@@ -1810,8 +1909,32 @@ function getBootstrapInfo()
         bootstrapVersion = BOOTSTRAP_VERSION,
         schemaVersion = STATE_SCHEMA_VERSION,
         characterId = CHARACTER_ID,
+        uiProtocolVersion = 1,
+        startupBindingVersion = 1,
         runtimeVersion = state and state.runtimeVersion or SEED_RUNTIME_VERSION,
         helperGuid = state and state.helperGuid or nil,
         updating = update.active,
     }
+end
+
+function setRuntimeUiAttributes(payload)
+    if type(payload) ~= "table" or payload.characterId ~= CHARACTER_ID
+        or payload.parentGuid ~= self.getGUID() or type(payload.attributes) ~= "table" then
+        return false
+    end
+    -- Validate the entire message before changing the desired UI state.
+    for id, attributes in pairs(payload.attributes) do
+        if type(id) ~= "string" or type(attributes) ~= "table" then return false end
+        for attribute, value in pairs(attributes) do
+            if UI_ATTRIBUTES[attribute] ~= true or type(value) ~= "string" then return false end
+        end
+    end
+    for id, attributes in pairs(payload.attributes) do
+        for attribute, value in pairs(attributes) do
+            setUiAttribute(id, attribute, value)
+        end
+    end
+    -- Accepted also means queued while XML is loading. Failed engine writes
+    -- remain uncached and are retried on the next render or explicit recovery.
+    return true
 end

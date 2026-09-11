@@ -10,7 +10,8 @@
     "character:new": "node scripts/new-character.mjs",
     "test": "node --test",
     "test:lua": "pwsh -NoProfile -File scripts/smoke-moonsharp.ps1",
-    "verify:tts-assets": "node scripts/verify-tts-assets.mjs"
+    "verify:tts-assets": "node scripts/verify-tts-assets.mjs",
+    "benchmark:lua": "pwsh -NoProfile -File scripts/benchmark-runtime.ps1 -CharacterId spentar -BaselineRef 8f6d941"
   },
   "engines": {
     "node": ">=20"

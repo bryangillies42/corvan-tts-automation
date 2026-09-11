@@ -833,7 +833,7 @@ local world = {helpers = {}, json = {}, jsonSerial = 0, crossBindings = 0}
 
 local function jsonEncode(value)
     world.jsonSerial = world.jsonSerial + 1
-    local token = 'JSON:' .. tostring(world.jsonSerial)
+    local token = 'JSON:' .. tostring(world.jsonSerial) .. ':' .. tostring(value.parentGuid or '')
     world.json[token] = value
     return token
 end
@@ -2568,5 +2568,10 @@ $releaseDiscoveryResult = $releaseDiscoveryRunner.DoString($fixtureBootstrap + "
 if ($releaseDiscoveryResult -ne '"arcane-test-v2.0.0", true') {
     throw "Smoke de descoberta retornou '$releaseDiscoveryResult'."
 }
+
+$writerRunner = [MoonSharp.Interpreter.Script]::new([MoonSharp.Interpreter.CoreModules]::Preset_Complete)
+$writerSource = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'shared/runtime-core.lua')
+$writerAssertions = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'tests/lua/ui-writer.lua')
+Write-Output $writerRunner.DoString($writerSource + "`n" + $writerAssertions).String
 
 Write-Output "MoonSharp OK: runtimes/bootstraps Corvan+Arcane+Spentar compilam; regras, estado, UI, helpers, cache e dados dos 3 personagens isolados; combate $runtimeFlowResult; SHA-256 em $integrityFrames frames; onLoad, cópia persistente, watchdog, update e rollback seguros"

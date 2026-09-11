@@ -10,7 +10,7 @@ const uiSource = await readFile(new URL('../characters/corvan/ui.xml', import.me
 test('keeps one build-time placeholder for the seed UI and runtime', () => {
   assert.equal((source.match(/__SEED_UI_LITERAL__/g) ?? []).length, 1);
   assert.equal((source.match(/__SEED_RUNTIME_LITERAL__/g) ?? []).length, 1);
-  assert.match(source, /local BOOTSTRAP_VERSION = "1\.0\.2"/);
+  assert.match(source, /local BOOTSTRAP_VERSION = "1\.0\.5"/);
   assert.match(source, /local SEED_RUNTIME_VERSION = __CHARACTER_VERSION_LITERAL__/);
   assert.match(source, /local SEED_UI = __SEED_UI_LITERAL__/);
   assert.match(source, /local SEED_RUNTIME = __SEED_RUNTIME_LITERAL__/);
@@ -87,7 +87,7 @@ test('waits for object UI loading and only targets IDs declared by the XML', () 
   assert.match(source, /isOn = true/);
   assert.match(source, /if not uiReady or uiIds\[id\] ~= true then\s+return false/);
   assert.match(source, /return self\.UI\.loading/);
-  assert.match(source, /Wait\.frames\(function\(\)\s+Wait\.condition\(finishLoading, hasFinishedLoading/);
+  assert.match(source, /Wait\.frames\(function\(\)\s+if serial ~= uiLoadSerial then return end\s+Wait\.condition\(finishLoading, hasFinishedLoading/);
   assert.match(source, /Wait\.condition\(finishLoading, hasFinishedLoading/);
   assert.doesNotMatch(source, /type\(Wait\)\s*==\s*"table"/);
   assert.doesNotMatch(runtimeSource, /type\(Wait\)\s*==\s*"table"/);

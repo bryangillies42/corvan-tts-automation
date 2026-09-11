@@ -446,7 +446,7 @@ local function parentCall(name, payload)
     local parent = resolveParent()
     if parent == nil or type(parent.call) ~= "function" then return false end
     local ok, result = pcall(function() return parent.call(name, payload) end)
-    return ok and result ~= false
+    return ok and result ~= false, result
 end
 
 local function privateError(message, playerColor)
@@ -463,17 +463,25 @@ local function publicMessage(message, playerColor, richText)
     })
 end
 
+local UiWriter = RuntimeCore.createUiWriter(CHARACTER_ID, parentCall, function() return parentGuid end)
+local renderPending = false
+
 local function safeSet(id, attribute, value)
-    return parentCall("setRuntimeUiAttribute", {
-        characterId=CHARACTER_ID, id=id, attribute=attribute, value=tostring(value or "")
-    })
+    return UiWriter.set(id, attribute, tostring(value or ""))
 end
 
 local function snapshot()
-    local copy = deepCopy(state)
-    copy.undo = {}
-    copy.casting.transaction = nil
-    return {character=copy, core=deepCopy(coreState)}
+    -- Do not copy the entire undo history just to throw it away afterwards.
+    local source = {}
+    for key, value in pairs(state) do
+        if key ~= "undo" and key ~= "casting" then source[key] = value end
+    end
+    source.undo = {}
+    source.casting = {}
+    for key, value in pairs(state.casting) do
+        if key ~= "transaction" then source.casting[key] = value end
+    end
+    return {character=deepCopy(source), core=deepCopy(coreState)}
 end
 
 local function pushUndo()
@@ -513,20 +521,33 @@ local function selectedPreparation()
     return state.casting.draft
 end
 
+local previewPlans = {}
 local function preparationPlan(spellId, preparation)
-    local shadow = deepCopy(state)
-    shadow.casting.preparations[spellId] = deepCopy(preparation)
-    shadow.scene.profanarTargetsConfirmed = preparation.profaneTargets == true
-    return SpentarRules.damagePlan(CHARACTER, shadow, spellId)
+    local slot = (preparation == state.casting.draft and "draft:" or "saved:") .. spellId
+    local key = table.concat({tostring(state.scene.profanar), tostring(state.souls.stored),
+        tostring(preparation.profaneTargets), tostring(preparation.damageType),
+        tostring(preparation.darkness), tostring(preparation.diceCount), tostring(preparation.diceSides),
+        tostring(preparation.bonus), tostring(preparation.releasedSouls), tostring(preparation.targets)}, "|")
+    local cached = previewPlans[slot]
+    if cached and cached.key == key then return cached.plan end
+    -- damagePlan only reads these fields; transactions still take their own copy.
+    local view = {
+        casting = {preparations = {[spellId] = preparation}},
+        scene = {profanar = state.scene.profanar, profanarTargetsConfirmed = preparation.profaneTargets == true},
+        souls = state.souls
+    }
+    local plan = SpentarRules.damagePlan(CHARACTER, view, spellId)
+    previewPlans[slot] = {key = key, plan = plan}
+    return plan
 end
 
 local function quickPreview(spellId)
     if spellId == "animate_dead" then
-        local shadow = deepCopy(state)
         local preparation = state.casting.preparations.animate_dead
             or defaultPreparation("animate_dead")
-        shadow.scene.profanarTargetsConfirmed = preparation.profaneTargets == true
-        return formatPlanPreview(SpentarRules.undeadDamagePlan(CHARACTER, shadow,
+        local view = {scene = {profanar = state.scene.profanar,
+            profanarTargetsConfirmed = preparation.profaneTargets == true}}
+        return formatPlanPreview(SpentarRules.undeadDamagePlan(CHARACTER, view,
             state.summons.undeadCount))
     end
     if spellId == "ballistic_spirit" then
@@ -540,6 +561,9 @@ end
 
 local function render()
     if not CHARACTER or not state then return end
+    UiWriter.begin()
+    local page = UiWriter.supportsBatch() and coreState.page or nil
+    local phase = state.casting.phase
     local defenses = SpentarRules.calculateDefenses(CHARACTER, state)
     safeSet("resource_hp", "text", "PV " .. state.resources.hp .. "/" .. CHARACTER.resources.hp.max)
     safeSet("resource_mp", "text", "PM " .. state.resources.mp .. "/" .. CHARACTER.resources.mp.max)
@@ -560,96 +584,108 @@ local function render()
         and "PROFANAR\nATIVO" or "PREPARAR\nPROFANAR")
     safeSet("connection_value", "text", string.upper(state.scene.connectionMode)
         .. " C" .. state.scene.connectionCircle)
-    safeSet("connection_circle_value", "text", state.scene.connectionCircle)
-    safeSet("connection_cost", "text", "PV PAGOS NA CENA: "
-        .. tostring(state.scene.connectionPaidHp))
-    safeSet("undead_formula", "text", tostring(state.summons.undeadCount) .. "d6 + "
-        .. tostring(state.summons.undeadCount * 2 + CHARACTER.attributes.intelligence))
-    safeSet("ballistic_formula", "text", tostring(state.summons.ballisticSpirits
-        * state.summons.ballisticDice) .. "d6 + "
-        .. tostring(state.summons.ballisticSpirits * 7))
-    safeSet("corpse_value", "text", string.upper(state.summons.corpsePartner))
-    safeSet("command_value", "text", (state.summons.commandUsed.undead
-        and "MORTOS: USADO" or "MORTOS: LIVRE") .. " • "
-        .. (state.summons.commandUsed.ballistic and "ESPÍRITOS: USADO" or "ESPÍRITOS: LIVRE"))
-    safeSet("mark_command_used", "text",
-        (state.summons.commandUsed.undead and state.summons.commandUsed.ballistic)
-            and "LIBERAR COMANDOS" or "MARCAR TODOS USADOS")
+    if page == nil or page == "necromancy" then
+        safeSet("connection_circle_value", "text", state.scene.connectionCircle)
+        safeSet("connection_cost", "text", "PV PAGOS NA CENA: "
+            .. tostring(state.scene.connectionPaidHp))
+        safeSet("undead_formula", "text", tostring(state.summons.undeadCount) .. "d6 + "
+            .. tostring(state.summons.undeadCount * 2 + CHARACTER.attributes.intelligence))
+        safeSet("ballistic_formula", "text", tostring(state.summons.ballisticSpirits
+            * state.summons.ballisticDice) .. "d6 + "
+            .. tostring(state.summons.ballisticSpirits * 7))
+        safeSet("corpse_value", "text", string.upper(state.summons.corpsePartner))
+        safeSet("command_value", "text", (state.summons.commandUsed.undead
+            and "MORTOS: USADO" or "MORTOS: LIVRE") .. " • "
+            .. (state.summons.commandUsed.ballistic and "ESPÍRITOS: USADO" or "ESPÍRITOS: LIVRE"))
+        safeSet("mark_command_used", "text",
+            (state.summons.commandUsed.undead and state.summons.commandUsed.ballistic)
+                and "LIBERAR COMANDOS" or "MARCAR TODOS USADOS")
+        safeSet("necromancy_souls_detail", "text", "+" .. tostring(state.souls.stored * 2)
+            .. " DEF/RES • " .. tostring(state.souls.stored * 2) .. "d6 ao liberar")
+    end
     safeSet("necropotency_value", "text", tostring(state.scene.necropotencyGained)
         .. "/" .. tostring(CHARACTER.resources.necropotency.max))
-    safeSet("necromancy_souls_detail", "text", "+" .. tostring(state.souls.stored * 2)
-        .. " DEF/RES • " .. tostring(state.souls.stored * 2) .. "d6 ao liberar")
     safeSet("version_label", "text", "v" .. CHARACTER_VERSION)
-    local selectedSpell = CHARACTER.spells[state.casting.spellId]
-    local preparation = selectedPreparation()
-    local selectedPlan = preparationPlan(state.casting.spellId, preparation)
-    safeSet("prepare_cost", "text", preparation.cost)
-    safeSet("prepare_targets", "text", preparation.targets)
-    safeSet("prepare_dice_count", "text", preparation.diceCount)
-    safeSet("prepare_dice_sides", "text", preparation.diceSides)
-    safeSet("prepare_bonus", "text", preparation.bonus)
-    safeSet("prepare_souls", "text", preparation.releasedSouls)
-    safeSet("prepare_note", "text", preparation.note)
-    safeSet("prepare_effect", "text", preparation.effect)
-    safeSet("prepare_darkness", "text", preparation.darkness and "TREVAS: SIM" or "TREVAS: NÃO")
-    safeSet("prepare_profane_targets", "text", preparation.profaneTargets
-        and "ALVOS NO PROFANAR: SIM" or "ALVOS NO PROFANAR: NÃO")
-    safeSet("prepare_formula", "text", formatPlanPreview(selectedPlan))
-    safeSet("prepare_spell_name", "text", selectedSpell.name)
-    safeSet("quick_inflict_formula", "text", quickPreview("inflict_wounds"))
-    safeSet("quick_arcane_bolt_formula", "text", quickPreview("arcane_bolt"))
-    safeSet("quick_undead_formula", "text", quickPreview("animate_dead"))
-    safeSet("quick_ballistic_formula", "text", quickPreview("ballistic_spirit"))
-    local lastUsedSpellId = state.casting.lastUsedSpellId or state.casting.spellId
-    local lastUsedSpell = CHARACTER.spells[lastUsedSpellId]
-    local lastUsedPreparation = state.casting.preparations[lastUsedSpellId]
-        or defaultPreparation(lastUsedSpellId)
-    safeSet("combat_last_preparation", "text", lastUsedSpell.name .. " • "
-        .. formatPlanPreview(preparationPlan(lastUsedSpellId, lastUsedPreparation)))
-    safeSet("bodies_available", "text", state.summons.bodiesAvailable)
-    safeSet("undead_count", "text", state.summons.undeadCount)
-    safeSet("ballistic_count", "text", state.summons.ballisticSpirits)
-    safeSet("ballistic_dice", "text", state.summons.ballisticDice)
-    safeSet("corpse_partner", "text", state.summons.corpsePartner)
-    local pending = state.casting.pendingResolution
-    safeSet("pending_resolution", "active", pending and "true" or "false")
-    safeSet("pending_failed", "text", pending and pending.failed or 0)
-    safeSet("pending_defeated", "text", pending and pending.defeated or 0)
-    safeSet("pending_summary", "text", pending and
-        ((CHARACTER.spells[pending.spellId] and CHARACTER.spells[pending.spellId].name
-            or "Ação") .. " • resolução opcional"
-            .. (#state.casting.pendingResolutions > 0
-                and " • +" .. #state.casting.pendingResolutions .. " na fila" or "")) or "")
-    local phase = state.casting.phase
-    local rollingDiceCount = 0
-    if type(state.casting.transaction) == "table"
-        and type(state.casting.transaction.plan) == "table" then
-        for _, group in ipairs(state.casting.transaction.plan.groups or {}) do
-            if not group.maximized then
-                rollingDiceCount = rollingDiceCount + math.max(0, integer(group.count, 0))
+    local selectedSpell, selectedPlan
+    if page == nil or page == "casting" then
+        selectedSpell = CHARACTER.spells[state.casting.spellId]
+        local preparation = selectedPreparation()
+        selectedPlan = preparationPlan(state.casting.spellId, preparation)
+        safeSet("prepare_cost", "text", preparation.cost)
+        safeSet("prepare_targets", "text", preparation.targets)
+        safeSet("prepare_dice_count", "text", preparation.diceCount)
+        safeSet("prepare_dice_sides", "text", preparation.diceSides)
+        safeSet("prepare_bonus", "text", preparation.bonus)
+        safeSet("prepare_souls", "text", preparation.releasedSouls)
+        safeSet("prepare_note", "text", preparation.note)
+        safeSet("prepare_effect", "text", preparation.effect)
+        safeSet("prepare_darkness", "text", preparation.darkness and "TREVAS: SIM" or "TREVAS: NÃO")
+        safeSet("prepare_profane_targets", "text", preparation.profaneTargets
+            and "ALVOS NO PROFANAR: SIM" or "ALVOS NO PROFANAR: NÃO")
+        safeSet("prepare_formula", "text", formatPlanPreview(selectedPlan))
+        safeSet("prepare_spell_name", "text", selectedSpell.name)
+    end
+    if page == nil or page == "combat" then
+        safeSet("quick_inflict_formula", "text", quickPreview("inflict_wounds"))
+        safeSet("quick_arcane_bolt_formula", "text", quickPreview("arcane_bolt"))
+        safeSet("quick_undead_formula", "text", quickPreview("animate_dead"))
+        safeSet("quick_ballistic_formula", "text", quickPreview("ballistic_spirit"))
+        local lastUsedSpellId = state.casting.lastUsedSpellId or state.casting.spellId
+        local lastUsedSpell = CHARACTER.spells[lastUsedSpellId]
+        local lastUsedPreparation = state.casting.preparations[lastUsedSpellId]
+            or defaultPreparation(lastUsedSpellId)
+        safeSet("combat_last_preparation", "text", lastUsedSpell.name .. " • "
+            .. formatPlanPreview(preparationPlan(lastUsedSpellId, lastUsedPreparation)))
+    end
+    if page == nil or page == "necromancy" then
+        safeSet("bodies_available", "text", state.summons.bodiesAvailable)
+        safeSet("undead_count", "text", state.summons.undeadCount)
+        safeSet("ballistic_count", "text", state.summons.ballisticSpirits)
+        safeSet("ballistic_dice", "text", state.summons.ballisticDice)
+        safeSet("corpse_partner", "text", state.summons.corpsePartner)
+    end
+    if page == nil or page == "combat" then
+        local pending = state.casting.pendingResolution
+        safeSet("pending_resolution", "active", pending and "true" or "false")
+        safeSet("pending_failed", "text", pending and pending.failed or 0)
+        safeSet("pending_defeated", "text", pending and pending.defeated or 0)
+        safeSet("pending_summary", "text", pending and
+            ((CHARACTER.spells[pending.spellId] and CHARACTER.spells[pending.spellId].name
+                or "Ação") .. " • resolução opcional"
+                .. (#state.casting.pendingResolutions > 0
+                    and " • +" .. #state.casting.pendingResolutions .. " na fila" or "")) or "")
+    end
+    if page == nil or page == "casting" then
+        local rollingDiceCount = 0
+        if type(state.casting.transaction) == "table"
+            and type(state.casting.transaction.plan) == "table" then
+            for _, group in ipairs(state.casting.transaction.plan.groups or {}) do
+                if not group.maximized then
+                    rollingDiceCount = rollingDiceCount + math.max(0, integer(group.count, 0))
+                end
             end
         end
-    end
-    safeSet("prepare_status", "text", phase == "rolling"
-        and coreState.lastResult .. "\n" .. tostring(rollingDiceCount)
-            .. " DADOS FÍSICOS • AGUARDANDO ESTABILIZAÇÃO"
-            .. "\nRecursos serão restaurados se a rolagem falhar."
-        or "PREPARO EDITÁVEL • nenhuma alteração gasta recursos")
-    safeSet("prepare_preview", "text", "CD "
-        .. tostring(SpentarRules.calculateSpellDifficulty(CHARACTER, state, state.casting.spellId))
-        .. " • " .. tostring(selectedSpell.resistance or "SEM RESISTÊNCIA")
-        .. " • " .. tostring(selectedSpell.summary or ""))
-    safeSet("prepare_cost_warning", "text",
-        state.preferences.automaticResourceSpending
-            and "O custo será cobrado somente ao rolar ou aplicar."
-            or "Gasto automático desligado.")
-    safeSet("prepare_roll", "text",
-        state.casting.spellId == "ballistic_spirit" and "CONJURAR"
-            or (selectedPlan and "ROLAR" or "APLICAR"))
-    local configuring = phase ~= "rolling"
-    local canSelectSpell = configuring
-    for spellId in pairs(CHARACTER.spells) do
-        safeSet("prepare_select_" .. spellId, "interactable", canSelectSpell and "true" or "false")
+        safeSet("prepare_status", "text", phase == "rolling"
+            and coreState.lastResult .. "\n" .. tostring(rollingDiceCount)
+                .. " DADOS FÍSICOS • AGUARDANDO ESTABILIZAÇÃO"
+                .. "\nRecursos serão restaurados se a rolagem falhar."
+            or "PREPARO EDITÁVEL • nenhuma alteração gasta recursos")
+        safeSet("prepare_preview", "text", "CD "
+            .. tostring(SpentarRules.calculateSpellDifficulty(CHARACTER, state, state.casting.spellId))
+            .. " • " .. tostring(selectedSpell.resistance or "SEM RESISTÊNCIA")
+            .. " • " .. tostring(selectedSpell.summary or ""))
+        safeSet("prepare_cost_warning", "text",
+            state.preferences.automaticResourceSpending
+                and "O custo será cobrado somente ao rolar ou aplicar."
+                or "Gasto automático desligado.")
+        safeSet("prepare_roll", "text",
+            state.casting.spellId == "ballistic_spirit" and "CONJURAR"
+                or (selectedPlan and "ROLAR" or "APLICAR"))
+        local configuring = phase ~= "rolling"
+        local canSelectSpell = configuring
+        for spellId in pairs(CHARACTER.spells) do
+            safeSet("prepare_select_" .. spellId, "interactable", canSelectSpell and "true" or "false")
+        end
     end
     local rolling = state.casting.transaction ~= nil or phase == "rolling"
     local canClearDice = rolling or tableHasEntries(coreState.ownedDice)
@@ -661,38 +697,56 @@ local function render()
         safeSet(id, "interactable", mutableOutsideCasting and "true" or "false")
     end
     safeSet("toggle_profanar", "interactable", mutableOutsideCasting and "true" or "false")
-    safeSet("necro_undead_roll", "interactable",
-        (mutableOutsideCasting and not state.summons.commandUsed.undead) and "true" or "false")
-    safeSet("necro_ballistic_roll", "interactable",
-        (mutableOutsideCasting and not state.summons.commandUsed.ballistic) and "true" or "false")
+    if page == nil or page == "necromancy" then
+        safeSet("necro_undead_roll", "interactable",
+            (mutableOutsideCasting and not state.summons.commandUsed.undead) and "true" or "false")
+        safeSet("necro_ballistic_roll", "interactable",
+            (mutableOutsideCasting and not state.summons.commandUsed.ballistic) and "true" or "false")
+    end
     safeSet("clear_dice", "text", rolling and "CANCELAR E LIMPAR" or "LIMPAR DADOS")
     safeSet("clear_dice", "interactable", canClearDice and "true" or "false")
     safeSet("undo", "text", "DESFAZER ÚLTIMA AÇÃO")
     safeSet("undo", "interactable",
         (mutableOutsideCasting and #state.undo > 0) and "true" or "false")
     safeSet("last_result", "text", coreState.lastResult)
-    safeSet("offset_x_value", "text", string.format("%.1f", coreState.diceOffset.x))
-    safeSet("offset_y_value", "text", string.format("%.1f", coreState.diceOffset.y))
-    safeSet("offset_z_value", "text", string.format("%.1f", coreState.diceOffset.z))
-    safeSet("toggle_auto_spend", "text", "GASTO AUTOMÁTICO: "
-        .. (state.preferences.automaticResourceSpending and "SIM" or "NÃO"))
-    safeSet("toggle_physical_dice", "text", "DADOS FÍSICOS: "
-        .. (state.preferences.physicalDice and "SIM" or "NÃO"))
-    safeSet("toggle_detailed_chat", "text", "DETALHAMENTO NO CHAT: "
-        .. (state.preferences.detailedChat and "SIM" or "NÃO"))
-    safeSet("health_status", "text", coreState.healthStatus)
-    safeSet("settings_status", "text", "IDENTIDADE: SPENTAR • SCHEMA "
-        .. tostring(STATE_SCHEMA_VERSION) .. " • ISOLADO")
+    if page == nil or page == "settings" then
+        safeSet("offset_x_value", "text", string.format("%.1f", coreState.diceOffset.x))
+        safeSet("offset_y_value", "text", string.format("%.1f", coreState.diceOffset.y))
+        safeSet("offset_z_value", "text", string.format("%.1f", coreState.diceOffset.z))
+        safeSet("toggle_auto_spend", "text", "GASTO AUTOMÁTICO: "
+            .. (state.preferences.automaticResourceSpending and "SIM" or "NÃO"))
+        safeSet("toggle_physical_dice", "text", "DADOS FÍSICOS: "
+            .. (state.preferences.physicalDice and "SIM" or "NÃO"))
+        safeSet("toggle_detailed_chat", "text", "DETALHAMENTO NO CHAT: "
+            .. (state.preferences.detailedChat and "SIM" or "NÃO"))
+        safeSet("health_status", "text", coreState.healthStatus)
+        safeSet("settings_status", "text", "IDENTIDADE: SPENTAR • SCHEMA "
+            .. tostring(STATE_SCHEMA_VERSION) .. " • ISOLADO")
+    end
     for _, page in ipairs({"combat","casting","necromancy","sheet","settings"}) do
         safeSet("page_" .. page, "active", page == coreState.page and "true" or "false")
         safeSet("nav_" .. page, "interactable",
             (phase ~= "rolling" and page ~= coreState.page) and "true" or "false")
     end
+    UiWriter.flush()
 end
 
-local function cacheAndRender()
-    cacheState()
+local function flushRender()
+    if not renderPending then return end
+    renderPending = false
     render()
+end
+
+local function cacheAndRender(immediate)
+    cacheState()
+    if immediate == true then
+        renderPending = true
+        flushRender()
+    elseif not renderPending then
+        renderPending = true
+        local scheduled = pcall(function() Wait.frames(flushRender, 1) end)
+        if not scheduled then flushRender() end
+    end
 end
 
 local function createDiceHost()
@@ -809,7 +863,7 @@ local function beginDamageRoll(plan, cost, playerColor)
     coreState.lastResult = "ROLANDO • " .. tostring(plan.label)
     -- A página e o estado de rolagem precisam aparecer antes de qualquer dado
     -- ser criado; a transação persistida também permite rollback em save/load.
-    cacheAndRender()
+    cacheAndRender(true)
     if state.preferences.physicalDice == false then
         local result = {groups={}, ownedGuids=coreState.ownedDice}
         for _, group in ipairs(plan.groups or {}) do
@@ -1161,11 +1215,11 @@ local function beginUndeadRoll(playerColor)
         privateError("O comando dos mortos-vivos já foi usado nesta rodada.", playerColor)
         return false
     end
-    local shadow = deepCopy(state)
     local preparation = state.casting.preparations.animate_dead
         or defaultPreparation("animate_dead")
-    shadow.scene.profanarTargetsConfirmed = preparation.profaneTargets == true
-    local plan = SpentarRules.undeadDamagePlan(CHARACTER, shadow, state.summons.undeadCount)
+    local view = {scene = {profanar = state.scene.profanar,
+        profanarTargetsConfirmed = preparation.profaneTargets == true}}
+    local plan = SpentarRules.undeadDamagePlan(CHARACTER, view, state.summons.undeadCount)
     plan.kind = "direct"
     state.casting.lastUsedSpellId = "animate_dead"
     local started = beginDamageRoll(plan, 0, playerColor)
@@ -1444,7 +1498,8 @@ function healthCheck(_)
         rollInProgress = diceHost ~= nil and type(diceHost.isRolling) == "function"
             and diceHost.isRolling() or false,
         stateSchemaVersion = STATE_SCHEMA_VERSION,
-        error = configurationError
+        error = configurationError,
+        startupStateVersion = 1
     }
 end
 
@@ -1458,6 +1513,7 @@ function registerParent(payload)
     parentCall("applyRuntimeUi", {xml=UI_XML, characterId=CHARACTER_ID, version=CHARACTER_VERSION})
     cacheAndRender()
     parentCall("runtimeReady", {
+        helperGuid=self.getGUID(),
         characterId=CHARACTER_ID, version=CHARACTER_VERSION, parentGuid=parentGuid,
         health=healthCheck({})
     })
@@ -1470,6 +1526,15 @@ function onLoad(savedData)
     if type(savedData) == "string" and savedData ~= "" and type(JSON) == "table" then
         local ok, decoded = pcall(function() return JSON.decode(savedData) end)
         if ok and type(decoded) == "table" then acceptState(decoded) end
+    end
+    -- Announce the saved helper before the panel's deferred discovery. Binding
+    -- still validates ownership and restores the panel's authoritative state.
+    local ok, notes = pcall(function() return JSON.decode(self.getGMNotes()) end)
+    if ok and type(notes) == "table" and notes.characterId == CHARACTER_ID
+        and type(notes.parentGuid) == "string" then
+        parentGuid = notes.parentGuid
+        parentCall("runtimeReady", {characterId=CHARACTER_ID, parentGuid=parentGuid,
+            helperGuid=self.getGUID(), version=CHARACTER_VERSION, health=healthCheck({})})
     end
 end
 
