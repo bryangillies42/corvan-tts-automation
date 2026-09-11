@@ -1,5 +1,29 @@
 # Startup do Corvan
 
+## Ficha nível 9 sobre o bootstrap 1.0.6
+
+Esta rodada compara a ficha nível 9 em `b73e2530b70d71c42d364c393d70a963de09f345` com o candidato compacto anterior `cfec0781d66116c415b48d1003c9c536013d8a4b`. Foram executadas 50 cargas por cenário. As variantes possuem valores funcionais diferentes por causa da evolução do personagem; o benchmark compara o trabalho de startup e mantém as verificações de segurança, enquanto as regras são validadas separadamente pelos testes Node e pelo smoke MoonSharp.
+
+```powershell
+pwsh -NoProfile -File scripts/benchmark-runtime.ps1 -Startup -AllowCharacterChanges -Iterations 50 -BaselineRef cfec078 -ReportPath docs/benchmarks/startup-corvan-level9.json
+```
+
+- A interface permaneceu com 187 elementos e 62 IDs.
+- Todas as contagens de operações ficaram iguais: uma renderização por carga, 16 tabelas copiadas, 39 atributos aplicados, nenhum reload e nenhum bloco de SHA-256. Somente o cenário sem UI executa uma montagem XML, como antes.
+- O Saved Object passou de 215.608 para 216.180 bytes (+0,27%); o runtime compactado passou de 102.031 para 102.427 bytes (+0,39%).
+- A média das medianas do harness passou de 74,47 para 75,32 ms (+1,15%). As medianas individuais variaram entre 3,70% mais lentas e 2,02% mais rápidas, sem uma alteração consistente que indique regressão de startup.
+
+| Cenário | Antes → nível 9 | Variação |
+| --- | ---: | ---: |
+| Painel primeiro / UI restaurada | 68,58 → 71,12 ms | 3,70% mais lento |
+| Helper primeiro / UI restaurada | 67,97 → 69,35 ms | 2,03% mais lento |
+| UI dinâmica restaurada | 96,08 → 97,53 ms | 1,52% mais lento |
+| UI ausente | 69,16 → 69,52 ms | 0,52% mais lento |
+| GUID antigo / 1.000 objetos | 66,97 → 67,96 ms | 1,47% mais lento |
+| Busca sem anúncio / 1.000 objetos | 78,04 → 76,46 ms | 2,02% mais rápido |
+
+Os percentis 95 tiveram outliers grandes nas duas direções e não foram usados para concluir melhora ou piora. O resultado relevante para o startup é a manutenção exata das chamadas ao engine simulado e da quantidade de elementos, apesar das novas regras.
+
 ## Rodada bootstrap 1.0.6
 
 Esta rodada compara o candidato compacto com `45cd049c9894cb350e922a39a0d4dcaed624afd2`, que já contém o bootstrap 1.0.5 e as deduplicações anteriores.

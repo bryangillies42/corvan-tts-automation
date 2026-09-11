@@ -1,0 +1,772 @@
+{
+  "characterId": "corvan",
+  "baselineCommit": "cfec0781d66116c415b48d1003c9c536013d8a4b",
+  "candidateCommit": "b73e2530b70d71c42d364c393d70a963de09f345",
+  "candidateDirty": false,
+  "iterations": 50,
+  "semanticEquivalence": false,
+  "startup": true,
+  "methodology": "Offline MoonSharp, real built sources, fresh Lua environments per load, restored host XML and helper. Two warmup pairs per scenario; alternating before/after order. luaHarnessMs measures wall-clock execution of harness setup, Lua compilation and startup including mock host/JSON and instrumentation; scheduled waits run on a simulated clock. Excludes Unity XML/layout, assets and disk I/O. Not TTS loading time. The variants intentionally contain different character values; cross-version state/UI equality is skipped while startup safety invariants remain enforced.",
+  "sourceHashes": {
+    "runtime": "C223401E2A5BC938E0533568B63FF5052F7A76486559F825B9BE406122A34D58",
+    "bootstrap": "86E500A20E2B86339D959100CE8EE8F56C47104C0105AB885E26BA5072B9807E"
+  },
+  "results": [
+    {
+      "scenario": "saved-panel-first",
+      "metric": "xmlSets",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "saved-panel-first",
+      "metric": "renderPasses",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-panel-first",
+      "metric": "registrations",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-panel-first",
+      "metric": "imports",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "saved-panel-first",
+      "metric": "exports",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "saved-panel-first",
+      "metric": "cacheCalls",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-panel-first",
+      "metric": "helperConfigurations",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-panel-first",
+      "metric": "tableScans",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "saved-panel-first",
+      "metric": "noteReads",
+      "before": 150.0,
+      "after": 150.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-panel-first",
+      "metric": "noteDecodes",
+      "before": 100.0,
+      "after": 100.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-panel-first",
+      "metric": "copyTables",
+      "before": 800.0,
+      "after": 800.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-panel-first",
+      "metric": "uiCalls",
+      "before": 100.0,
+      "after": 100.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-panel-first",
+      "metric": "attributeSets",
+      "before": 1950.0,
+      "after": 1950.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-panel-first",
+      "metric": "reloads",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "saved-panel-first",
+      "metric": "hashBlocks",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "saved-panel-first",
+      "metric": "luaHarnessMs",
+      "before": 4028.769099999219,
+      "after": 4197.037699995562,
+      "reductionPercent": -4.18
+    },
+    {
+      "scenario": "saved-panel-first",
+      "metric": "luaHarnessMedianMs",
+      "before": 68.58330000005662,
+      "after": 71.12069999985397,
+      "reductionPercent": -3.7
+    },
+    {
+      "scenario": "saved-panel-first",
+      "metric": "luaHarnessP95Ms",
+      "before": 190.55220000073314,
+      "after": 173.00160000100732,
+      "reductionPercent": 9.21
+    },
+    {
+      "scenario": "saved-helper-first",
+      "metric": "xmlSets",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "saved-helper-first",
+      "metric": "renderPasses",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-helper-first",
+      "metric": "registrations",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-helper-first",
+      "metric": "imports",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "saved-helper-first",
+      "metric": "exports",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "saved-helper-first",
+      "metric": "cacheCalls",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-helper-first",
+      "metric": "helperConfigurations",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-helper-first",
+      "metric": "tableScans",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "saved-helper-first",
+      "metric": "noteReads",
+      "before": 150.0,
+      "after": 150.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-helper-first",
+      "metric": "noteDecodes",
+      "before": 100.0,
+      "after": 100.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-helper-first",
+      "metric": "copyTables",
+      "before": 800.0,
+      "after": 800.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-helper-first",
+      "metric": "uiCalls",
+      "before": 100.0,
+      "after": 100.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-helper-first",
+      "metric": "attributeSets",
+      "before": 1950.0,
+      "after": 1950.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-helper-first",
+      "metric": "reloads",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "saved-helper-first",
+      "metric": "hashBlocks",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "saved-helper-first",
+      "metric": "luaHarnessMs",
+      "before": 3631.5136999972165,
+      "after": 3821.8507000077516,
+      "reductionPercent": -5.24
+    },
+    {
+      "scenario": "saved-helper-first",
+      "metric": "luaHarnessMedianMs",
+      "before": 67.97309999912977,
+      "after": 69.35319999977946,
+      "reductionPercent": -2.03
+    },
+    {
+      "scenario": "saved-helper-first",
+      "metric": "luaHarnessP95Ms",
+      "before": 86.92139999940991,
+      "after": 84.6045000012964,
+      "reductionPercent": 2.67
+    },
+    {
+      "scenario": "saved-dynamic-ui",
+      "metric": "xmlSets",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "saved-dynamic-ui",
+      "metric": "renderPasses",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-dynamic-ui",
+      "metric": "registrations",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-dynamic-ui",
+      "metric": "imports",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "saved-dynamic-ui",
+      "metric": "exports",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "saved-dynamic-ui",
+      "metric": "cacheCalls",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-dynamic-ui",
+      "metric": "helperConfigurations",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-dynamic-ui",
+      "metric": "tableScans",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "saved-dynamic-ui",
+      "metric": "noteReads",
+      "before": 150.0,
+      "after": 150.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-dynamic-ui",
+      "metric": "noteDecodes",
+      "before": 100.0,
+      "after": 100.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-dynamic-ui",
+      "metric": "copyTables",
+      "before": 800.0,
+      "after": 800.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-dynamic-ui",
+      "metric": "uiCalls",
+      "before": 100.0,
+      "after": 100.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-dynamic-ui",
+      "metric": "attributeSets",
+      "before": 1950.0,
+      "after": 1950.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "saved-dynamic-ui",
+      "metric": "reloads",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "saved-dynamic-ui",
+      "metric": "hashBlocks",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "saved-dynamic-ui",
+      "metric": "luaHarnessMs",
+      "before": 5464.422500003129,
+      "after": 5392.826400002465,
+      "reductionPercent": 1.31
+    },
+    {
+      "scenario": "saved-dynamic-ui",
+      "metric": "luaHarnessMedianMs",
+      "before": 96.07580000162125,
+      "after": 97.53419999964535,
+      "reductionPercent": -1.52
+    },
+    {
+      "scenario": "saved-dynamic-ui",
+      "metric": "luaHarnessP95Ms",
+      "before": 119.56620000116527,
+      "after": 111.93140000104904,
+      "reductionPercent": 6.39
+    },
+    {
+      "scenario": "missing-ui",
+      "metric": "xmlSets",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "missing-ui",
+      "metric": "renderPasses",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "missing-ui",
+      "metric": "registrations",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "missing-ui",
+      "metric": "imports",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "missing-ui",
+      "metric": "exports",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "missing-ui",
+      "metric": "cacheCalls",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "missing-ui",
+      "metric": "helperConfigurations",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "missing-ui",
+      "metric": "tableScans",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "missing-ui",
+      "metric": "noteReads",
+      "before": 150.0,
+      "after": 150.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "missing-ui",
+      "metric": "noteDecodes",
+      "before": 100.0,
+      "after": 100.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "missing-ui",
+      "metric": "copyTables",
+      "before": 800.0,
+      "after": 800.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "missing-ui",
+      "metric": "uiCalls",
+      "before": 100.0,
+      "after": 100.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "missing-ui",
+      "metric": "attributeSets",
+      "before": 1950.0,
+      "after": 1950.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "missing-ui",
+      "metric": "reloads",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "missing-ui",
+      "metric": "hashBlocks",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "missing-ui",
+      "metric": "luaHarnessMs",
+      "before": 4923.41940000467,
+      "after": 3786.1305999998003,
+      "reductionPercent": 23.1
+    },
+    {
+      "scenario": "missing-ui",
+      "metric": "luaHarnessMedianMs",
+      "before": 69.16029999963939,
+      "after": 69.52010000124574,
+      "reductionPercent": -0.52
+    },
+    {
+      "scenario": "missing-ui",
+      "metric": "luaHarnessP95Ms",
+      "before": 422.094299999997,
+      "after": 78.50650000013411,
+      "reductionPercent": 81.4
+    },
+    {
+      "scenario": "stale-guid-1000-objects",
+      "metric": "xmlSets",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "stale-guid-1000-objects",
+      "metric": "renderPasses",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "stale-guid-1000-objects",
+      "metric": "registrations",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "stale-guid-1000-objects",
+      "metric": "imports",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "stale-guid-1000-objects",
+      "metric": "exports",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "stale-guid-1000-objects",
+      "metric": "cacheCalls",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "stale-guid-1000-objects",
+      "metric": "helperConfigurations",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "stale-guid-1000-objects",
+      "metric": "tableScans",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "stale-guid-1000-objects",
+      "metric": "noteReads",
+      "before": 150.0,
+      "after": 150.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "stale-guid-1000-objects",
+      "metric": "noteDecodes",
+      "before": 100.0,
+      "after": 100.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "stale-guid-1000-objects",
+      "metric": "copyTables",
+      "before": 800.0,
+      "after": 800.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "stale-guid-1000-objects",
+      "metric": "uiCalls",
+      "before": 100.0,
+      "after": 100.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "stale-guid-1000-objects",
+      "metric": "attributeSets",
+      "before": 1950.0,
+      "after": 1950.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "stale-guid-1000-objects",
+      "metric": "reloads",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "stale-guid-1000-objects",
+      "metric": "hashBlocks",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "stale-guid-1000-objects",
+      "metric": "luaHarnessMs",
+      "before": 3412.036100000143,
+      "after": 5175.396699996665,
+      "reductionPercent": -51.68
+    },
+    {
+      "scenario": "stale-guid-1000-objects",
+      "metric": "luaHarnessMedianMs",
+      "before": 66.97320000082254,
+      "after": 67.95949999988079,
+      "reductionPercent": -1.47
+    },
+    {
+      "scenario": "stale-guid-1000-objects",
+      "metric": "luaHarnessP95Ms",
+      "before": 75.66660000011325,
+      "after": 472.3057000003755,
+      "reductionPercent": -524.19
+    },
+    {
+      "scenario": "fallback-scan-1000-objects",
+      "metric": "xmlSets",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "fallback-scan-1000-objects",
+      "metric": "renderPasses",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "fallback-scan-1000-objects",
+      "metric": "registrations",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "fallback-scan-1000-objects",
+      "metric": "imports",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "fallback-scan-1000-objects",
+      "metric": "exports",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "fallback-scan-1000-objects",
+      "metric": "cacheCalls",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "fallback-scan-1000-objects",
+      "metric": "helperConfigurations",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "fallback-scan-1000-objects",
+      "metric": "tableScans",
+      "before": 50.0,
+      "after": 50.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "fallback-scan-1000-objects",
+      "metric": "noteReads",
+      "before": 50150.0,
+      "after": 50150.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "fallback-scan-1000-objects",
+      "metric": "noteDecodes",
+      "before": 100.0,
+      "after": 100.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "fallback-scan-1000-objects",
+      "metric": "copyTables",
+      "before": 800.0,
+      "after": 800.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "fallback-scan-1000-objects",
+      "metric": "uiCalls",
+      "before": 100.0,
+      "after": 100.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "fallback-scan-1000-objects",
+      "metric": "attributeSets",
+      "before": 1950.0,
+      "after": 1950.0,
+      "reductionPercent": 0.0
+    },
+    {
+      "scenario": "fallback-scan-1000-objects",
+      "metric": "reloads",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "fallback-scan-1000-objects",
+      "metric": "hashBlocks",
+      "before": 0.0,
+      "after": 0.0,
+      "reductionPercent": null
+    },
+    {
+      "scenario": "fallback-scan-1000-objects",
+      "metric": "luaHarnessMs",
+      "before": 5015.704300001264,
+      "after": 4401.608499998227,
+      "reductionPercent": 12.24
+    },
+    {
+      "scenario": "fallback-scan-1000-objects",
+      "metric": "luaHarnessMedianMs",
+      "before": 78.03769999928772,
+      "after": 76.46040000021458,
+      "reductionPercent": 2.02
+    },
+    {
+      "scenario": "fallback-scan-1000-objects",
+      "metric": "luaHarnessP95Ms",
+      "before": 121.20570000074804,
+      "after": 86.82479999959469,
+      "reductionPercent": 28.37
+    }
+  ]
+}
